@@ -66,7 +66,7 @@ class _QuestionPayload(BaseModel):
 
     question: str = Field(..., min_length=1)
     expected_answer: str = Field(..., min_length=1)
-    answer_kind: Literal["math_latex", "text"] = Field(...)
+    answer_kind: Literal["latex", "text", "choice"] = Field(...)
     probe_family: ProbeFamily = Field(...)
     choices: list[str] = Field(default_factory=list)
 
@@ -83,6 +83,9 @@ class _QuestionPayload(BaseModel):
             expected = self.expected_answer.strip()
             if expected not in normalized_choices:
                 message = "expectedAnswer must exactly match one recognition_discrimination choice"
+                raise ValueError(message)
+            if self.answer_kind != "choice":
+                message = "recognition_discrimination requires answerKind=choice"
                 raise ValueError(message)
             self.choices = normalized_choices
         elif self.choices:

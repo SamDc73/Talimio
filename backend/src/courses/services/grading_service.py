@@ -76,8 +76,8 @@ class GradingService:
 
     async def _grade_latex_expression(self, request: GradeRequest, user_id: uuid.UUID) -> GradeResponse:
         expected_latex = request.expected.expected_latex
-        answer_latex = request.answer.answer_latex
-        if expected_latex is None or answer_latex is None:
+        answer_text = request.answer.answer_text
+        if expected_latex is None or answer_text is None:
             fallback = self._fallback_feedback("parse_error", request.expected.criteria)
             verifier = VerifierInfo(name="sympy", method=None, notes="Missing LaTeX payload.")
             return GradeResponse(
@@ -88,7 +88,7 @@ class GradingService:
                 tags=["parse-error"],
             )
 
-        verification = self._verifier.verify(expected_latex, answer_latex)
+        verification = self._verifier.verify(expected_latex, answer_text)
         feedback_markdown, coach_tags, error_highlight = await self._generate_feedback(
             request=request,
             verification=verification,
@@ -150,7 +150,11 @@ class GradingService:
 
     async def _grade_practice_answer(self, request: GradeRequest, user_id: uuid.UUID) -> GradeResponse:
         expected_answer = cast("str", request.expected.expected_answer)
-        answer_kind = cast("Literal['math_latex', 'text']", request.expected.answer_kind)
+        answer_kind = cast("Literal['latex', 'text', 'choice']", request.expected.answer_kind)
+
+        if answer_kind == "choice":
+            return self._grade_choice_answer(request, expected_answer)
+
         learner_answer = cast("str", request.answer.answer_text)
         model = get_settings().FAST_LLM_MODEL.strip() or None
 
@@ -172,7 +176,7 @@ class GradingService:
         )
 
         tags = self._merge_tags(result.tags)
-        error_highlight = result.error_highlight if answer_kind == "math_latex" else None
+        error_highlight = result.error_highlight if answer_kind == "latex" else None
         verifier = VerifierInfo(name="llm", method=None, notes="LLM grading prompt.")
         return GradeResponse(
             is_correct=result.is_correct,
@@ -181,6 +185,25 @@ class GradingService:
             verifier=verifier,
             tags=tags,
             error_highlight=error_highlight,
+        )
+
+    def _grade_choice_answer(self, request: GradeRequest, expected_answer: str) -> GradeResponse:
+        correct_index = request.expected.correct_choice_index
+        selected_index = request.answer.choice_index
+        is_correct = selected_index == correct_index
+        if is_correct:
+            feedback = f"Correct! The answer is: {expected_answer}"
+            status = "correct"
+        else:
+            feedback = f"Not quite. The correct answer is: {expected_answer}"
+            status = "incorrect"
+        verifier = VerifierInfo(name="choice_index", method="index_match", notes="Deterministic MCQ index matching.")
+        return GradeResponse(
+            is_correct=is_correct,
+            status=status,
+            feedback_markdown=feedback,
+            verifier=verifier,
+            tags=["choice-deterministic"],
         )
 
     async def _generate_feedback(
@@ -194,7 +217,7 @@ class GradingService:
         payload = {
             "question": request.question,
             "expectedLatex": request.expected.expected_latex,
-            "answerLatex": request.answer.answer_latex,
+            "answerText": request.answer.answer_text,
             "criteria": request.expected.criteria,
             "hintsUsed": request.context.hints_used,
             "verifierVerdict": {

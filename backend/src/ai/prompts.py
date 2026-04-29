@@ -54,7 +54,7 @@ GRADING_PROMPT = """You are the official grader for learner free-form answers.
 
 You will receive one JSON payload with:
 - question
-- answerKind ("math_latex" or "text")
+- answerKind ("latex", "text", or "choice")
 - expectedAnswer
 - learnerAnswer
 - optional criteria and hintsUsed
@@ -71,12 +71,12 @@ Return ONLY a JSON object with this exact shape (no markdown fences, no extra ke
 Rules:
 - Decide correctness yourself from expectedAnswer vs learnerAnswer.
 - Use "parse_error" only when the learner answer cannot be interpreted.
-- For answerKind="math_latex", judge mathematical equivalence over formatting.
+- For answerKind="latex", judge mathematical equivalence over formatting.
 - For answerKind="text", accept concise synonyms/paraphrases with same meaning.
 - Keep feedback to 1-3 sentences and never reveal full worked solutions.
 - Wrap math fragments in $...$.
 - tags should be 0-3 lowercase-hyphen strings.
-- Only include errorHighlight for answerKind="math_latex" when a specific fragment can be pointed out.
+- Only include errorHighlight for answerKind="latex" when a specific fragment can be pointed out.
 """
 
 PRACTICE_GENERATION_PROMPT = """
@@ -96,7 +96,8 @@ Selected family: {probe_family}
 
 Allowed families only: free_recall, recognition_discrimination, completion_transformation, error_diagnosis_repair, constructive_explanation.
 - Return probeFamily exactly as the selected family for every question.
-- Use answerKind "math_latex" only when the learner should submit math; otherwise use "text".
+- For non-recognition families, use answerKind "latex" only when the learner should submit math; otherwise use "text".
+- For recognition_discrimination, always use answerKind "choice" because the learner selects a choice index.
 - For recognition_discrimination, include choices and make expectedAnswer exactly match one choice.
 - For every other family, use choices: [].
 
@@ -106,7 +107,7 @@ Avoid questions similar to these:
 Return JSON:
 {{
   "questions": [
-    {{"question": "...", "expectedAnswer": "...", "answerKind": "math_latex", "probeFamily": "{probe_family}", "choices": []}}
+    {{"question": "...", "expectedAnswer": "...", "answerKind": "choice", "probeFamily": "{probe_family}", "choices": ["...", "...", "..."]}}
   ]
 }}
 """
@@ -547,7 +548,7 @@ Guidelines:
 - Prefer `<LatexExpression>` when the answer can be checked as a single expression.
 - For `<FreeForm>`, always provide `expectedAnswer` for grading; keep `sampleAnswer` optional and use it only as an extra learner reference after submission.
 - Do not set `minLength` on `<FreeForm>`; non-empty answers should be submitted and judged by the grading flow.
-- Set `<FreeForm answerKind="math_latex" ... />` when the learner should enter LaTeX math instead of plain text.
+- Set `<FreeForm answerKind="latex" ... />` when the learner should enter LaTeX math instead of plain text.
 - To populate the lesson's Quick Check, set `practiceContext="quick_check"` on 1-3 `<LatexExpression>` items.
 - If the lesson needs graphs, geometry, or simulation-style visualization, prefer `<JXGBoard>` over static text descriptions.
 - For `<JXGBoard>` plots, pass real JS functions (e.g. `(x) => x * x - 3`) or point arrays, never parse math strings (for example `"x^2"`).

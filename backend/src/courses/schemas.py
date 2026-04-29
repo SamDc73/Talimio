@@ -367,7 +367,7 @@ class NextReviewResponse(BaseModel):
 GradeKind = Literal["latex_expression", "jxg_state", "practice_answer"]
 GradeStatus = Literal["correct", "incorrect", "parse_error", "unsupported"]
 PracticeContext = Literal["inline", "quick_check", "scheduled_review", "drill", "review", "chat"]
-PracticeAnswerKind = Literal["math_latex", "text"]
+PracticeAnswerKind = Literal["latex", "text", "choice"]
 QuestionSetPracticeContext = Literal["inline", "drill", "review", "chat"]
 ProbeFamily = Literal[
     "free_recall",
@@ -378,7 +378,7 @@ ProbeFamily = Literal[
 ]
 ProbeRendererKind = Literal["free_form", "multiple_choice", "fill_in_blank", "text_response"]
 AttemptStatus = Literal["correct", "incorrect", "unsupported"]
-AttemptAnswerKind = Literal["text", "math_latex", "jxg_state", "skip"]
+AttemptAnswerKind = Literal["text", "latex", "jxg_state", "choice", "skip"]
 
 
 class JXGBoardState(BaseModel):
@@ -412,6 +412,7 @@ class GradeExpectedPayload(BaseModel):
     expected_latex: str | None = Field(None, min_length=1, description="Expected answer in LaTeX")
     expected_answer: str | None = Field(None, min_length=1, description="Expected answer for generalized practice grading")
     answer_kind: PracticeAnswerKind | None = Field(None, description="Expected answer type for generalized practice grading")
+    correct_choice_index: int | None = Field(None, ge=0, description="0-based index of the correct choice for MCQ grading")
     expected_state: JXGBoardState | None = Field(
         None,
         description=(
@@ -436,8 +437,7 @@ class GradeExpectedPayload(BaseModel):
 class GradeAnswerPayload(BaseModel):
     """Learner answer payload for grading."""
 
-    answer_latex: str | None = Field(None, min_length=1, description="Learner answer in LaTeX")
-    answer_text: str | None = Field(None, min_length=1, description="Learner answer string for generalized practice grading")
+    answer_text: str | None = Field(None, min_length=1, description="Learner answer text")
     answer_state: JXGBoardState | None = Field(
         None,
         description=(
@@ -445,6 +445,7 @@ class GradeAnswerPayload(BaseModel):
             "as expectedState."
         ),
     )
+    choice_index: int | None = Field(None, ge=0, description="0-based index of the selected choice for MCQ grading")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -487,8 +488,8 @@ class GradeRequest(BaseModel):
             if not self.expected.expected_latex:
                 message = "expected.expectedLatex is required when kind=latex_expression"
                 raise ValueError(message)
-            if not self.answer.answer_latex:
-                message = "answer.answerLatex is required when kind=latex_expression"
+            if not self.answer.answer_text:
+                message = "answer.answerText is required when kind=latex_expression"
                 raise ValueError(message)
             return self
 
@@ -502,18 +503,28 @@ class GradeRequest(BaseModel):
             return self
 
         if self.kind == "practice_answer":
-            if not self.expected.expected_answer:
-                message = "expected.expectedAnswer is required when kind=practice_answer"
-                raise ValueError(message)
-            if not self.expected.answer_kind:
-                message = "expected.answerKind is required when kind=practice_answer"
-                raise ValueError(message)
-            if not self.answer.answer_text:
-                message = "answer.answerText is required when kind=practice_answer"
-                raise ValueError(message)
-            return self
+            self._validate_practice_answer_payload()
 
         return self
+
+    def _validate_practice_answer_payload(self) -> None:
+        if not self.expected.expected_answer:
+            message = "expected.expectedAnswer is required when kind=practice_answer"
+            raise ValueError(message)
+        if not self.expected.answer_kind:
+            message = "expected.answerKind is required when kind=practice_answer"
+            raise ValueError(message)
+        if self.expected.answer_kind == "choice":
+            if self.expected.correct_choice_index is None:
+                message = "expected.correctChoiceIndex is required when answerKind=choice"
+                raise ValueError(message)
+            if self.answer.choice_index is None:
+                message = "answer.choiceIndex is required when answerKind=choice"
+                raise ValueError(message)
+            return
+        if not self.answer.answer_text:
+            message = "answer.answerText is required when kind=practice_answer"
+            raise ValueError(message)
 
 
 class VerifierInfo(BaseModel):
@@ -561,7 +572,7 @@ class PracticeDrillItem(BaseModel):
     lesson_id: uuid.UUID = Field(..., description="Lesson ID linked to this concept")
     question: str = Field(..., min_length=1, description="Learner-facing drill question")
     expected_answer: str = Field(..., min_length=1, description="Expected answer string")
-    answer_kind: PracticeAnswerKind = Field(..., description="Expected answer input mode")
+    answer_kind: PracticeAnswerKind = Field(..., description="Expected answer interpretation")
     probe_family: ProbeFamily = Field(
         "free_recall",
         description="Bounded pedagogical family used to generate this drill",
@@ -600,7 +611,8 @@ class QuestionSetItem(BaseModel):
     concept_id: uuid.UUID = Field(description="Concept this question practices")
     lesson_id: uuid.UUID | None = Field(None, description="Lesson linked to this question")
     question: str = Field(min_length=1, description="Learner-facing question prompt")
-    input_kind: PracticeAnswerKind = Field(description="Learner answer input mode")
+    answer_kind: PracticeAnswerKind = Field(description="Learner answer interpretation")
+    answer_field: str = Field(description="Attempt answer field name the frontend should use (e.g. answerText or answerLatex)")
     probe_family: ProbeFamily = Field(description="Bounded pedagogical family selected for this question")
     renderer_kind: ProbeRendererKind = Field(description="Known renderer contract for this question")
     choices: list[str] = Field(default_factory=list, description="Learner-visible choices for choice-based questions")
@@ -624,6 +636,7 @@ class AttemptAnswerPayload(BaseModel):
     answer_text: str | None = Field(None, min_length=1, description="Plain-text learner answer")
     answer_latex: str | None = Field(None, min_length=1, description="LaTeX learner answer")
     answer_state: JXGBoardState | None = Field(None, description="JSXGraph learner board state")
+    choice_index: int | None = Field(None, ge=0, description="0-based index of the selected choice")
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 
@@ -633,11 +646,14 @@ class AttemptAnswerPayload(BaseModel):
         if self.kind == "text" and not self.answer_text:
             detail = "answer.answerText is required when kind=text"
             raise ValueError(detail)
-        if self.kind == "math_latex" and not self.answer_latex:
-            detail = "answer.answerLatex is required when kind=math_latex"
+        if self.kind == "latex" and not self.answer_latex:
+            detail = "answer.answerLatex is required when kind=latex"
             raise ValueError(detail)
         if self.kind == "jxg_state" and self.answer_state is None:
             detail = "answer.answerState is required when kind=jxg_state"
+            raise ValueError(detail)
+        if self.kind == "choice" and self.choice_index is None:
+            detail = "answer.choiceIndex is required when kind=choice"
             raise ValueError(detail)
         return self
 

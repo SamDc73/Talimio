@@ -43,8 +43,10 @@ class _InlineQuestion:
     question: str
     hints: list[str]
     grade_kind: str
+    expected_answer: str | None
+    answer_kind: str | None
     expected_payload: dict[str, Any]
-    input_kind: str
+    practice_context: str
 
 
 class InlineQuestionMaterializer:
@@ -154,12 +156,15 @@ class InlineQuestionMaterializer:
                 LearningQuestion.source_key == source_key,
             )
         )
-        question_payload = {"inputKind": inline_question.input_kind, "hints": inline_question.hints}
+        question_payload = {"answerKind": inline_question.answer_kind, "hints": inline_question.hints}
         if existing is not None:
             existing.question = inline_question.question
+            existing.expected_answer = inline_question.expected_answer
+            existing.answer_kind = inline_question.answer_kind
             existing.grade_kind = inline_question.grade_kind
             existing.expected_payload = inline_question.expected_payload
             existing.question_payload = question_payload
+            existing.practice_context = inline_question.practice_context
             existing.source_component = source_component
             await self._session.flush()
             return existing.id
@@ -171,8 +176,8 @@ class InlineQuestionMaterializer:
             lesson_id=lesson_id,
             lesson_version_id=lesson_version_id,
             question=inline_question.question,
-            expected_answer=inline_question.expected_payload.get("expectedAnswer"),
-            answer_kind=inline_question.input_kind if inline_question.input_kind in {"text", "math_latex"} else None,
+            expected_answer=inline_question.expected_answer,
+            answer_kind=inline_question.answer_kind,
             grade_kind=inline_question.grade_kind,
             expected_payload=inline_question.expected_payload,
             question_payload=question_payload,
@@ -183,7 +188,7 @@ class InlineQuestionMaterializer:
             target_low=0.0,
             target_high=1.0,
             core_model="lesson_inline",
-            practice_context=inline_question.expected_payload.get("practiceContext", "inline"),
+            practice_context=inline_question.practice_context,
             source_component=source_component,
             source_key=source_key,
         )
@@ -262,8 +267,10 @@ def _build_inline_question(component: str, attrs: dict[str, Any]) -> _InlineQues
             question=question,
             hints=hints,
             grade_kind="latex_expression",
-            input_kind="math_latex",
-            expected_payload={"expectedLatex": expected_latex, "criteria": criteria, "practiceContext": practice_context},
+            expected_answer=expected_latex,
+            answer_kind="latex",
+            expected_payload={"expectedLatex": expected_latex, "criteria": criteria},
+            practice_context=practice_context,
         )
     if component == "JXGBoard":
         expected_state = _dict_attr(attrs, "expectedState")
@@ -273,14 +280,15 @@ def _build_inline_question(component: str, attrs: dict[str, Any]) -> _InlineQues
             question=question,
             hints=hints,
             grade_kind="jxg_state",
-            input_kind="jxg_state",
+            expected_answer=None,
+            answer_kind=None,
             expected_payload={
                 "expectedState": expected_state,
                 "tolerance": _number_attr(attrs, "tolerance"),
                 "perCheckTolerance": _dict_attr(attrs, "perCheckTolerance"),
                 "criteria": criteria,
-                "practiceContext": practice_context,
             },
+            practice_context=practice_context,
         )
     if component == "MultipleChoice":
         options = _list_attr(attrs, "options")
@@ -291,13 +299,10 @@ def _build_inline_question(component: str, attrs: dict[str, Any]) -> _InlineQues
             question=question,
             hints=hints,
             grade_kind="practice_answer",
-            input_kind="text",
-            expected_payload={
-                "expectedAnswer": options[correct_index],
-                "answerKind": "text",
-                "criteria": criteria,
-                "practiceContext": practice_context,
-            },
+            expected_answer=options[correct_index],
+            answer_kind="text",
+            expected_payload={"criteria": criteria},
+            practice_context=practice_context,
         )
     if component == "FillInTheBlank":
         expected_blank = _string_attr(attrs, "answer") or _string_attr(attrs, "expectedAnswer")
@@ -307,13 +312,10 @@ def _build_inline_question(component: str, attrs: dict[str, Any]) -> _InlineQues
             question=question,
             hints=hints,
             grade_kind="practice_answer",
-            input_kind="text",
-            expected_payload={
-                "expectedAnswer": expected_blank,
-                "answerKind": "text",
-                "criteria": criteria,
-                "practiceContext": practice_context,
-            },
+            expected_answer=expected_blank,
+            answer_kind="text",
+            expected_payload={"criteria": criteria},
+            practice_context=practice_context,
         )
 
     expected_answer = _string_attr(attrs, "expectedAnswer") or _string_attr(attrs, "sampleAnswer")
@@ -324,13 +326,10 @@ def _build_inline_question(component: str, attrs: dict[str, Any]) -> _InlineQues
         question=question,
         hints=hints,
         grade_kind="practice_answer",
-        input_kind=answer_kind,
-        expected_payload={
-            "expectedAnswer": expected_answer,
-            "answerKind": answer_kind,
-            "criteria": criteria,
-            "practiceContext": practice_context,
-        },
+        expected_answer=expected_answer,
+        answer_kind=answer_kind,
+        expected_payload={"criteria": criteria},
+        practice_context=practice_context,
     )
 
 

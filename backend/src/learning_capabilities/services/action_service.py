@@ -585,13 +585,9 @@ class LearningCapabilityActionService:
             expected_answer=active_probe.expected_answer,
             answer_kind=active_probe.answer_kind,
             grade_kind="practice_answer",
-            expected_payload={
-                "expectedAnswer": active_probe.expected_answer,
-                "answerKind": active_probe.answer_kind,
-                "probeFamily": drill.probe_family,
-            },
+            expected_payload={},
             question_payload={
-                "inputKind": active_probe.answer_kind,
+                "answerKind": active_probe.answer_kind,
                 "probeFamily": drill.probe_family,
                 "rendererKind": drill.renderer_kind,
                 "choices": drill.choices,
@@ -858,8 +854,15 @@ def _submitted_probe_output(
 
 
 def _chat_probe_answer_payload(*, answer_kind: str, learner_answer: str) -> AttemptAnswerPayload:
-    if answer_kind == "math_latex":
-        return AttemptAnswerPayload(kind="math_latex", answer_latex=learner_answer)
+    if answer_kind == "latex":
+        return AttemptAnswerPayload(kind="latex", answer_latex=learner_answer)
+    if answer_kind == "choice":
+        try:
+            index = int(learner_answer)
+        except ValueError as error:
+            detail = "Choice answers must be submitted as a 0-based choice index."
+            raise LearningCapabilitiesValidationError(detail) from error
+        return AttemptAnswerPayload(kind="choice", choice_index=index)
     return AttemptAnswerPayload(kind="text", answer_text=learner_answer)
 
 

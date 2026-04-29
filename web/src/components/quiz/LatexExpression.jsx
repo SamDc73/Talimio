@@ -70,7 +70,8 @@ function ReadOnlyLatexField({ latex, className }) {
 
 export function LatexExpression({
 	question,
-	answerKind = "math_latex",
+	answerKind = "latex",
+	answerField,
 	criteria,
 	hints,
 	solutionLatex,
@@ -92,7 +93,7 @@ export function LatexExpression({
 	const [submissionError, setSubmissionError] = useState(null)
 	const fieldRef = useRef(null)
 	const startedAtRef = useRef(null)
-	const isMathLatex = answerKind === "math_latex"
+	const isMathLatex = answerKind === "latex"
 
 	const normalizedHints = useMemo(() => normalizeHints(hints), [hints])
 	const hasHints = normalizedHints.length > 0
@@ -192,6 +193,7 @@ export function LatexExpression({
 			const result = await onGrade({
 				question,
 				answerKind,
+				answerField: answerField || (answerKind === "latex" ? "answerLatex" : "answerText"),
 				criteria,
 				answerText: trimmedAnswer,
 				practiceContext,
@@ -214,6 +216,7 @@ export function LatexExpression({
 			setIsSubmitting(false)
 		}
 	}, [
+		answerField,
 		answerKind,
 		answerText,
 		attemptCount,

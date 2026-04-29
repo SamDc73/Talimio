@@ -42,7 +42,15 @@ const getMathFieldErrors = (field) => {
 	return Array.isArray(errors) ? errors : []
 }
 
-export function FreeForm({ questionId, question, answerKind = "text", courseId, lessonId, lessonConceptId }) {
+export function FreeForm({
+	questionId,
+	question,
+	answerKind = "text",
+	answerField,
+	courseId,
+	lessonId,
+	lessonConceptId,
+}) {
 	const courseService = useCourseService(courseId)
 	const fieldRef = useRef(null)
 	const [userAnswer, setUserAnswer] = useState("")
@@ -50,7 +58,8 @@ export function FreeForm({ questionId, question, answerKind = "text", courseId, 
 	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [submissionError, setSubmissionError] = useState(null)
 
-	const isMathLatex = answerKind === "math_latex"
+	const resolvedAnswerField = answerField || (answerKind === "latex" ? "answerLatex" : "answerText")
+	const isMathLatex = answerKind === "latex"
 	const submitted = grade !== null
 	const hasGradingContext = Boolean(courseId && lessonId && lessonConceptId && questionId)
 	const hasAnswer = userAnswer.trim().length > 0
@@ -98,13 +107,12 @@ export function FreeForm({ questionId, question, answerKind = "text", courseId, 
 
 		try {
 			const trimmedAnswer = userAnswer.trim()
+			const answer = { kind: answerKind === "latex" ? "latex" : "text" }
+			answer[resolvedAnswerField] = trimmedAnswer
 			const response = await courseService.submitAttempt({
 				attemptId: crypto.randomUUID(),
 				questionId,
-				answer:
-					answerKind === "math_latex"
-						? { kind: "math_latex", answerLatex: trimmedAnswer }
-						: { kind: "text", answerText: trimmedAnswer },
+				answer,
 				hintsUsed: 0,
 				durationMs: 0,
 			})

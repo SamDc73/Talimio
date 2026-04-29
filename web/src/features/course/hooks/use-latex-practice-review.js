@@ -51,7 +51,16 @@ export function useLatexPracticeReview({ courseId, lessonId, conceptId: initialC
 	)
 
 	const submitAnswer = useCallback(
-		async ({ questionId, answerKind = "math_latex", answerText, conceptId, attempts, durationMs, hintsUsed } = {}) => {
+		async ({
+			questionId,
+			answerKind = "latex",
+			answerField = "answerLatex",
+			answerText,
+			conceptId,
+			attempts,
+			durationMs,
+			hintsUsed,
+		} = {}) => {
 			normalizeAttempts(attempts)
 			const normalizedDuration = normalizeDuration(durationMs)
 			const normalizedHints = normalizeHintsUsed(hintsUsed)
@@ -60,8 +69,8 @@ export function useLatexPracticeReview({ courseId, lessonId, conceptId: initialC
 				throw new Error("Question ID required for server-owned practice attempt")
 			}
 
-			const answer =
-				answerKind === "math_latex" ? { kind: "math_latex", answerLatex: answerText } : { kind: "text", answerText }
+			const answer = { kind: answerKind }
+			answer[answerField] = answerText
 
 			setIsSubmitting(true)
 			setError(null)

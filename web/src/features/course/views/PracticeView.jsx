@@ -56,20 +56,32 @@ function normalizeDrill(rawItem) {
 
 	const question = typeof rawItem.question === "string" ? rawItem.question.trim() : ""
 	const questionId = rawItem.questionId ? String(rawItem.questionId) : ""
-	let inputKind = ""
-	if (rawItem.inputKind === "text") {
-		inputKind = "text"
-	} else if (rawItem.inputKind === "math_latex") {
-		inputKind = "math_latex"
+	let answerKind = ""
+	if (rawItem.answerKind === "text") {
+		answerKind = "text"
+	} else if (rawItem.answerKind === "latex") {
+		answerKind = "latex"
+	} else if (rawItem.answerKind === "choice") {
+		answerKind = "choice"
 	}
 	const conceptId = rawItem.conceptId ? String(rawItem.conceptId) : ""
 	const lessonId = rawItem.lessonId ? String(rawItem.lessonId) : ""
+	const answerField = typeof rawItem.answerField === "string" ? rawItem.answerField : ""
 	const probeFamily = typeof rawItem.probeFamily === "string" ? rawItem.probeFamily : ""
 	const rendererKind = typeof rawItem.rendererKind === "string" ? rawItem.rendererKind : ""
 	const choices = Array.isArray(rawItem.choices)
 		? rawItem.choices.filter((item) => typeof item === "string" && item.trim())
 		: []
-	if (!question || !questionId || !inputKind || !conceptId || !lessonId || !probeFamily || !rendererKind) {
+	if (
+		!question ||
+		!questionId ||
+		!answerKind ||
+		!answerField ||
+		!conceptId ||
+		!lessonId ||
+		!probeFamily ||
+		!rendererKind
+	) {
 		return null
 	}
 
@@ -78,7 +90,8 @@ function normalizeDrill(rawItem) {
 		conceptId,
 		lessonId,
 		question,
-		inputKind,
+		answerKind,
+		answerField,
 		probeFamily,
 		rendererKind,
 		choices,
@@ -94,17 +107,18 @@ function drillKey(item) {
 }
 
 function ChoicePracticeQuestion({ question, onGrade, onSkip, onComplete }) {
-	const [selectedChoice, setSelectedChoice] = useState("")
+	const [selectedChoiceIndex, setSelectedChoiceIndex] = useState(null)
 	const [feedback, setFeedback] = useState(null)
 	const [startedAt] = useState(() => Date.now())
 
 	const handleSubmit = async () => {
-		if (!selectedChoice) {
+		if (selectedChoiceIndex === null) {
 			return
 		}
 		const result = await onGrade({
-			answerKind: "text",
-			answerText: selectedChoice,
+			answerKind: "choice",
+			answerField: "choiceIndex",
+			answerText: selectedChoiceIndex,
 			attempts: 1,
 			durationMs: Date.now() - startedAt,
 			hintsUsed: 0,
@@ -126,15 +140,15 @@ function ChoicePracticeQuestion({ question, onGrade, onSkip, onComplete }) {
 				<p className="text-base font-medium text-foreground">{question.question}</p>
 			</div>
 			<div className="grid gap-2">
-				{question.choices.map((choice) => (
+				{question.choices.map((choice, index) => (
 					<button
 						key={choice}
 						type="button"
-						onClick={() => setSelectedChoice(choice)}
+						onClick={() => setSelectedChoiceIndex(index)}
 						disabled={isAnswered}
 						className={cn(
 							"rounded-lg border px-4 py-3 text-left text-sm transition-colors",
-							selectedChoice === choice
+							selectedChoiceIndex === index
 								? "border-primary bg-primary/10 text-primary"
 								: "border-border bg-background text-foreground hover:bg-muted"
 						)}
@@ -152,7 +166,7 @@ function ChoicePracticeQuestion({ question, onGrade, onSkip, onComplete }) {
 				{feedback ? (
 					<Button onClick={onComplete}>Next question</Button>
 				) : (
-					<Button onClick={handleSubmit} disabled={!selectedChoice}>
+					<Button onClick={handleSubmit} disabled={selectedChoiceIndex === null}>
 						Submit answer
 					</Button>
 				)}
@@ -704,7 +718,8 @@ export default function PracticeView() {
 				<LatexExpression
 					key={drillKey(currentQuestion)}
 					question={currentQuestion.question}
-					answerKind={currentQuestion.inputKind}
+					answerKind={currentQuestion.answerKind}
+					answerField={currentQuestion.answerField}
 					hints={currentQuestion.hints}
 					practiceContext="drill"
 					completeOnAnyGrade

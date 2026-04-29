@@ -109,7 +109,7 @@ export function LatexExpressionPractice({
 	return (
 		<LatexExpression
 			question={question}
-			answerKind="math_latex"
+			answerKind="latex"
 			criteria={criteria}
 			hints={hints}
 			solutionLatex={solutionLatex}

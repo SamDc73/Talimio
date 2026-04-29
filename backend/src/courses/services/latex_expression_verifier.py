@@ -44,10 +44,10 @@ class LatexExpressionVerifier:
         self._tolerance = tolerance
         self._max_samples = max_samples
 
-    def verify(self, expected_latex: str, answer_latex: str) -> LatexExpressionVerificationResult:
+    def verify(self, expected_latex: str, learner_latex: str) -> LatexExpressionVerificationResult:
         """Verify whether the answer matches the expected expression."""
         expected_expr, expected_error = self._parse_latex(expected_latex)
-        answer_expr, answer_error = self._parse_latex(answer_latex)
+        answer_expr, answer_error = self._parse_latex(learner_latex)
 
         method_attempts: list[str] = []
         tags: list[str] = []

@@ -516,13 +516,9 @@ class CoursesFacade:  # noqa: PLR0904
                 expected_answer=drill.expected_answer,
                 answer_kind=drill.answer_kind,
                 grade_kind="practice_answer",
-                expected_payload={
-                    "expectedAnswer": drill.expected_answer,
-                    "answerKind": drill.answer_kind,
-                    "probeFamily": drill.probe_family,
-                },
+                expected_payload={},
                 question_payload={
-                    "inputKind": drill.answer_kind,
+                    "answerKind": drill.answer_kind,
                     "probeFamily": drill.probe_family,
                     "rendererKind": drill.renderer_kind,
                     "choices": drill.choices,
@@ -539,13 +535,19 @@ class CoursesFacade:  # noqa: PLR0904
             )
             self._session.add(stored)
             await self._session.flush()
+            answer_field = "answerText"
+            if drill.answer_kind == "latex":
+                answer_field = "answerLatex"
+            elif drill.answer_kind == "choice":
+                answer_field = "choiceIndex"
             questions.append(
                 QuestionSetItem(
                     question_id=stored.id,
                     concept_id=stored.concept_id,
                     lesson_id=stored.lesson_id,
                     question=stored.question,
-                    input_kind=cast("Any", stored.answer_kind),
+                    answer_kind=cast("Any", stored.answer_kind),
+                    answer_field=answer_field,
                     probe_family=drill.probe_family,
                     renderer_kind=drill.renderer_kind,
                     choices=drill.choices,
@@ -813,10 +815,12 @@ class CoursesFacade:  # noqa: PLR0904
     def _stringify_attempt_answer(self, payload: AttemptRequest) -> str:
         if payload.answer.kind == "skip":
             return "skip"
-        if payload.answer.kind == "math_latex" and payload.answer.answer_latex:
+        if payload.answer.kind == "latex" and payload.answer.answer_latex:
             return payload.answer.answer_latex.strip()
         if payload.answer.kind == "text" and payload.answer.answer_text:
             return payload.answer.answer_text.strip()
+        if payload.answer.kind == "choice" and payload.answer.choice_index is not None:
+            return str(payload.answer.choice_index)
         if payload.answer.kind == "jxg_state" and payload.answer.answer_state is not None:
             return payload.answer.answer_state.model_dump_json(by_alias=True)
         detail = "Answer payload does not match the question type"
@@ -840,7 +844,7 @@ class CoursesFacade:  # noqa: PLR0904
         )
         grade_kind = question.grade_kind or "practice_answer"
         if grade_kind == "latex_expression":
-            if payload.answer.kind != "math_latex":
+            if payload.answer.kind != "latex":
                 detail = "Question expects a LaTeX answer"
                 raise CoursesFacadeValidationError(detail)
             return GradeRequest(
@@ -851,7 +855,7 @@ class CoursesFacade:  # noqa: PLR0904
                     or question.expected_payload.get("expected_latex"),
                     criteria=question.expected_payload.get("criteria"),
                 ),
-                answer=GradeAnswerPayload(answer_latex=payload.answer.answer_latex),
+                answer=GradeAnswerPayload(answer_text=payload.answer.answer_latex),
                 context=context,
             )
         if grade_kind == "jxg_state":
@@ -873,13 +877,33 @@ class CoursesFacade:  # noqa: PLR0904
                 context=context,
             )
 
-        expected_answer = question.expected_payload.get("expectedAnswer") or question.expected_payload.get("expected_answer")
-        answer_kind = question.expected_payload.get("answerKind") or question.expected_payload.get("answer_kind")
-        expected_answer = expected_answer or question.expected_answer
-        answer_kind = answer_kind or question.answer_kind
+        expected_answer = question.expected_answer
+        answer_kind = question.answer_kind
         if not expected_answer or not answer_kind:
             detail = "Question is missing expected answer metadata"
             raise CoursesFacadeValidationError(detail)
+        if payload.answer.kind != answer_kind:
+            detail = f"Question expects a {answer_kind} answer"
+            raise CoursesFacadeValidationError(detail)
+
+        if answer_kind == "choice":
+            choices = question.question_payload.get("choices", [])
+            if not isinstance(choices, list) or expected_answer not in choices:
+                detail = "Choice question is missing correct choice metadata"
+                raise CoursesFacadeValidationError(detail)
+            correct_index = choices.index(expected_answer)
+            return GradeRequest(
+                kind="practice_answer",
+                question=question.question,
+                expected=GradeExpectedPayload(
+                    expected_answer=expected_answer,
+                    answer_kind=cast("Any", answer_kind),
+                    correct_choice_index=correct_index,
+                ),
+                answer=GradeAnswerPayload(choice_index=payload.answer.choice_index),
+                context=context,
+            )
+
         return GradeRequest(
             kind="practice_answer",
             question=question.question,
