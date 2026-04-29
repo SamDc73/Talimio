@@ -46,7 +46,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "search_concepts",
-            "Search concepts inside one adaptive course when the learner changes topics, concept matches are weak, or adaptive concept evidence is needed. Do not guess course_id; use server-provided state/history or ask a natural clarification.",
+            "Search adaptive course concepts. Use for topic switches, weak concept matches, or concept-state lookup. Ask a follow-up if course_id is missing.",
             {
                 "type": "object",
                 "additionalProperties": False,
@@ -61,7 +61,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "search_course_sources",
-            "Retrieve uploaded course source excerpts for one owned course. Use this before answering source/reference/document questions because routing packets only expose source metadata. Do not guess course_id; use server-provided state/history or ask a natural clarification.",
+            "Retrieve uploaded source excerpts for one course. Use for source, reference, or document questions. Ask a follow-up if course_id is missing.",
             {
                 "type": "object",
                 "additionalProperties": False,
@@ -91,7 +91,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "get_course_outline_state",
-            "Get a course lesson outline with generated, completed, and current flags.",
+            "Get course navigation state: lesson titles, generated/completed/current flags. Not lesson content. Use for course planning or next-step routing.",
             {
                 "type": "object",
                 "additionalProperties": False,
@@ -117,7 +117,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "get_lesson_windows",
-            "Retrieve lesson window content for the current or specified lesson. Use this before answering lesson-detail, step-by-step, or 'this part' questions because routing packets only expose lesson metadata. Do not guess course_id or lesson_id; use server-provided state/history or ask a natural clarification.",
+            "Get lesson content windows. Use for what a lesson teaches, examples, steps, or 'this part'. Ask a follow-up if course_id or lesson_id is missing.",
             {
                 "type": "object",
                 "additionalProperties": False,
@@ -132,7 +132,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "get_concept_tutor_context",
-            "Get adaptive tutor evidence, recent probes, and candidate causes for one concept.",
+            "Get adaptive tutor evidence for one concept. Use for confused, wrong, stuck, why, misconception, or diagnostic help turns. Ask a follow-up if course_id or concept_id is missing.",
             {
                 "type": "object",
                 "additionalProperties": False,
@@ -147,7 +147,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "get_course_frontier",
-            "Get adaptive frontier state for a course.",
+            "Get adaptive review/frontier state for one course. Use for due reviews, what to study next, or spaced-practice planning. Ask a follow-up if course_id is missing.",
             {
                 "type": "object",
                 "additionalProperties": False,

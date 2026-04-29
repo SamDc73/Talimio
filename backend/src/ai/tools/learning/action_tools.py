@@ -86,7 +86,7 @@ def build_learning_action_tools(
         ),
         (
             "generate_concept_probe",
-            "Generate one adaptive chat practice question. Does not require confirmation.",
+            "Create one server-owned adaptive chat probe. Use for quiz, challenge, check, practice, or diagnostic probe turns. Ask a follow-up if course_id or concept_id is missing.",
             {
                 "type": "object",
                 "additionalProperties": False,
@@ -102,7 +102,7 @@ def build_learning_action_tools(
         ),
         (
             "submit_concept_probe_result",
-            "Submit an answer to the current active chat practice probe. Only use when the learner is clearly answering that probe.",
+            "Record the learner's answer to the active chat probe. Use when the latest turn is clearly the probe answer. Ask a follow-up if course_id is missing.",
             {
                 "type": "object",
                 "additionalProperties": False,

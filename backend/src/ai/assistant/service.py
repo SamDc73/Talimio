@@ -533,6 +533,50 @@ def _build_learning_routing_packet(context_bundle: Any) -> dict[str, Any]:
     return {key: value for key, value in packet.items() if value is not None}
 
 
+def _build_learning_environment_facts(packet: dict[str, Any]) -> str:
+    """Build current state for when-to-call decisions."""
+    facts: list[str] = []
+    course_mode_facts = {
+        "adaptive": "Adaptive course: concept state and practice tools may apply.",
+        "standard": "Standard course: adaptive concept probes do not apply.",
+    }
+    course_mode = packet.get("courseMode")
+    if isinstance(course_mode, str) and course_mode in course_mode_facts:
+        facts.append(course_mode_facts[course_mode])
+    else:
+        facts.append("Course mode unknown: ask a follow-up if course state is needed.")
+
+    if packet.get("hasActiveProbe"):
+        facts.append("Active probe exists: learner answers require server grading.")
+    else:
+        facts.append("No active probe.")
+
+    lesson_focus = packet.get("lessonFocus")
+    if isinstance(lesson_focus, dict) and lesson_focus.get("hasLessonContent"):
+        facts.append("Lesson content exists: use lesson windows for lesson-specific answers.")
+    elif isinstance(lesson_focus, dict):
+        facts.append("Lesson focus exists; packet has metadata only.")
+
+    concept_focus = packet.get("conceptFocus")
+    if isinstance(concept_focus, dict):
+        current_concept = concept_focus.get("currentLessonConcept")
+        if isinstance(current_concept, dict):
+            facts.append("Current concept is known.")
+            if current_concept.get("confusorCount") or current_concept.get("prerequisiteGapCount"):
+                facts.append("Learner state has diagnostic signals.")
+        elif concept_focus.get("weakSemanticMatch"):
+            facts.append("Concept match is weak: search before assuming the target concept.")
+
+    if packet.get("hasSourceFocus"):
+        facts.append("Source matches exist: retrieve excerpts before source-specific answers.")
+
+    frontier_state = packet.get("frontierState")
+    if isinstance(frontier_state, dict) and frontier_state.get("dueCount", 0) > 0:
+        facts.append(f"Due reviews: {frontier_state['dueCount']}.")
+
+    return "\n".join(f"- {fact}" for fact in facts)
+
+
 def _build_completion_metadata(
     *,
     request: NormalizedChatRequest,
@@ -1284,6 +1328,7 @@ async def _build_messages(
 
     user_blocks = list(request.latest_user_blocks)
     context_packet = _build_learning_routing_packet(context_bundle)
+    user_blocks.append({"type": "text", "text": f"\n\n[learning_environment]\n{_build_learning_environment_facts(context_packet)}"})
     user_blocks.append({"type": "text", "text": f"\n\n[learning_context_packet]\n{json.dumps(context_packet, default=str)}"})
     _append_prefetched_learning_blocks(
         user_blocks=user_blocks,
