@@ -2,12 +2,12 @@ import { createPluginRegistration } from "@embedpdf/core"
 import { EmbedPDF } from "@embedpdf/core/react"
 import { usePdfiumEngine } from "@embedpdf/engines/react"
 import { ignore } from "@embedpdf/models"
+import { DocumentContent, DocumentManagerPluginPackage } from "@embedpdf/plugin-document-manager/react"
 import {
 	GlobalPointerProvider,
 	InteractionManagerPluginPackage,
 	PagePointerProvider,
 } from "@embedpdf/plugin-interaction-manager/react"
-import { LoaderPluginPackage } from "@embedpdf/plugin-loader/react"
 import { RenderLayer, RenderPluginPackage } from "@embedpdf/plugin-render/react"
 import { Scroller, ScrollPluginPackage, useScroll } from "@embedpdf/plugin-scroll/react"
 import { SelectionLayer, SelectionPluginPackage, useSelectionCapability } from "@embedpdf/plugin-selection/react"
@@ -19,6 +19,7 @@ import { api as apiClient } from "@/lib/apiClient"
 import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../hooks/use-book-state"
 
 function ViewerRuntime({
+	documentId,
 	bookId,
 	registerApi,
 	getBookReadingState,
@@ -31,8 +32,8 @@ function ViewerRuntime({
 	const zoomRestoredRef = useRef(false)
 
 	// Runtime selection bridge + zoom/page persistence
-	const { provides: scrollProvides, state: scrollState } = useScroll()
-	const { provides: zoomProvides, state: zoomState } = useZoom()
+	const { provides: scrollProvides, state: scrollState } = useScroll(documentId)
+	const { provides: zoomProvides, state: zoomState } = useZoom(documentId)
 	const currentZoomLevel = zoomState?.currentZoomLevel
 
 	// Expose a narrow API for header controls
@@ -136,18 +137,19 @@ function ViewerRuntime({
 				}}
 			>
 				<PagePointerProvider
+					documentId={documentId}
 					pageIndex={pageIndex}
 					pageWidth={width}
 					pageHeight={height}
 					rotation={rotation}
 					scale={scale}
 				>
-					<RenderLayer pageIndex={pageIndex} scale={scale} />
-					<SelectionLayer pageIndex={pageIndex} scale={scale} background="Highlight" />
+					<RenderLayer documentId={documentId} pageIndex={pageIndex} scale={scale} />
+					<SelectionLayer documentId={documentId} pageIndex={pageIndex} scale={scale} background="Highlight" />
 				</PagePointerProvider>
 			</div>
 		),
-		[]
+		[documentId]
 	)
 
 	// When a PDF selection ends, dispatch a simple event with selected text and a window clientRect
@@ -185,8 +187,8 @@ function ViewerRuntime({
 	}, [selection])
 
 	return (
-		<Viewport className="size-full ">
-			<Scroller renderPage={renderPage} />
+		<Viewport documentId={documentId} className="size-full ">
+			<Scroller documentId={documentId} renderPage={renderPage} />
 		</Viewport>
 	)
 }
@@ -325,14 +327,13 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 			defaultZoom = initialZoomLevelRef.current / 100
 		}
 		return [
-			createPluginRegistration(LoaderPluginPackage, {
-				loadingOptions: {
-					type: "url",
-					pdfFile: {
-						id: documentId,
+			createPluginRegistration(DocumentManagerPluginPackage, {
+				initialDocuments: [
+					{
+						documentId,
 						url: pdfBlobUrl,
 					},
-				},
+				],
 			}),
 			createPluginRegistration(ViewportPluginPackage),
 			createPluginRegistration(ScrollPluginPackage, {
@@ -386,18 +387,56 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 	return (
 		<div className="relative flex h-full flex-col overflow-auto bg-muted py-8 dark:bg-background/80">
 			<EmbedPDF engine={engine} plugins={plugins}>
-				<GlobalPointerProvider>
-					<div className="flex size-full  justify-center" data-selection-zone="true">
-						<ViewerRuntime
-							bookId={bookId}
-							registerApi={registerApi}
-							getBookReadingState={(id) => (id === bookId ? readingState : null)}
-							updateBookReadingState={updateBookReadingState}
-							hasRestoredPage={hasRestoredPage}
-							onMarkPageRestored={markPageRestored}
-						/>
-					</div>
-				</GlobalPointerProvider>
+				{({ activeDocumentId }) => {
+					if (!activeDocumentId) {
+						return (
+							<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
+								<p className="text-muted-foreground">Loading PDF…</p>
+							</div>
+						)
+					}
+
+					return (
+						<DocumentContent documentId={activeDocumentId}>
+							{({ isError, isLoaded }) => {
+								if (isError) {
+									return (
+										<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
+											<div className="text-center">
+												<p className="text-destructive font-semibold">Failed to load PDF</p>
+												<p className="mt-2 text-xs text-destructive/80">The PDF could not be opened.</p>
+											</div>
+										</div>
+									)
+								}
+
+								if (!isLoaded) {
+									return (
+										<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
+											<p className="text-muted-foreground">Loading PDF…</p>
+										</div>
+									)
+								}
+
+								return (
+									<GlobalPointerProvider documentId={activeDocumentId}>
+										<div className="flex size-full  justify-center" data-selection-zone="true">
+											<ViewerRuntime
+												documentId={activeDocumentId}
+												bookId={bookId}
+												registerApi={registerApi}
+												getBookReadingState={(id) => (id === bookId ? readingState : null)}
+												updateBookReadingState={updateBookReadingState}
+												hasRestoredPage={hasRestoredPage}
+												onMarkPageRestored={markPageRestored}
+											/>
+										</div>
+									</GlobalPointerProvider>
+								)
+							}}
+						</DocumentContent>
+					)
+				}}
 			</EmbedPDF>
 		</div>
 	)
