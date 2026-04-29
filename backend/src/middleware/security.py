@@ -2,12 +2,11 @@
 
 
 import ipaddress
-from collections.abc import Callable
 from functools import lru_cache
 
 from fastapi import Request
-from fastapi.responses import Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from src.config.settings import get_settings
 
@@ -64,29 +63,42 @@ def get_client_ip(request: Request) -> str:
 _API_CSP_HEADER = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
 
 
-class SimpleSecurityMiddleware(BaseHTTPMiddleware):
+class SimpleSecurityMiddleware:
     """
     Ultra-simple security middleware.
 
     Adds essential headers and basic protection.
     """
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        """Handle request with security headers."""
-        response = await call_next(request)
-        path = request.url.path
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-        # Essential security headers (prevents 90% of attacks)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Handle HTTP response start events with security headers."""
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = str(scope.get("path", ""))
+
+        async def send_with_security_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["X-Content-Type-Options"] = "nosniff"
+                headers["X-Frame-Options"] = "DENY"
+                headers["X-XSS-Protection"] = "1; mode=block"
+                headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+                headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+                self._set_api_headers(path, headers)
+
+            await send(message)
+
+        await self.app(scope, receive, send_with_security_headers)
+
+    def _set_api_headers(self, path: str, headers: MutableHeaders) -> None:
         if path.startswith("/api/"):
-            response.headers["Content-Security-Policy"] = _API_CSP_HEADER
+            headers["Content-Security-Policy"] = _API_CSP_HEADER
         if path.startswith("/api/v1/auth/"):
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-
-        return response
+            headers["Cache-Control"] = "no-store"
+            headers["Pragma"] = "no-cache"
+            headers["Expires"] = "0"
