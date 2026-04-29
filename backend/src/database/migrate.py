@@ -182,13 +182,14 @@ async def _apply_pending_migrations(
     migration_files: list[Path],
     applied: set[str],
     verbose: bool,
+    settings: Settings | None = None,
 ) -> int:
     applied_count = 0
     for path in migration_files:
         if path.name in applied:
             continue
 
-        sql_content = _interpolate_sql_placeholders(_read_sql(path))
+        sql_content = _interpolate_sql_placeholders(_read_sql(path), settings)
         _assert_transaction_safe_migration(path, sql_content)
         await _execute_migration_sql(conn=conn, sql_content=sql_content)
         await _record_applied_migration(conn, filename=path.name)
@@ -208,13 +209,13 @@ async def _get_pending_migration_names(conn: AsyncConnection, *, migration_files
     return [path.name for path in migration_files if path.name not in applied]
 
 
-async def apply_migrations(db_engine: AsyncEngine | None = None) -> int:
+async def apply_migrations(db_engine: AsyncEngine | None = None, settings: Settings | None = None) -> int:
     """Apply pending SQL migrations in order and return the number applied."""
     engine = db_engine or default_engine
 
-    settings = get_settings()
-    migration_files = _resolve_migration_files(settings)
-    verbose = settings.MIGRATIONS_VERBOSE
+    resolved_settings = settings or get_settings()
+    migration_files = _resolve_migration_files(resolved_settings)
+    verbose = resolved_settings.MIGRATIONS_VERBOSE
 
     async with engine.connect() as conn, conn.begin():
         lock_key = await _resolve_lock_key(conn)
@@ -226,6 +227,7 @@ async def apply_migrations(db_engine: AsyncEngine | None = None) -> int:
             migration_files=migration_files,
             applied=applied,
             verbose=verbose,
+            settings=resolved_settings,
         )
 
 

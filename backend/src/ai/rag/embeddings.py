@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.litellm_config import configure_litellm
-from src.ai.rag.config import rag_config
+from src.ai.rag.config import get_rag_config
 from src.ai.rag.schemas import SearchResult
 
 
@@ -62,17 +62,17 @@ class VectorRAG:
 
     def __init__(self) -> None:
         """Initialize LiteLLM configuration and caching helpers."""
-        # Prefer centralized config (env prefix RAG_ already supported by pydantic BaseSettings)
-        self.embedding_model = rag_config.embedding_model
+        config = get_rag_config()
+        self.embedding_model = config.embedding_model
         if not self.embedding_model:
             error_msg = "RAG embedding model not configured (set RAG_EMBEDDING_MODEL)"
             raise ValueError(error_msg)
 
-        self.configured_embedding_dim = rag_config.embedding_output_dim
-        self.embedding_context_size = rag_config.embedding_context_size
-        self.manual_retry_attempts = max(rag_config.embedding_manual_retries, 0)
-        self.retry_backoff_seconds = max(rag_config.embedding_retry_delay_seconds, 0.0)
-        self.batch_size = max(rag_config.embedding_batch_size, 1)
+        self.configured_embedding_dim = config.embedding_output_dim
+        self.embedding_context_size = config.embedding_context_size
+        self.manual_retry_attempts = config.embedding_manual_retries
+        self.retry_backoff_seconds = config.embedding_retry_delay_seconds
+        self.batch_size = config.embedding_batch_size
 
         self._db_embedding_dim: int | None = None
         self._effective_embedding_dim: int | None = self.configured_embedding_dim
@@ -221,7 +221,7 @@ class VectorRAG:
             # Note: PostgreSQL does not allow bind parameters in SET statements.
             # Use a validated literal integer to avoid syntax errors like
             # "syntax error at or near $1" from psycopg.
-            ef_val = int(rag_config.hnsw_ef_search)
+            ef_val = get_rag_config().hnsw_ef_search
             await session.execute(text(f"SET LOCAL hnsw.ef_search = {ef_val}"))
 
             if doc_id and course_id:

@@ -112,8 +112,26 @@ class Settings(BaseSettings):
     PRIMARY_LLM_MODELS: str = ""
     FAST_LLM_MODEL: str = ""
     AI_REQUEST_TIMEOUT: int = 300
+    RAG_EMBEDDING_MODEL: str = ""
+    RAG_EMBEDDING_CONTEXT_SIZE: int | None = None
+    RAG_EMBEDDING_MANUAL_RETRIES: int = 1
+    RAG_EMBEDDING_RETRY_DELAY_SECONDS: float = 1.0
+    RAG_EMBEDDING_BATCH_SIZE: int = 1
     RAG_EMBEDDING_OUTPUT_DIM: int | None = None
+    MEMORY_LLM_MODEL: str = ""
+    MEMORY_EMBEDDING_MODEL: str = ""
     MEMORY_EMBEDDING_OUTPUT_DIM: int | None = None
+
+    # RAG Configuration
+    RAG_HNSW_EF_SEARCH: int = 80
+    RAG_HNSW_M: int = 16
+    RAG_HNSW_EF_CONSTRUCTION: int = 200
+    RAG_ENABLE_OCR: bool = False
+    RAG_EXTRACT_TABLES: bool = True
+    RAG_EXTRACT_IMAGES: bool = False
+    RAG_TOP_K: int = 50
+    RAG_RERANK_K: int = 10
+    RAG_MAX_FILE_SIZE_MB: int = 10
 
     # AI Tooling Configuration
     AI_ENABLED_TOOLS: str = ""  # Comma-separated allowlist; empty means allow all.
@@ -126,6 +144,12 @@ class Settings(BaseSettings):
 
     # Domain-specific model overrides
     TAGGING_LLM_MODEL: str | None = None
+
+    # LiteLLM/Langfuse observability
+    LANGFUSE_PUBLIC_KEY: str = ""
+    LANGFUSE_SECRET_KEY: SecretStr = SecretStr("")
+    LANGFUSE_OTEL_HOST: str = ""
+    LANGFUSE_BASE_URL: str = ""
 
     # Code Execution (E2B)
     E2B_SANDBOX_TTL: int = 600
@@ -156,6 +180,11 @@ class Settings(BaseSettings):
     MIGRATIONS_AUTO_APPLY: bool = False
     MIGRATIONS_VERBOSE: bool = False
     MIGRATIONS_DIR: str | None = None
+
+    # Migration rehearsal
+    NEON_API_KEY: SecretStr = SecretStr("")
+    NEON_PROJECT_ID: str = ""
+    COMMIT_SHA: str = "local"
     _OSS_DEFAULT_SIGNING_SEED = "talimio-oss-local-dev-signing-seed"
 
     @field_validator("DATABASE_URL")
@@ -207,6 +236,41 @@ class Settings(BaseSettings):
             return None
         if value <= 0:
             msg = "Embedding output dimensions must be greater than zero"
+            raise ValueError(msg)
+        return value
+
+    @field_validator(
+        "RAG_EMBEDDING_BATCH_SIZE",
+        "RAG_HNSW_EF_SEARCH",
+        "RAG_HNSW_M",
+        "RAG_HNSW_EF_CONSTRUCTION",
+        "RAG_TOP_K",
+        "RAG_RERANK_K",
+        "RAG_MAX_FILE_SIZE_MB",
+    )
+    @classmethod
+    def validate_positive_rag_integers(cls, value: int) -> int:
+        """Ensure integer RAG settings are positive."""
+        if value <= 0:
+            msg = "RAG integer settings must be greater than zero"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("RAG_EMBEDDING_MANUAL_RETRIES")
+    @classmethod
+    def validate_non_negative_rag_retries(cls, value: int) -> int:
+        """Ensure manual embedding retries are not negative."""
+        if value < 0:
+            msg = "RAG_EMBEDDING_MANUAL_RETRIES must be greater than or equal to zero"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("RAG_EMBEDDING_RETRY_DELAY_SECONDS")
+    @classmethod
+    def validate_non_negative_rag_retry_delay(cls, value: float) -> float:
+        """Ensure embedding retry delay is not negative."""
+        if value < 0:
+            msg = "RAG_EMBEDDING_RETRY_DELAY_SECONDS must be greater than or equal to zero"
             raise ValueError(msg)
         return value
 

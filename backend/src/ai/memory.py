@@ -32,7 +32,6 @@ from mem0.configs.base import MemoryConfig
 apply_mem0_telemetry_disable_patch()
 
 from src.ai.mem0_litellm_embedder_patch import apply_mem0_litellm_embedder_patch
-from src.config import env
 from src.config.settings import get_settings
 
 
@@ -52,7 +51,8 @@ _MEMORY_HISTORY_DB_PATH = ":memory:"
 
 def _memory_is_configured() -> bool:
     """Return True if required MEMORY_* vars are set."""
-    return bool(env("MEMORY_LLM_MODEL") and env("MEMORY_EMBEDDING_MODEL"))
+    settings = get_settings()
+    return bool(settings.MEMORY_LLM_MODEL and settings.MEMORY_EMBEDDING_MODEL)
 
 
 def _resolve_embedding_dims() -> int | None:
@@ -95,13 +95,13 @@ def _get_memory_config() -> dict[str, Any]:
         "llm": {
             "provider": "litellm",
             "config": {
-                "model": env("MEMORY_LLM_MODEL"),
+                "model": settings.MEMORY_LLM_MODEL,
             },
         },
         "embedder": {
             "provider": "openai",
             "config": {
-                "model": env("MEMORY_EMBEDDING_MODEL"),
+                "model": settings.MEMORY_EMBEDDING_MODEL,
             },
         },
     }

@@ -1,91 +1,48 @@
-"""RAG system configuration for LiteLLM + pgvector pipeline."""
+"""Plain RAG configuration derived from canonical application settings."""
 
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from dataclasses import dataclass
 
-from src.config.settings import get_settings
-
-
-class RAGConfig(BaseSettings):
-    """RAG system configuration."""
-
-    # Embedding Configuration
-    embedding_model: str = Field(
-        default="",  # Optional - RAG might not be configured
-        description="Model for generating embeddings via LiteLLM",
-    )
-    embedding_context_size: int | None = Field(
-        default=None,
-        description="Optional provider-specific embedding context size",
-    )
-    embedding_manual_retries: int = Field(
-        default=1,
-        description="Manual retries for embedding calls (in addition to any provider retries)",
-    )
-    embedding_retry_delay_seconds: float = Field(
-        default=1.0,
-        description="Delay in seconds between manual embedding retries",
-    )
-    embedding_batch_size: int = Field(
-        default=1,
-        description="Batch size for embedding generation (must be >= 1)",
-    )
-
-    # Database Configuration (pgvector)
-    hnsw_ef_search: int = Field(
-        default=80,
-        description="pgvector HNSW query-time ef_search (higher = better recall, slower)",
-    )
-    hnsw_m: int = Field(
-        default=16,
-        description="pgvector HNSW graph connectivity (m) used at index build time",
-    )
-    hnsw_ef_construction: int = Field(
-        default=200,
-        description="pgvector HNSW ef_construction used at index build time",
-    )
-
-    # Parsing Configuration (Unstructured)
-    enable_ocr: bool = Field(
-        default=False,  # Disabled to avoid tesseract dependency
-        description="Enable OCR for scanned PDFs",
-    )
-    extract_tables: bool = Field(
-        default=True,
-        description="Extract tables from documents",
-    )
-    extract_images: bool = Field(
-        default=False,
-        description="Extract and process images from documents",
-    )
-
-    # Search Configuration
-    top_k: int = Field(
-        default=50,  # Match the value from .env
-        description="Number of chunks to retrieve before reranking",
-    )
-    rerank_k: int = Field(
-        default=10,  # Sensible default
-        description="Number of chunks to return after reranking",
-    )
-
-    # File size limit
-    max_file_size_mb: int = Field(
-        default=10,  # 10MB default limit
-        description="Maximum file size in MB for document processing",
-    )
-
-    model_config = SettingsConfigDict(
-        env_prefix="RAG_",
-        env_file=".env",
-        extra="ignore",
-    )
-
-    @property
-    def embedding_output_dim(self) -> int | None:
-        """Return the canonical RAG embedding dimension from application settings."""
-        return get_settings().RAG_EMBEDDING_OUTPUT_DIM
+from src.config.settings import Settings, get_settings
 
 
-# Global configuration instance
-rag_config = RAGConfig()
+@dataclass(frozen=True, slots=True)
+class RAGConfig:
+    """RAG system configuration used by the LiteLLM + pgvector pipeline."""
+
+    embedding_model: str
+    embedding_context_size: int | None
+    embedding_manual_retries: int
+    embedding_retry_delay_seconds: float
+    embedding_batch_size: int
+    embedding_output_dim: int | None
+    hnsw_ef_search: int
+    hnsw_m: int
+    hnsw_ef_construction: int
+    enable_ocr: bool
+    extract_tables: bool
+    extract_images: bool
+    top_k: int
+    rerank_k: int
+    max_file_size_mb: int
+
+
+def get_rag_config(settings: Settings | None = None) -> RAGConfig:
+    """Build RAG configuration from the current application settings."""
+    resolved_settings = settings or get_settings()
+    return RAGConfig(
+        embedding_model=resolved_settings.RAG_EMBEDDING_MODEL,
+        embedding_context_size=resolved_settings.RAG_EMBEDDING_CONTEXT_SIZE,
+        embedding_manual_retries=resolved_settings.RAG_EMBEDDING_MANUAL_RETRIES,
+        embedding_retry_delay_seconds=resolved_settings.RAG_EMBEDDING_RETRY_DELAY_SECONDS,
+        embedding_batch_size=resolved_settings.RAG_EMBEDDING_BATCH_SIZE,
+        embedding_output_dim=resolved_settings.RAG_EMBEDDING_OUTPUT_DIM,
+        hnsw_ef_search=resolved_settings.RAG_HNSW_EF_SEARCH,
+        hnsw_m=resolved_settings.RAG_HNSW_M,
+        hnsw_ef_construction=resolved_settings.RAG_HNSW_EF_CONSTRUCTION,
+        enable_ocr=resolved_settings.RAG_ENABLE_OCR,
+        extract_tables=resolved_settings.RAG_EXTRACT_TABLES,
+        extract_images=resolved_settings.RAG_EXTRACT_IMAGES,
+        top_k=resolved_settings.RAG_TOP_K,
+        rerank_k=resolved_settings.RAG_RERANK_K,
+        max_file_size_mb=resolved_settings.RAG_MAX_FILE_SIZE_MB,
+    )

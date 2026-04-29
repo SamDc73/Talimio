@@ -22,7 +22,6 @@ from starlette.routing import Match
 from .ai.assistant.router import router as assistant_router
 from .ai.litellm_config import cleanup_litellm_async_clients
 from .ai.mcp.router import router as mcp_router
-from .ai.rag.config import rag_config
 from .ai.rag.router import router as rag_router
 from .auth.csrf import CSRFMiddlewareWithMaxAge, get_csrf_cookie_domain
 from .auth.router import router as auth_router
@@ -84,10 +83,10 @@ def _register_routers(app: FastAPI) -> None:
 
 async def _startup() -> None:
     """Perform lightweight startup checks and initialization."""
-    if rag_config.embedding_model:
+    settings = get_settings()
+    if settings.RAG_EMBEDDING_MODEL:
         logger.debug("startup.rag.config_loaded")
 
-    settings = get_settings()
     if settings.MIGRATIONS_AUTO_APPLY:
         applied_migrations = await apply_migrations(engine)
         logger.info("startup.migrations.applied", extra={"applied_count": applied_migrations})
@@ -333,9 +332,8 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
-    from src.config import env
-
-    host = env("API_HOST", "127.0.0.1")
-    port = int(env("API_PORT", "8080"))
+    settings = get_settings()
+    host = settings.API_HOST
+    port = settings.API_PORT
 
     uvicorn.run(app, host=host, port=port)

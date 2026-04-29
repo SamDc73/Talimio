@@ -14,10 +14,13 @@ COMMIT_SHA        Git commit SHA (set automatically by Cloud Build)
 
 import json
 import logging
-import os
-import subprocess  # noqa: S404
-import sys
 import urllib.request
+
+from pydantic import SecretStr
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from src.config.settings import Settings
+from src.database.migrate import apply_migrations
 
 
 logger = logging.getLogger(__name__)
@@ -71,11 +74,37 @@ def _delete_branch(api_key: str, project_id: str, branch_id: str) -> None:
         )
 
 
-def main() -> None:
+async def _run_rehearsal_migrations(db_url: str, settings: Settings) -> None:
+    """Run migrations against the temporary Neon branch."""
+    engine = create_async_engine(
+        db_url,
+        echo=False,
+        pool_pre_ping=True,
+        connect_args={"connect_timeout": 10},
+    )
+    try:
+        applied_count = await apply_migrations(engine, settings=settings)
+        logger.info("neon.rehearsal_migrations_applied", extra={"applied_count": applied_count})
+    finally:
+        await engine.dispose()
+
+
+async def main() -> None:
     """Create a Neon preview branch, run migrations, and clean up."""
-    api_key = os.environ["NEON_API_KEY"]
-    project_id = os.environ["NEON_PROJECT_ID"]
-    commit_sha = os.environ.get("COMMIT_SHA", "local")
+    settings = Settings(
+        AUTH_SECRET_KEY=SecretStr("neon-rehearsal-key"),
+        DATABASE_URL="postgresql+psycopg://unused:unused@localhost/unused",
+    )
+    api_key = settings.NEON_API_KEY.get_secret_value().strip()
+    project_id = settings.NEON_PROJECT_ID.strip()
+    commit_sha = settings.COMMIT_SHA.strip() or "local"
+    if not api_key:
+        msg = "NEON_API_KEY environment variable is required"
+        raise RuntimeError(msg)
+    if not project_id:
+        msg = "NEON_PROJECT_ID environment variable is required"
+        raise RuntimeError(msg)
+
     branch_name = f"deploy-check-{commit_sha[:12]}"
 
     logger.info("neon.creating_preview_branch", extra={"branch_name": branch_name})
@@ -83,20 +112,15 @@ def main() -> None:
     logger.info("neon.preview_branch_created", extra={"branch_id": branch_id})
 
     try:
-        subprocess.run(
-            [sys.executable, "-m", "src.database.migrate"],
-            env={
-                **os.environ,
-                "DATABASE_URL": db_url,
-                "AUTH_SECRET_KEY": "neon-rehearsal-key",
-            },
-            check=True,
-        )
+        rehearsal_settings = settings.model_copy(update={"DATABASE_URL": db_url})
+        await _run_rehearsal_migrations(db_url, rehearsal_settings)
         logger.info("neon.rehearsal_passed")
     finally:
         _delete_branch(api_key, project_id, branch_id)
 
 
 if __name__ == "__main__":
+    import asyncio
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    main()
+    asyncio.run(main())

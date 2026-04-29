@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
 from src.ai.rag.chunker import chunk_text_async
-from src.ai.rag.config import rag_config
+from src.ai.rag.config import get_rag_config
 from src.ai.rag.exceptions import (
     RagCourseNotFoundError,
     RagDocumentNotFoundError,
@@ -67,8 +67,7 @@ class RAGService:
 
     def __init__(self) -> None:
         """Initialize RAG service components for LiteLLM + pgvector pipeline."""
-        # Configuration from centralized config
-        self.config = rag_config
+        self.config = get_rag_config()
 
         # Components will be lazily initialized
         self._document_processor = None  # Unstructured parser

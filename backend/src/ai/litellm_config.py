@@ -9,6 +9,8 @@ import litellm
 import structlog
 from litellm.integrations.custom_logger import CustomLogger
 
+from src.config.settings import get_settings
+
 
 _LITELLM_CONFIGURED = False
 _LLM_COMPLETION_CALL_TYPES = {
@@ -110,13 +112,13 @@ def _configure_langfuse_otel_callback() -> None:
     callbacks = _normalize_callbacks(getattr(litellm, "callbacks", []))
     callbacks_without_langfuse = [callback for callback in callbacks if callback != "langfuse_otel"]
 
-    platform_mode = os.getenv("PLATFORM_MODE", "cloud").strip().lower()
-    public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
-    secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
-    configured_host = os.getenv("LANGFUSE_OTEL_HOST", "").strip()
-    base_url = os.getenv("LANGFUSE_BASE_URL", "").strip()
+    settings = get_settings()
+    public_key = settings.LANGFUSE_PUBLIC_KEY.strip()
+    secret_key = settings.LANGFUSE_SECRET_KEY.get_secret_value().strip()
+    configured_host = settings.LANGFUSE_OTEL_HOST.strip()
+    base_url = settings.LANGFUSE_BASE_URL.strip()
 
-    is_cloud = platform_mode == "cloud"
+    is_cloud = settings.PLATFORM_MODE == "cloud"
     has_credentials = bool(public_key) and bool(secret_key)
     resolved_host = configured_host or base_url
 
@@ -125,6 +127,7 @@ def _configure_langfuse_otel_callback() -> None:
         return
 
     if not configured_host and base_url:
+        # LiteLLM's Langfuse adapter reads this host from process env only.
         os.environ["LANGFUSE_OTEL_HOST"] = base_url
 
     if "langfuse_otel" not in callbacks_without_langfuse:
