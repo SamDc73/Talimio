@@ -40,6 +40,7 @@ from .schemas import (
     GradeContextPayload,
     GradeExpectedPayload,
     GradeRequest,
+    GradeResponse,
     LessonDetailResponse,
     LessonVersionHistoryResponse,
     NextReviewResponse,
@@ -419,11 +420,13 @@ class CoursesFacade:  # noqa: PLR0904
         lesson_service = LessonService(self._session, user_id)
 
         try:
-            return await lesson_service.start_next_pass(
+            lesson = await lesson_service.start_next_pass(
                 course_id=course_id,
                 lesson_id=lesson_id,
                 force=force,
             )
+            materializer = InlineQuestionMaterializer(self._session)
+            return await materializer.materialize_lesson_response(lesson=lesson, user_id=user_id, course_id=course_id)
         except DomainError:
             raise
         except (SQLAlchemyError, RuntimeError, TypeError, ValueError) as error:

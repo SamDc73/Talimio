@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import ast
+import asyncio
 import hashlib
 import json
-import logging
-import re
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import select
@@ -18,36 +17,25 @@ from src.courses.models import LearningQuestion
 from src.courses.schemas import LessonDetailResponse
 
 
-logger = logging.getLogger(__name__)
-
-
 _SUPPORTED_COMPONENTS = {"LatexExpression", "FreeForm", "JXGBoard", "MultipleChoice", "FillInTheBlank"}
-_COMPONENT_RE = re.compile(
-    r"<(LatexExpression|FreeForm|JXGBoard|MultipleChoice|FillInTheBlank)\b(?P<attrs>[^>]*)/?>",
-    re.DOTALL,
-)
-_ATTR_NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-_HIDDEN_PROPS = {
-    "expectedLatex",
-    "expectedAnswer",
-    "sampleAnswer",
-    "solutionLatex",
-    "expectedState",
-    "correctAnswer",
-    "answer",
-    "explanation",
-    "tolerance",
-    "perCheckTolerance",
-}
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_WEB_DIR = _REPO_ROOT / "web"
+_MDX_MATERIALIZER_SCRIPT = _WEB_DIR / "scripts" / "materialize-inline-questions.mjs"
 
 
 @dataclass(frozen=True)
-class _Attribute:
-    name: str
-    raw_value: str
-    value: Any
-    start: int
-    end: int
+class _MdxDocument:
+    key: str
+    scope: str
+    content: str
+
+
+@dataclass(frozen=True)
+class _ExtractedComponent:
+    component: str
+    index: int
+    placeholder: str
+    attrs: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -73,76 +61,74 @@ class InlineQuestionMaterializer:
         course_id: uuid.UUID,
     ) -> LessonDetailResponse:
         """Return a lesson response with inline questions bound to server-owned IDs."""
-        content = lesson.content
-        sanitized_content = content
-        if content:
-            sanitized_content = await self._materialize_content(
-                content=content,
-                user_id=user_id,
-                course_id=course_id,
-                lesson_id=lesson.id,
-                concept_id=lesson.concept_id,
-                lesson_version_id=lesson.version_id,
-                scope="content",
+        documents: list[_MdxDocument] = []
+        if lesson.content:
+            documents.append(_MdxDocument(key="content", scope="content", content=lesson.content))
+        documents.extend(
+            _MdxDocument(
+                key=f"window:{window.window_index}",
+                scope=f"window:{window.window_index}",
+                content=window.content,
             )
+            for window in lesson.windows
+        )
+
+        materialized_documents = await self._materialize_documents(
+            documents=documents,
+            user_id=user_id,
+            course_id=course_id,
+            lesson_id=lesson.id,
+            concept_id=lesson.concept_id,
+            lesson_version_id=lesson.version_id,
+        )
+        sanitized_content = materialized_documents.get("content", lesson.content)
         sanitized_windows = []
         for window in lesson.windows:
-            sanitized_window_content = await self._materialize_content(
-                content=window.content,
-                user_id=user_id,
-                course_id=course_id,
-                lesson_id=lesson.id,
-                concept_id=lesson.concept_id,
-                lesson_version_id=lesson.version_id,
-                scope=f"window:{window.window_index}",
-            )
+            sanitized_window_content = materialized_documents.get(f"window:{window.window_index}", window.content)
             sanitized_windows.append(window.model_copy(update={"content": sanitized_window_content}))
 
         return lesson.model_copy(update={"content": sanitized_content, "windows": sanitized_windows})
 
-    async def _materialize_content(
+    async def _materialize_documents(
         self,
         *,
-        content: str,
+        documents: list[_MdxDocument],
         user_id: uuid.UUID,
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
         concept_id: uuid.UUID | None,
         lesson_version_id: uuid.UUID | None,
-        scope: str,
-    ) -> str:
-        pieces: list[str] = []
-        cursor = 0
-        for index, match in enumerate(_COMPONENT_RE.finditer(content)):
-            pieces.append(content[cursor : match.start()])
-            component = match.group(1)
-            raw_attrs = match.group("attrs")
-            replacement = match.group(0)
-            try:
-                attrs = _parse_attributes(raw_attrs)
-                inline_question = _build_inline_question(component=component, attrs=attrs)
-                if inline_question is not None:
-                    question_id = await self._upsert_question(
-                        user_id=user_id,
-                        course_id=course_id,
-                        lesson_id=lesson_id,
-                        concept_id=concept_id,
-                        lesson_version_id=lesson_version_id,
-                        source_component=component,
-                        source_key=_source_key(scope=scope, index=index, component=component, attrs=attrs),
-                        inline_question=inline_question,
-                    )
-                    replacement = _rewrite_component(match.group(0), raw_attrs=raw_attrs, attrs=attrs, question_id=question_id)
-            except (TypeError, ValueError, json.JSONDecodeError) as error:
-                replacement = _strip_hidden_component(match.group(0), raw_attrs=raw_attrs)
-                logger.warning(
-                    "courses.inline_question.materialize_failed",
-                    extra={"lesson_id": str(lesson_id), "component": component, "scope": scope, "error": str(error)},
+    ) -> dict[str, str]:
+        if not documents:
+            return {}
+
+        parsed_documents = await _parse_mdx_documents(documents)
+        materialized_documents: dict[str, str] = {}
+        for document in parsed_documents:
+            content = str(document["content"])
+            for component in _extracted_components(document):
+                inline_question = _build_inline_question(component=component.component, attrs=component.attrs)
+                if inline_question is None:
+                    content = _remove_placeholder_question_id(content, component.placeholder)
+                    continue
+                question_id = await self._upsert_question(
+                    user_id=user_id,
+                    course_id=course_id,
+                    lesson_id=lesson_id,
+                    concept_id=concept_id,
+                    lesson_version_id=lesson_version_id,
+                    source_component=component.component,
+                    source_key=_source_key(
+                        scope=str(document["scope"]),
+                        index=component.index,
+                        component=component.component,
+                        attrs=component.attrs,
+                    ),
+                    inline_question=inline_question,
                 )
-            pieces.append(replacement)
-            cursor = match.end()
-        pieces.append(content[cursor:])
-        return "".join(pieces)
+                content = content.replace(component.placeholder, str(question_id))
+            materialized_documents[str(document["key"])] = content
+        return materialized_documents
 
     async def _upsert_question(
         self,
@@ -206,127 +192,61 @@ class InlineQuestionMaterializer:
         return question.id
 
 
-def _parse_attributes(raw_attrs: str) -> dict[str, _Attribute]:
-    attrs: dict[str, _Attribute] = {}
-    cursor = 0
-    while cursor < len(raw_attrs):
-        match = _ATTR_NAME_RE.search(raw_attrs, cursor)
-        if match is None:
-            break
-        name = match.group(0)
-        equals_index = _skip_space(raw_attrs, match.end())
-        if equals_index >= len(raw_attrs) or raw_attrs[equals_index] != "=":
-            cursor = match.end()
-            continue
-        value_start = _skip_space(raw_attrs, equals_index + 1)
-        raw_value, end = _read_raw_value(raw_attrs, value_start)
-        attrs[name] = _Attribute(name=name, raw_value=raw_value, value=_parse_value(raw_value), start=match.start(), end=end)
-        cursor = end
-    return attrs
-
-
-def _skip_space(text: str, index: int) -> int:
-    while index < len(text) and text[index].isspace():
-        index += 1
-    return index
-
-
-def _read_raw_value(text: str, start: int) -> tuple[str, int]:
-    if start >= len(text):
-        detail = "missing attribute value"
+async def _parse_mdx_documents(documents: list[_MdxDocument]) -> list[dict[str, Any]]:
+    payload = {"documents": [{"key": document.key, "content": document.content} for document in documents]}
+    process = await asyncio.create_subprocess_exec(
+        "node",
+        str(_MDX_MATERIALIZER_SCRIPT),
+        cwd=str(_WEB_DIR),
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await process.communicate(json.dumps(payload).encode())
+    if process.returncode != 0:
+        detail = stderr.decode().strip() or "MDX materializer failed"
         raise ValueError(detail)
-    quote = text[start]
-    if quote in {'"', "'"}:
-        end = start + 1
-        while end < len(text):
-            if text[end] == quote and text[end - 1] != "\\":
-                return text[start : end + 1], end + 1
-            end += 1
-        detail = "unterminated quoted attribute"
-        raise ValueError(detail)
-    if quote == "{":
-        depth = 1
-        end = start + 1
-        while end < len(text) and depth > 0:
-            if text[end] == "{":
-                depth += 1
-            elif text[end] == "}":
-                depth -= 1
-            end += 1
-        if depth != 0:
-            detail = "unterminated expression attribute"
-            raise ValueError(detail)
-        return text[start:end], end
-    end = start
-    while end < len(text) and not text[end].isspace():
-        end += 1
-    return text[start:end], end
+    try:
+        response = json.loads(stdout.decode())
+    except json.JSONDecodeError as error:
+        detail = f"invalid MDX materializer response: {error}"
+        raise ValueError(detail) from error
+
+    response_documents = response.get("documents")
+    if not isinstance(response_documents, list):
+        detail = "invalid MDX materializer response: missing documents"
+        raise TypeError(detail)
+    scope_by_key = {document.key: document.scope for document in documents}
+    for response_document in response_documents:
+        key = str(response_document.get("key"))
+        response_document["scope"] = scope_by_key[key]
+    return response_documents
 
 
-def _parse_value(raw_value: str) -> Any:
-    if raw_value.startswith(("'", '"')):
-        return ast.literal_eval(raw_value)
-    if raw_value.startswith("{") and raw_value.endswith("}"):
-        inner = raw_value[1:-1].strip()
-        if not inner:
-            return None
-        try:
-            return json.loads(inner)
-        except json.JSONDecodeError:
-            return ast.literal_eval(_pythonize_js_object_literal(inner))
-    return raw_value
-
-
-def _pythonize_js_object_literal(value: str) -> str:
-    """Quote JSX-style object keys so Python can parse the literal."""
-    text = _replace_js_literals(value)
-    pieces: list[str] = []
-    cursor = 0
-    quote: str | None = None
-    while cursor < len(text):
-        char = text[cursor]
-        if quote is not None:
-            pieces.append(char)
-            if char == quote and text[cursor - 1] != "\\":
-                quote = None
-            cursor += 1
+def _extracted_components(document: dict[str, Any]) -> list[_ExtractedComponent]:
+    components = document.get("components")
+    if not isinstance(components, list):
+        return []
+    extracted_components: list[_ExtractedComponent] = []
+    for component in components:
+        if not isinstance(component, dict):
             continue
-
-        if char in {'"', "'"}:
-            quote = char
-            pieces.append(char)
-            cursor += 1
+        component_name = str(component.get("component"))
+        if component_name not in _SUPPORTED_COMPONENTS:
             continue
-
-        if char.isalpha() or char == "_":
-            end = cursor + 1
-            while end < len(text) and (text[end].isalnum() or text[end] == "_"):
-                end += 1
-            next_index = _skip_space(text, end)
-            if next_index < len(text) and text[next_index] == ":" and _is_object_key_position(text, cursor):
-                pieces.append(repr(text[cursor:end]))
-                cursor = end
-                continue
-
-        pieces.append(char)
-        cursor += 1
-    return "".join(pieces)
+        attrs = component.get("attrs")
+        extracted_components.append(
+            _ExtractedComponent(
+                component=component_name,
+                index=_int_value(component.get("index")) or 0,
+                placeholder=str(component.get("placeholder")),
+                attrs=attrs if isinstance(attrs, dict) else {},
+            )
+        )
+    return extracted_components
 
 
-def _replace_js_literals(value: str) -> str:
-    replacements = {"true": "True", "false": "False", "null": "None"}
-    pattern = re.compile(r"\b(true|false|null)\b")
-    return pattern.sub(lambda match: replacements[match.group(1)], value)
-
-
-def _is_object_key_position(text: str, index: int) -> bool:
-    previous = index - 1
-    while previous >= 0 and text[previous].isspace():
-        previous -= 1
-    return previous < 0 or text[previous] in "{,"
-
-
-def _build_inline_question(component: str, attrs: dict[str, _Attribute]) -> _InlineQuestion | None:  # noqa: PLR0911
+def _build_inline_question(component: str, attrs: dict[str, Any]) -> _InlineQuestion | None:  # noqa: PLR0911
     if component not in _SUPPORTED_COMPONENTS:
         return None
     question = _string_attr(attrs, "question") or _string_attr(attrs, "sentence") or "Practice question"
@@ -346,8 +266,8 @@ def _build_inline_question(component: str, attrs: dict[str, _Attribute]) -> _Inl
             expected_payload={"expectedLatex": expected_latex, "criteria": criteria, "practiceContext": practice_context},
         )
     if component == "JXGBoard":
-        expected_state = attrs.get("expectedState")
-        if expected_state is None or not isinstance(expected_state.value, dict):
+        expected_state = _dict_attr(attrs, "expectedState")
+        if expected_state is None:
             return None
         return _InlineQuestion(
             question=question,
@@ -355,7 +275,7 @@ def _build_inline_question(component: str, attrs: dict[str, _Attribute]) -> _Inl
             grade_kind="jxg_state",
             input_kind="jxg_state",
             expected_payload={
-                "expectedState": expected_state.value,
+                "expectedState": expected_state,
                 "tolerance": _number_attr(attrs, "tolerance"),
                 "perCheckTolerance": _dict_attr(attrs, "perCheckTolerance"),
                 "criteria": criteria,
@@ -414,41 +334,36 @@ def _build_inline_question(component: str, attrs: dict[str, _Attribute]) -> _Inl
     )
 
 
-def _string_attr(attrs: dict[str, _Attribute], name: str) -> str | None:
-    attr = attrs.get(name)
-    value = attr.value if attr is not None else None
+def _string_attr(attrs: dict[str, Any], name: str) -> str | None:
+    value = attrs.get(name)
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
 
 
-def _number_attr(attrs: dict[str, _Attribute], name: str) -> float | None:
-    attr = attrs.get(name)
-    value = attr.value if attr is not None else None
+def _number_attr(attrs: dict[str, Any], name: str) -> float | None:
+    value = attrs.get(name)
     if isinstance(value, int | float):
         return float(value)
     return None
 
 
-def _int_attr(attrs: dict[str, _Attribute], name: str) -> int | None:
-    attr = attrs.get(name)
-    value = attr.value if attr is not None else None
+def _int_attr(attrs: dict[str, Any], name: str) -> int | None:
+    value = attrs.get(name)
     if isinstance(value, int):
         return value
     return None
 
 
-def _dict_attr(attrs: dict[str, _Attribute], name: str) -> dict[str, Any] | None:
-    attr = attrs.get(name)
-    value = attr.value if attr is not None else None
+def _dict_attr(attrs: dict[str, Any], name: str) -> dict[str, Any] | None:
+    value = attrs.get(name)
     if isinstance(value, dict):
         return value
     return None
 
 
-def _list_attr(attrs: dict[str, _Attribute], name: str) -> list[str]:
-    attr = attrs.get(name)
-    value = attr.value if attr is not None else None
+def _list_attr(attrs: dict[str, Any], name: str) -> list[str]:
+    value = attrs.get(name)
     if isinstance(value, list):
         return [str(item) for item in value if item]
     if isinstance(value, str) and value.strip():
@@ -456,65 +371,15 @@ def _list_attr(attrs: dict[str, _Attribute], name: str) -> list[str]:
     return []
 
 
-def _source_key(*, scope: str, index: int, component: str, attrs: dict[str, _Attribute]) -> str:
+def _source_key(*, scope: str, index: int, component: str, attrs: dict[str, Any]) -> str:
     question = _string_attr(attrs, "question") or ""
     digest = hashlib.sha256(f"{scope}:{index}:{component}:{question}".encode()).hexdigest()
     return f"inline:{digest}"
 
 
-def _rewrite_component(tag: str, *, raw_attrs: str, attrs: dict[str, _Attribute], question_id: uuid.UUID) -> str:
-    cleaned_attrs = raw_attrs
-    for attr in sorted(attrs.values(), key=lambda item: item.start, reverse=True):
-        if attr.name in _HIDDEN_PROPS or attr.name == "questionId":
-            cleaned_attrs = f"{cleaned_attrs[: attr.start]}{cleaned_attrs[attr.end :]}"
-    cleaned_attrs = cleaned_attrs.strip()
-    closing = "/>" if tag.rstrip().endswith("/>") else ">"
-    if cleaned_attrs.endswith("/"):
-        cleaned_attrs = cleaned_attrs[:-1].rstrip()
-    prefix = tag[: tag.find(raw_attrs)].rstrip()
-    visible_attrs = f" {cleaned_attrs}" if cleaned_attrs else ""
-    question_attr = f' questionId="{question_id}"'
-    return f"{prefix}{visible_attrs}{question_attr}{closing}"
+def _remove_placeholder_question_id(content: str, placeholder: str) -> str:
+    return content.replace(f' questionId="{placeholder}"', "")
 
 
-def _strip_hidden_component(tag: str, *, raw_attrs: str) -> str:
-    cleaned_attrs = _remove_hidden_attrs(raw_attrs).strip()
-    closing = "/>" if tag.rstrip().endswith("/>") else ">"
-    if cleaned_attrs.endswith("/"):
-        cleaned_attrs = cleaned_attrs[:-1].rstrip()
-    prefix = tag[: tag.find(raw_attrs)].rstrip()
-    visible_attrs = f" {cleaned_attrs}" if cleaned_attrs else ""
-    return f"{prefix}{visible_attrs}{closing}"
-
-
-def _remove_hidden_attrs(raw_attrs: str) -> str:
-    spans: list[tuple[int, int]] = []
-    cursor = 0
-    while cursor < len(raw_attrs):
-        match = _ATTR_NAME_RE.search(raw_attrs, cursor)
-        if match is None:
-            break
-        name = match.group(0)
-        equals_index = _skip_space(raw_attrs, match.end())
-        if equals_index >= len(raw_attrs) or raw_attrs[equals_index] != "=":
-            cursor = match.end()
-            continue
-        value_start = _skip_space(raw_attrs, equals_index + 1)
-        try:
-            _, end = _read_raw_value(raw_attrs, value_start)
-        except ValueError:
-            end = _next_attr_boundary(raw_attrs, value_start)
-        if name in _HIDDEN_PROPS or name == "questionId":
-            spans.append((match.start(), end))
-        cursor = end
-    cleaned = raw_attrs
-    for start, end in sorted(spans, reverse=True):
-        cleaned = f"{cleaned[:start]}{cleaned[end:]}"
-    return cleaned
-
-
-def _next_attr_boundary(raw_attrs: str, start: int) -> int:
-    end = start
-    while end < len(raw_attrs) and not raw_attrs[end].isspace():
-        end += 1
-    return end
+def _int_value(value: Any) -> int | None:
+    return value if isinstance(value, int) else None
