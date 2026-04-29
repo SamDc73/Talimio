@@ -18,14 +18,13 @@ from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError, IntegrityError, OperationalError, SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Match
-from starlette_csrf import CSRFMiddleware
 
 from .ai.assistant.router import router as assistant_router
 from .ai.litellm_config import cleanup_litellm_async_clients
 from .ai.mcp.router import router as mcp_router
 from .ai.rag.config import rag_config
 from .ai.rag.router import router as rag_router
-from .auth.csrf import get_csrf_cookie_domain
+from .auth.csrf import CSRFMiddlewareWithMaxAge, get_csrf_cookie_domain
 from .auth.router import router as auth_router
 from .auth.security import get_csrf_signing_key, get_session_signing_key
 from .books.router import router as books_router
@@ -180,7 +179,7 @@ def _configure_middlewares(app: FastAPI, settings: Any) -> None:
         https_only=settings.ENVIRONMENT == "production",
     )
     app.add_middleware(
-        cast("Any", CSRFMiddleware),
+        cast("Any", CSRFMiddlewareWithMaxAge),
         secret=csrf_secret,
         exempt_urls=[
             re.compile(r"^/api/v1/auth/(login|signup|forgot-password|reset-password|verify|resend-verification)$")
