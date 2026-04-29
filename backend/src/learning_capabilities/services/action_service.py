@@ -3,6 +3,7 @@
 import logging
 import uuid
 from datetime import UTC, datetime
+from typing import Protocol
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -12,16 +13,17 @@ from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.assistant.models import AssistantActiveProbe, AssistantConversation
 from src.ai.errors import AIRuntimeError
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
-from src.courses.facade import CoursesFacade, CoursesFacadeConflictError
 from src.courses.models import Course, LearningQuestion, Lesson
 from src.courses.schemas import (
     AttemptAnswerPayload,
     AttemptRequest,
     AttemptResponse,
+    CourseResponse,
     PracticeDrillItem,
 )
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.practice_drill_service import PracticeDrillService
+from src.exceptions import ConflictError
 from src.learning_capabilities.errors import LearningCapabilitiesValidationError
 from src.learning_capabilities.schemas import (
     AppendCourseLessonCapabilityInput,
@@ -46,6 +48,28 @@ from src.learning_capabilities.services.authorization_service import LearningCap
 logger = logging.getLogger(__name__)
 
 
+class CourseCapabilityPort(Protocol):
+    """Course operations needed by learning capabilities."""
+
+    async def create_course(
+        self,
+        course_data: dict[str, object],
+        user_id: uuid.UUID,
+    ) -> CourseResponse:
+        """Create a course from capability input."""
+        ...
+
+    async def submit_attempt(
+        self,
+        *,
+        course_id: uuid.UUID,
+        payload: AttemptRequest,
+        user_id: uuid.UUID,
+    ) -> AttemptResponse:
+        """Submit a learning attempt for grading."""
+        ...
+
+
 class LearningCapabilityActionService:
     """Capability-backed write operations for course/lesson mutations."""
 
@@ -54,9 +78,11 @@ class LearningCapabilityActionService:
         session: AsyncSession,
         *,
         authorization_service: LearningCapabilityAuthorizationService,
+        course_capability_port: CourseCapabilityPort,
     ) -> None:
         self._session = session
         self._authorization_service = authorization_service
+        self._course_capability_port = course_capability_port
 
     async def create_course(
         self,
@@ -68,8 +94,7 @@ class LearningCapabilityActionService:
         if not payload.confirmed:
             return _build_create_confirmation()
 
-        facade = CoursesFacade(self._session)
-        created_course = await facade.create_course(
+        created_course = await self._course_capability_port.create_course(
             {"prompt": payload.prompt.strip(), "adaptive_enabled": payload.adaptive_enabled},
             user_id=user_id,
         )
@@ -483,7 +508,7 @@ class LearningCapabilityActionService:
         if active_probe.status != "active":
             try:
                 await self._require_chat_learning_question(active_probe=active_probe)
-                existing_attempt = await CoursesFacade(self._session).submit_attempt(
+                existing_attempt = await self._course_capability_port.submit_attempt(
                     course_id=course.id,
                     payload=AttemptRequest(
                         attempt_id=active_probe.id,
@@ -494,7 +519,7 @@ class LearningCapabilityActionService:
                     ),
                     user_id=user_id,
                 )
-            except CoursesFacadeConflictError:
+            except ConflictError:
                 existing_attempt = None
             if existing_attempt is not None:
                 return _submitted_probe_output(
@@ -513,7 +538,7 @@ class LearningCapabilityActionService:
             )
 
         await self._require_chat_learning_question(active_probe=active_probe)
-        attempt = await CoursesFacade(self._session).submit_attempt(
+        attempt = await self._course_capability_port.submit_attempt(
             course_id=course.id,
             payload=AttemptRequest(
                 attempt_id=active_probe.id,

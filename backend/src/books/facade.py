@@ -16,6 +16,8 @@ from src.books.models import Book
 from src.books.schemas import (
     BookLearningStatus,
     BookListResponse,
+    BookProgressResponse,
+    BookProgressUpdate,
     BookRagStatus,
     BookResponse,
     BookTocChapterResponse,
@@ -410,6 +412,50 @@ class BooksFacade:
             raise
 
         return {"progress": updated_progress}
+
+    async def update_progress_from_request(
+        self,
+        book_id: uuid.UUID,
+        user_id: uuid.UUID,
+        progress_data: BookProgressUpdate,
+    ) -> BookProgressResponse:
+        """Map an API progress request into the canonical book progress response."""
+        progress_dict = self._build_progress_dict(progress_data)
+        result = await self.update_progress(book_id, user_id, progress_dict)
+        progress = result.get("progress", {})
+        return BookResponseBuilder.build_progress_response(progress, book_id)
+
+    @staticmethod
+    def _build_progress_dict(progress_data: BookProgressUpdate) -> dict[str, Any]:
+        """Build the service progress payload from an update request."""
+        progress_dict: dict[str, Any] = {}
+
+        if (
+            progress_data.total_pages is not None
+            and progress_data.current_page is not None
+            and progress_data.current_page > progress_data.total_pages
+        ):
+            message = "current_page cannot exceed total_pages"
+            raise ValidationError(message)
+
+        if progress_data.current_page is not None:
+            progress_dict["page"] = progress_data.current_page
+        if progress_data.total_pages is not None:
+            progress_dict["total_pages"] = progress_data.total_pages
+        if progress_data.progress_percentage is not None:
+            progress_dict["completion_percentage"] = progress_data.progress_percentage
+        if progress_data.toc_progress is not None:
+            progress_dict["toc_progress"] = progress_data.toc_progress
+        if progress_data.bookmarks is not None:
+            progress_dict["bookmarks"] = progress_data.bookmarks
+        if progress_data.status is not None:
+            progress_dict["status"] = progress_data.status
+        if progress_data.notes is not None:
+            progress_dict["notes"] = progress_data.notes
+        if progress_data.reading_time_minutes is not None:
+            progress_dict["reading_time_minutes"] = progress_data.reading_time_minutes
+
+        return progress_dict
 
     async def update_book(self, book_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> BookResponse:
         """Update book metadata."""

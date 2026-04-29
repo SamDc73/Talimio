@@ -14,7 +14,7 @@ from sqlalchemy import text
 
 from src.exceptions import NotFoundError
 
-from .models import ContentType, ProgressResponse, ProgressUpdate
+from .models import BatchProgressResponse, ContentType, ProgressData, ProgressResponse, ProgressUpdate
 from .queries import (
     DELETE_PROGRESS_QUERY,
     GET_BATCH_PROGRESS_QUERY,
@@ -59,6 +59,35 @@ class ProgressService:
 
         return progress_map
 
+    async def get_batch_progress_response(
+        self,
+        user_id: uuid.UUID,
+        content_ids: list[uuid.UUID],
+    ) -> BatchProgressResponse:
+        """Get stored progress with canonical course progress where applicable."""
+        from src.courses.services.course_progress_service import CourseProgressService
+
+        progress_data = await self.get_batch_progress(user_id, content_ids)
+        progress_map: dict[str, ProgressData] = {
+            content_id: ProgressData(progress_percentage=data["progress_percentage"], metadata=data["metadata"])
+            for content_id, data in progress_data.items()
+        }
+
+        course_progress_service = CourseProgressService(self.session)
+        for content_id in content_ids:
+            content_type = await self.get_content_type(content_id, user_id)
+            if content_type != "course":
+                continue
+
+            computed = await course_progress_service.get_progress(content_id, user_id)
+            metadata = {key: value for key, value in computed.items() if key != "completion_percentage"}
+            progress_map[str(content_id)] = ProgressData(
+                progress_percentage=computed.get("completion_percentage", 0.0),
+                metadata=metadata,
+            )
+
+        return BatchProgressResponse(progress=progress_map)
+
     async def get_single_progress(self, user_id: uuid.UUID, content_id: uuid.UUID) -> ProgressResponse | None:
         """Get progress for a single content item."""
         result = await self.session.execute(
@@ -70,6 +99,40 @@ class ProgressService:
             return None
 
         return self._row_to_progress_response(row)
+
+    async def get_progress_response(self, user_id: uuid.UUID, content_id: uuid.UUID) -> ProgressResponse:
+        """Get progress with canonical course progress where applicable."""
+        from src.courses.services.course_progress_service import CourseProgressService
+
+        content_type = await self.require_content_type(content_id, user_id)
+
+        if content_type == "course":
+            row = await self.get_single_progress(user_id, content_id)
+            computed = await CourseProgressService(self.session).get_progress(content_id, user_id)
+            metadata = {key: value for key, value in computed.items() if key != "completion_percentage"}
+            return ProgressResponse(
+                id=row.id if row else None,
+                content_id=content_id,
+                content_type="course",
+                progress_percentage=computed.get("completion_percentage", 0.0),
+                metadata=metadata,
+                created_at=row.created_at if row else None,
+                updated_at=row.updated_at if row else None,
+            )
+
+        progress = await self.get_single_progress(user_id, content_id)
+        if progress is not None:
+            return progress
+
+        return ProgressResponse(
+            id=None,
+            content_id=content_id,
+            content_type=content_type,
+            progress_percentage=0.0,
+            metadata={},
+            created_at=None,
+            updated_at=None,
+        )
 
     async def update_progress(
         self,

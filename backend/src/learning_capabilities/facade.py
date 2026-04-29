@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.courses.facade import CoursesFacade
 from src.learning_capabilities import capability_registry
 from src.learning_capabilities.errors import LearningCapabilitiesBadRequestError
 from src.learning_capabilities.schemas import (
@@ -59,6 +60,7 @@ class LearningCapabilitiesFacade:  # noqa: PLR0904
         self._action_service = LearningCapabilityActionService(
             session,
             authorization_service=authorization_service,
+            course_capability_port=CoursesFacade(session),
         )
         self._context_packet_service = LearningContextPacketService(self._query_service)
 

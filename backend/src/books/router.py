@@ -5,13 +5,13 @@ from collections.abc import AsyncGenerator
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
 from src.auth import CurrentAuth
 from src.books.models import Book
-from src.exceptions import ValidationError
+from src.config.schema_casing import build_camel_config
 from src.storage.factory import get_storage_provider
 
 from .facade import BooksFacade
@@ -26,7 +26,6 @@ from .schemas import (
     BookUpdate,
     BookWithProgress,
 )
-from .services.book_response_builder import BookResponseBuilder
 
 
 logger = logging.getLogger(__name__)
@@ -34,55 +33,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
 
 
-def _build_progress_dict(progress_data: BookProgressUpdate) -> dict[str, Any]:
-    """Build progress dictionary from update request."""
-    progress_dict: dict[str, Any] = {}
-
-    if (
-        progress_data.total_pages is not None
-        and progress_data.current_page is not None
-        and progress_data.current_page > progress_data.total_pages
-    ):
-        message = "current_page cannot exceed total_pages"
-        raise ValidationError(message)
-
-    if progress_data.current_page is not None:
-        progress_dict["page"] = progress_data.current_page
-
-    if progress_data.total_pages is not None:
-        progress_dict["total_pages"] = progress_data.total_pages
-
-    if progress_data.progress_percentage is not None:
-        progress_dict["completion_percentage"] = progress_data.progress_percentage
-
-    if progress_data.toc_progress is not None:
-        progress_dict["toc_progress"] = progress_data.toc_progress
-
-    if progress_data.bookmarks is not None:
-        progress_dict["bookmarks"] = progress_data.bookmarks
-
-    if progress_data.status is not None:
-        progress_dict["status"] = progress_data.status
-
-    if progress_data.notes is not None:
-        progress_dict["notes"] = progress_data.notes
-
-    if progress_data.reading_time_minutes is not None:
-        progress_dict["reading_time_minutes"] = progress_data.reading_time_minutes
-
-    return progress_dict
+def get_books_facade(auth: CurrentAuth) -> BooksFacade:
+    """Provide request-scoped books facade."""
+    return BooksFacade(auth.session)
 
 
 @router.get("")
 async def list_books(
     auth: CurrentAuth,
+    facade: Annotated[BooksFacade, Depends(get_books_facade)],
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     limit: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
     search: Annotated[str | None, Query(description="Search in title, author, or description")] = None,
     tags: Annotated[list[str] | None, Query(description="Filter by tags")] = None,
 ) -> BookListResponse:
     """List all books with pagination and optional filtering."""
-    facade = BooksFacade(auth.session)
     return await facade.get_paginated_user_books(
         user_id=auth.user_id,
         page=page,
@@ -93,26 +58,20 @@ async def list_books(
 
 
 @router.get("/{book_id}")
-async def get_book(book_id: uuid.UUID, auth: CurrentAuth) -> BookWithProgress:
+async def get_book(
+    book_id: uuid.UUID,
+    auth: CurrentAuth,
+    facade: Annotated[BooksFacade, Depends(get_books_facade)],
+) -> BookWithProgress:
     """Get book details with progress information."""
-    facade = BooksFacade(auth.session)
-    try:
-        return await facade.get_book(book_id, auth.user_id)
-    except (RuntimeError, TypeError, ValueError) as error:
-        logger.exception(
-            "books.get.runtime_error",
-            extra={"book_id": str(book_id), "error_type": type(error).__name__},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve book",
-        ) from error
+    return await facade.get_book(book_id, auth.user_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_book(
     auth: CurrentAuth,
     background_tasks: BackgroundTasks,
+    facade: Annotated[BooksFacade, Depends(get_books_facade)],
     file: Annotated[UploadFile, File(description="Book file (PDF or EPUB)")],
     title: Annotated[str, Form(description="Book title")],
     author: Annotated[str | None, Form(description="Book author")] = None,
@@ -147,7 +106,6 @@ async def create_book(
         )
 
     file_content = await file.read()
-    facade = BooksFacade(auth.session)
     return await facade.create_book_from_upload(
         user_id=auth.user_id,
         filename=file.filename,
@@ -166,10 +124,14 @@ async def create_book(
 
 
 @router.patch("/{book_id}")
-async def update_book(book_id: uuid.UUID, book_data: BookUpdate, auth: CurrentAuth) -> BookResponse:
+async def update_book(
+    book_id: uuid.UUID,
+    book_data: BookUpdate,
+    auth: CurrentAuth,
+    facade: Annotated[BooksFacade, Depends(get_books_facade)],
+) -> BookResponse:
     """Update book details."""
     update_dict = book_data.model_dump(exclude_unset=True)
-    facade = BooksFacade(auth.session)
     return await facade.update_book(book_id, auth.user_id, update_dict)
 
 
@@ -178,13 +140,10 @@ async def update_book_progress(
     book_id: uuid.UUID,
     progress_data: BookProgressUpdate,
     auth: CurrentAuth,
+    facade: Annotated[BooksFacade, Depends(get_books_facade)],
 ) -> BookProgressResponse:
     """Update reading progress for a book."""
-    progress_dict = _build_progress_dict(progress_data)
-    facade = BooksFacade(auth.session)
-    result = await facade.update_progress(book_id, auth.user_id, progress_dict)
-    progress = result.get("progress", {})
-    return BookResponseBuilder.build_progress_response(progress, book_id)
+    return await facade.update_progress_from_request(book_id, auth.user_id, progress_data)
 
 
 @router.post("/{book_id}/progress")
@@ -192,9 +151,10 @@ async def save_book_progress(
     book_id: uuid.UUID,
     progress_data: BookProgressUpdate,
     auth: CurrentAuth,
+    facade: Annotated[BooksFacade, Depends(get_books_facade)],
 ) -> BookProgressResponse:
     """Update reading progress for a book (POST version for sendBeacon compatibility)."""
-    return await update_book_progress(book_id, progress_data, auth)
+    return await facade.update_progress_from_request(book_id, auth.user_id, progress_data)
 
 
 @router.get("/{book_id}/file", response_model=None)
@@ -350,9 +310,12 @@ async def stream_book_content(book_id: uuid.UUID, request: Request, auth: Curren
 
 
 @router.get("/{book_id}/chapters")
-async def get_book_chapters(book_id: uuid.UUID, auth: CurrentAuth) -> list[BookTocChapterResponse]:
+async def get_book_chapters(
+    book_id: uuid.UUID,
+    auth: CurrentAuth,
+    facade: Annotated[BooksFacade, Depends(get_books_facade)],
+) -> list[BookTocChapterResponse]:
     """Get all chapters or table-of-contents entries for a book."""
-    facade = BooksFacade(auth.session)
     return await facade.get_book_chapters(book_id, auth.user_id)
 
 
@@ -362,9 +325,9 @@ async def update_book_chapter_status(
     chapter_id: str,
     status_data: BookChapterStatusUpdate,
     auth: CurrentAuth,
+    facade: Annotated[BooksFacade, Depends(get_books_facade)],
 ) -> BookTocChapterResponse:
     """Update the status of a book chapter."""
-    facade = BooksFacade(auth.session)
     return await facade.update_book_chapter_status(
         book_id=book_id,
         user_id=auth.user_id,
@@ -376,6 +339,8 @@ async def update_book_chapter_status(
 class RAGStatusResponse(BaseModel):
     """Response model for RAG embedding status."""
 
+    model_config = build_camel_config()
+
     book_id: uuid.UUID
     rag_status: BookRagStatus
     rag_processed_at: str | None = None
@@ -385,8 +350,11 @@ class RAGStatusResponse(BaseModel):
 
 
 @router.get("/{book_id}/rag-status")
-async def get_book_rag_status(book_id: uuid.UUID, auth: CurrentAuth) -> RAGStatusResponse:
+async def get_book_rag_status(
+    book_id: uuid.UUID,
+    auth: CurrentAuth,
+    facade: Annotated[BooksFacade, Depends(get_books_facade)],
+) -> RAGStatusResponse:
     """Get the RAG embedding status for a book."""
-    facade = BooksFacade(auth.session)
     payload = await facade.get_book_rag_status_payload(book_id=book_id, user_id=auth.user_id)
     return RAGStatusResponse.model_validate(payload)

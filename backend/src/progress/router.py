@@ -1,16 +1,15 @@
 """Progress tracking API endpoints."""
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from src.auth import CurrentAuth
-from src.courses.services.course_progress_service import CourseProgressService
 
 from .models import (
     BatchProgressRequest,
     BatchProgressResponse,
-    ProgressData,
     ProgressResponse,
     ProgressUpdate,
 )
@@ -22,11 +21,17 @@ router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
 MAX_BATCH_SIZE = 100  # Prevent unbounded requests
 
 
+def get_progress_service(auth: CurrentAuth) -> ProgressService:
+    """Provide request-scoped progress service."""
+    return ProgressService(auth.session)
+
+
 @router.post("/batch")
 async def get_batch_progress(
     request: BatchProgressRequest,
     _response: Response,
     auth: CurrentAuth,
+    service: Annotated[ProgressService, Depends(get_progress_service)],
 ) -> BatchProgressResponse:
     """Get progress for multiple content items in one request."""
     if len(request.content_ids) > MAX_BATCH_SIZE:
@@ -35,71 +40,17 @@ async def get_batch_progress(
             detail=f"Batch size exceeds maximum of {MAX_BATCH_SIZE}",
         )
 
-    service = ProgressService(auth.session)
-    progress_data = await service.get_batch_progress(auth.user_id, request.content_ids)
-
-    # Start with DB results
-    progress_map: dict[str, ProgressData] = {
-        content_id: ProgressData(progress_percentage=data["progress_percentage"], metadata=data["metadata"])
-        for content_id, data in progress_data.items()
-    }
-
-    # For courses, override with canonical adaptive calculation
-    cps = CourseProgressService(auth.session)
-    for cid in request.content_ids:
-        ctype = await service.get_content_type(cid, auth.user_id)
-        if ctype == "course":
-            computed = await cps.get_progress(cid, auth.user_id)
-            # Drop completion_percentage from metadata
-            meta = {k: v for k, v in computed.items() if k != "completion_percentage"}
-            progress_map[str(cid)] = ProgressData(
-                progress_percentage=computed.get("completion_percentage", 0.0),
-                metadata=meta,
-            )
-
-    return BatchProgressResponse(progress=progress_map)
+    return await service.get_batch_progress_response(auth.user_id, request.content_ids)
 
 
 @router.get("/{content_id}")
 async def get_single_progress(
     content_id: uuid.UUID,
     auth: CurrentAuth,
+    service: Annotated[ProgressService, Depends(get_progress_service)],
 ) -> ProgressResponse:
     """Get progress for a single content item."""
-    service = ProgressService(auth.session)
-
-    # Determine content type first to unify behavior
-    content_type = await service.require_content_type(content_id, auth.user_id)
-
-    # For courses, compute canonical adaptive progress from concept mastery
-    if content_type == "course":
-        # Fetch row only to reuse timestamps if present
-        row = await service.get_single_progress(auth.user_id, content_id)
-        computed = await CourseProgressService(auth.session).get_progress(content_id, auth.user_id)
-        metadata = {k: v for k, v in computed.items() if k != "completion_percentage"}
-        return ProgressResponse(
-            id=row.id if row else None,
-            content_id=content_id,
-            content_type="course",
-            progress_percentage=computed.get("completion_percentage", 0.0),
-            metadata=metadata,
-            created_at=row.created_at if row else None,
-            updated_at=row.updated_at if row else None,
-        )
-
-    # Non-course: return stored row or virtual default
-    progress = await service.get_single_progress(auth.user_id, content_id)
-    if not progress:
-        return ProgressResponse(
-            id=None,
-            content_id=content_id,
-            content_type=content_type,
-            progress_percentage=0.0,
-            metadata={},
-            created_at=None,
-            updated_at=None,
-        )
-    return progress
+    return await service.get_progress_response(auth.user_id, content_id)
 
 
 @router.put("/{content_id}")
@@ -107,14 +58,10 @@ async def update_progress(
     content_id: uuid.UUID,
     progress: ProgressUpdate,
     auth: CurrentAuth,
+    service: Annotated[ProgressService, Depends(get_progress_service)],
 ) -> ProgressResponse:
     """Update progress for a content item."""
-    service = ProgressService(auth.session)
-
-    # Determine content type - now validates ownership
     content_type = await service.require_content_type(content_id, auth.user_id)
-
-    # Update progress
     return await service.update_progress(auth.user_id, content_id, content_type, progress)
 
 
@@ -122,7 +69,7 @@ async def update_progress(
 async def delete_progress(
     content_id: uuid.UUID,
     auth: CurrentAuth,
+    service: Annotated[ProgressService, Depends(get_progress_service)],
 ) -> None:
     """Delete progress for a content item."""
-    service = ProgressService(auth.session)
     await service.delete_progress(auth.user_id, content_id)

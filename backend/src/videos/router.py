@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 
 from src.auth import CurrentAuth
 from src.videos.facade import VideosFacade
@@ -160,20 +160,4 @@ async def get_video_details(
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> dict[str, Any]:
     """Get video with chapters and transcript info in a single optimized request."""
-    try:
-        video = await facade.get_video(video_id=video_id, user_id=auth.user_id)
-        chapters = await facade.get_video_chapters(video_id=video_id, user_id=auth.user_id)
-        transcript_info = await facade.get_transcript_info(video_id=video_id)
-        progress_payload = await facade.get_video_with_progress(video_id, auth.user_id)
-    except (RuntimeError, TypeError, ValueError) as error:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred",
-        ) from error
-
-    return {
-        **video.model_dump(),
-        "chapters": chapters,
-        "transcript_info": transcript_info,
-        "progress": progress_payload["progress"],
-    }
+    return await facade.get_video_details(video_id=video_id, user_id=auth.user_id)

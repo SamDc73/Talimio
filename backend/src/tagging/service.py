@@ -13,13 +13,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai.client import LLMClient
 from src.ai.errors import AIRateLimitOrQuotaError, AIRuntimeError
 from src.ai.prompts import CONTENT_TAGGING_PROMPT
+from src.books.models import Book
 from src.config.settings import get_settings
+from src.courses.models import Course
+from src.exceptions import NotFoundError, ValidationError
+from src.videos.models import Video
 
 from .models import Tag, TagAssociation
-from .schemas import TagWithConfidence
+from .schemas import TaggingResponse, TagWithConfidence
 
 
 logger = logging.getLogger(__name__)
+VALID_CONTENT_TYPES = {"book", "video", "course"}
 
 
 class TaggedContent(BaseModel):
@@ -268,6 +273,55 @@ class TaggingService:
                 confidence_score=1.0,
                 auto_generated=False,
             )
+
+    async def update_content_tags(
+        self,
+        *,
+        content_id: uuid.UUID,
+        content_type: str,
+        user_id: uuid.UUID,
+        tag_names: list[str],
+    ) -> TaggingResponse:
+        """Update manual tags and the content denormalized tag JSON."""
+        content_type = self.validate_content_type(content_type)
+        await self.require_owned_content(content_type=content_type, content_id=content_id, user_id=user_id)
+        await self.update_manual_tags(
+            content_id=content_id,
+            content_type=content_type,
+            user_id=user_id,
+            tag_names=tag_names,
+        )
+        await update_content_tags_json(
+            self.session,
+            content_id,
+            content_type,
+            tag_names,
+            user_id,
+        )
+        return TaggingResponse(
+            content_id=content_id,
+            content_type=content_type,
+            tags=tag_names,
+            auto_generated=False,
+            success=True,
+        )
+
+    @staticmethod
+    def validate_content_type(content_type: str) -> str:
+        """Return a supported content type or raise a domain validation error."""
+        if content_type not in VALID_CONTENT_TYPES:
+            options = ", ".join(sorted(VALID_CONTENT_TYPES))
+            message = f"Invalid content type: {content_type}. Must be one of: {options}"
+            raise ValidationError(message)
+        return content_type
+
+    async def require_owned_content(self, *, content_type: str, content_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        """Validate that the tagged resource exists and belongs to the user."""
+        content_type = self.validate_content_type(content_type)
+        model = {"book": Book, "video": Video, "course": Course}[content_type]
+        result = await self.session.execute(select(model.id).where(model.id == content_id, model.user_id == user_id))
+        if result.scalar_one_or_none() is None:
+            raise NotFoundError(content_type, str(content_id))
 
     async def get_all_tags(
         self,

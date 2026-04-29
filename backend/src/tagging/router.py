@@ -3,13 +3,9 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 
-# AI imports removed - using facades instead
 from src.auth import CurrentAuth
-from src.books.models import Book
-from src.courses.models import Course
-from src.videos.models import Video
 
 from .schemas import (
     ContentTagsUpdate,
@@ -25,50 +21,6 @@ router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
 def get_tagging_service(auth: CurrentAuth) -> TaggingService:
     """Get tagging service instance."""
     return TaggingService(auth.session)
-
-
-# Content type validation dependency
-VALID_CONTENT_TYPES = ["book", "video", "course"]
-
-
-def validate_content_type(content_type: str) -> str:
-    """Validate content type parameter.
-
-    Args:
-        content_type: Type of content to validate
-
-    Returns
-    -------
-        The validated content type
-
-    Raises
-    ------
-        HTTPException: If content type is invalid
-    """
-    if content_type not in VALID_CONTENT_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid content type: {content_type}. Must be one of: {', '.join(VALID_CONTENT_TYPES)}",
-        )
-    return content_type
-
-
-async def validate_owned_content(auth: CurrentAuth, content_type: str, content_id: uuid.UUID) -> None:
-    """Validate ownership for tagged content without auth-module cross-coupling."""
-    if content_type == "book":
-        await auth.get_or_404(Book, content_id, "book")
-        return
-    if content_type == "video":
-        await auth.get_or_404(Video, content_id, "video")
-        return
-    if content_type == "course":
-        await auth.get_or_404(Course, content_id, "course")
-        return
-
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Unknown resource type: {content_type}",
-    )
 
 
 @router.get("")
@@ -111,9 +63,7 @@ async def get_content_tags(
     -------
         List of tags for the content
     """
-    # Validate content type
-    content_type = validate_content_type(content_type)
-
+    content_type = service.validate_content_type(content_type)
     tags = await service.get_content_tags(content_id, content_type, auth.user_id)
     return [TagSchema.model_validate(tag) for tag in tags]
 
@@ -139,33 +89,9 @@ async def update_content_tags(
     -------
         TaggingResponse with updated tags
     """
-    # Validate content type
-    content_type = validate_content_type(content_type)
-
-    await validate_owned_content(auth, content_type, content_id)
-
-    await service.update_manual_tags(
+    return await service.update_content_tags(
         content_id=content_id,
         content_type=content_type,
         user_id=auth.user_id,
         tag_names=request.tags,
-    )
-
-    # Also update content's tags field
-    from .service import update_content_tags_json
-
-    await update_content_tags_json(
-        service.session,
-        content_id,
-        content_type,
-        request.tags,
-        auth.user_id,
-    )
-
-    return TaggingResponse(
-        content_id=content_id,
-        content_type=content_type,
-        tags=request.tags,
-        auto_generated=False,
-        success=True,
     )

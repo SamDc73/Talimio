@@ -15,7 +15,6 @@ from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.exceptions import RagUnavailableError
 from src.ai.rag.service import RAGService
 from src.config.settings import get_settings
-from src.courses.facade import CoursesFacade
 from src.courses.models import (
     Concept,
     ConceptPrerequisite,
@@ -30,8 +29,11 @@ from src.courses.models import (
     ProbeEvent,
     UserConceptState,
 )
+from src.courses.services.concept_graph_service import ConceptGraphService
+from src.courses.services.concept_scheduler_service import LectorSchedulerService
 from src.courses.services.course_progress_service import CourseProgressService
 from src.courses.services.course_query_service import CourseQueryService
+from src.courses.services.frontier_builder import build_course_frontier
 from src.courses.services.lesson_service import LessonService
 from src.learning_capabilities.schemas import (
     ActiveChatProbe,
@@ -796,10 +798,12 @@ class LearningCapabilityQueryService:
         payload: GetCourseFrontierCapabilityInput,
     ) -> GetCourseFrontierCapabilityOutput:
         """Return compact adaptive frontier state."""
-        courses_facade = CoursesFacade(self._session)
-        frontier = await courses_facade.get_course_concept_frontier(
-            course_id=payload.course_id,
+        frontier = await build_course_frontier(
+            session=self._session,
             user_id=user_id,
+            course_id=payload.course_id,
+            graph_service=ConceptGraphService(self._session),
+            scheduler_service=LectorSchedulerService(self._session),
         )
 
         state = CourseFrontierState(

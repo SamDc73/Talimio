@@ -147,6 +147,20 @@ class VideosFacade:
         """Get transcript metadata without loading transcript segments."""
         return await self._video_service.get_transcript_info(self._session, video_id)
 
+    async def get_video_details(self, video_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+        """Get video, chapters, transcript metadata, and progress in one payload."""
+        video = await self.get_video(video_id=video_id, user_id=user_id)
+        chapters = await self.get_video_chapters(video_id=video_id, user_id=user_id)
+        transcript_info = await self.get_transcript_info(video_id=video_id)
+        progress_payload = await self.get_video_with_progress(video_id, user_id)
+
+        return {
+            **video.model_dump(),
+            "chapters": chapters,
+            "transcript_info": transcript_info,
+            "progress": progress_payload["progress"],
+        }
+
     async def get_video_with_progress(self, video_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
         """
         Get complete video information with progress.
