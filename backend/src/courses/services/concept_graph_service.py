@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from src.ai.rag.embeddings import VectorRAG
 from src.config.settings import get_settings
 from src.courses.models import Concept, ConceptPrerequisite, CourseConcept, UserConceptState
+from src.exceptions import ConflictError, ValidationError
 
 
 logger = logging.getLogger(__name__)
@@ -127,7 +128,7 @@ class ConceptGraphService:
         """Add prerequisite relation while preventing cycles."""
         if concept_id == prereq_id:
             msg = "A concept cannot depend on itself"
-            raise ValueError(msg)
+            raise ValidationError(msg)
 
         await self._assert_no_cycle(concept_id=concept_id, prereq_id=prereq_id)
         result = await self._session.execute(
@@ -143,7 +144,7 @@ class ConceptGraphService:
         if int(getattr(result, "rowcount", 0) or 0) == 0:
             logger.debug("Prerequisite already exists for concept %s -> %s", concept_id, prereq_id)
             msg = "Prerequisite already exists"
-            raise ValueError(msg)
+            raise ConflictError(msg)
         await self._session.flush()
 
     async def add_prerequisites_bulk(self, edges: Sequence[tuple[uuid.UUID, uuid.UUID]]) -> int:
@@ -337,7 +338,7 @@ class ConceptGraphService:
         )
         if result.scalar_one_or_none():
             msg = "Adding prerequisite would create a cycle"
-            raise ValueError(msg)
+            raise ConflictError(msg)
 
     async def recompute_embedding_confusors_for_course(self, course_id: uuid.UUID) -> int:
         """Compute and upsert concept similarities for a course using embeddings only.

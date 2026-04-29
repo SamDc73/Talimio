@@ -29,6 +29,7 @@ from src.courses.models import (
     UserConceptState,
 )
 from src.database.session import async_session_maker
+from src.exceptions import NotFoundError
 
 from .concept_graph_service import ConceptGraphService
 from .setup_commands_normalizer import normalize_setup_commands_payload
@@ -550,8 +551,8 @@ class CourseContentService:
         result = await session.execute(query)
         course = result.scalar_one_or_none()
         if not course:
-            error_msg = f"Course {course_id} not found"
-            raise ValueError(error_msg)
+            resource_type = "course"
+            raise NotFoundError(resource_type, str(course_id))
 
         for attr, value in data.items():
             if value is None:

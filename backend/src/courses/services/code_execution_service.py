@@ -36,6 +36,7 @@ from src.ai.service import get_ai_service
 from src.ai.tools.sandbox import SandboxToolContext
 from src.config.settings import get_settings
 from src.courses.models import Course, Lesson
+from src.exceptions import DomainError, ErrorCategory
 
 from .setup_commands_normalizer import normalize_setup_commands
 
@@ -116,13 +117,24 @@ class WorkspaceFile:
     content: str
 
 
-class CodeExecutionError(RuntimeError):
+def _execution_error_category(status_code: int) -> ErrorCategory:
+    if status_code == status.HTTP_404_NOT_FOUND:
+        return ErrorCategory.RESOURCE_NOT_FOUND
+    if status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
+        return ErrorCategory.UPSTREAM_UNAVAILABLE
+    return ErrorCategory.BAD_REQUEST
+
+
+class CodeExecutionError(DomainError):
     """Domain error raised when sandbox execution fails."""
 
     def __init__(self, message: str, *, status_code: int, error_code: str) -> None:
-        super().__init__(message)
-        self.status_code = status_code
-        self.error_code = error_code
+        super().__init__(
+            message,
+            error_code=error_code,
+            status_code=status_code,
+            category=_execution_error_category(status_code),
+        )
 
 
 # Fast-path templates for instant execution (no AI overhead)
@@ -1598,7 +1610,7 @@ class CodeExecutionService:
         file_list = list(files)
         if not file_list:
             msg = "Workspace execution requires at least one file"
-            raise ValueError(msg)
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="missing_workspace_files")
 
         workspace_dir = self._resolve_workspace_root(workspace_id, course_id, lesson_id)
         await self._reset_workspace_directory(sbx, workspace_dir)
@@ -1646,7 +1658,7 @@ class CodeExecutionService:
     async def _reset_workspace_directory(self, sbx: Any, workspace_dir: str) -> None:
         if not workspace_dir.startswith(self._workspace_root):
             msg = "Workspace directory outside sandbox root"
-            raise ValueError(msg)
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_workspace")
         root_quoted = shlex.quote(self._workspace_root)
         await sbx.commands.run(f"mkdir -p {root_quoted}")
         quoted = shlex.quote(workspace_dir)
@@ -1669,7 +1681,7 @@ class CodeExecutionService:
         normalized = posixpath.normpath(candidate)
         if normalized in ("", ".", "..") or normalized.startswith("../"):
             msg = f"Invalid workspace file path: {raw_path}"
-            raise ValueError(msg)
+            raise CodeExecutionError(msg, status_code=status.HTTP_400_BAD_REQUEST, error_code="invalid_workspace_path")
         return normalized
 
     def _normalize_runtime_env(self, env: dict[str, str] | None) -> dict[str, str]:

@@ -485,6 +485,8 @@ class CoursesFacade:  # noqa: PLR0904
                 concept_id=payload.concept_id,
                 count=payload.count,
             )
+        except DomainError:
+            raise
         except LookupError as error:
             raise CoursesFacadeNotFoundError(str(error)) from error
         except ValueError as error:

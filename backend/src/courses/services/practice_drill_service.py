@@ -16,6 +16,7 @@ from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
 from src.courses.models import Concept, CourseConcept, Lesson, ProbeEvent, UserConceptState
 from src.courses.schemas import PracticeDrillItem, ProbeFamily, ProbeRendererKind
+from src.exceptions import NotFoundError, ValidationError
 
 
 _RECENT_PROBE_WINDOW = 20
@@ -147,11 +148,11 @@ class PracticeDrillService:
         row = concept_lesson_row.first()
         if row is None:
             message = "Concept is not assigned to this course"
-            raise LookupError(message)
+            raise NotFoundError(message=message)
         concept, lesson_id = row
         if lesson_id is None:
             message = "Lesson is not assigned to this course concept"
-            raise LookupError(message)
+            raise NotFoundError(message=message)
 
         learner = await self._load_learner_profile(user_id=user_id, course_id=course_id, concept_id=concept_id)
         generation_context = self._build_generation_context(learner, learner_context=learner_context)
@@ -175,7 +176,7 @@ class PracticeDrillService:
 
         if len(drills) < count:
             message = f"Unable to generate {count} unique practice drills right now. Please try again."
-            raise ValueError(message)
+            raise ValidationError(message)
 
         return drills
 

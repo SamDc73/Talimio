@@ -36,7 +36,7 @@ def _coerce_slug_list(values: Any, *, field: str) -> list[str]:
         values = [values]
     if not isinstance(values, list):
         msg = f"{field} must be provided as a list of slugs"
-        raise TypeError(msg)
+        raise ValueError(msg)  # noqa: TRY004 - used by Pydantic validators for schema errors.
     return [_coerce_slug(item, field=field) for item in values if str(item or "").strip()]
 
 

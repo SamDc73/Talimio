@@ -35,7 +35,7 @@ class PDFHighlightData(BaseModel):
         """Validate PDF position data structure."""
         if not isinstance(v, dict):
             msg = "Position must be a dictionary"
-            raise TypeError(msg)
+            raise ValueError(msg)  # noqa: TRY004 - Pydantic validators should report schema errors as ValueError.
 
         # Required position fields for PDF
         required_fields = {"rects", "pageNumber"}
@@ -53,7 +53,7 @@ class PDFHighlightData(BaseModel):
         for i, rect in enumerate(rects):
             if not isinstance(rect, dict):
                 msg = f"Rect {i} must be a dictionary"
-                raise TypeError(msg)
+                raise ValueError(msg)  # noqa: TRY004 - Pydantic validators should report schema errors as ValueError.
 
             rect_dict = cast("dict[str, Any]", rect)
             rect_fields = {"x1", "y1", "x2", "y2", "width", "height"}
@@ -271,7 +271,7 @@ def validate_json_highlight_data(json_data: str | dict[str, Any], _content_type:
 
     if not isinstance(data, dict):
         msg = "Highlight data must be a JSON object"
-        raise TypeError(msg)
+        raise ValueError(msg)  # noqa: TRY004 - callers expect validation-shaped failures.
 
     return validate_highlight_data(data, _content_type)
 
