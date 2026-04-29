@@ -10,6 +10,7 @@ from src.ai.rag.service import RAGService
 from src.auth import CurrentAuth
 
 
+# RAG owns course-scoped document routes and standalone document routes.
 router = APIRouter(prefix="/api/v1", tags=["rag"])
 
 

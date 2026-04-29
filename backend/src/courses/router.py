@@ -121,7 +121,7 @@ class _InMemoryUploadFile:
         return self.content
 
 
-@router.post("/", status_code=status.HTTP_202_ACCEPTED)
+@router.post("", status_code=status.HTTP_202_ACCEPTED)
 async def create_course(
     prompt: Annotated[str, Form()],
     auth: CurrentAuth,
@@ -154,7 +154,7 @@ async def create_course(
     )
 
 
-@router.get("/")
+@router.get("")
 async def list_courses(
     auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],

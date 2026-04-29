@@ -36,8 +36,8 @@ export async function fetchConceptFrontierByCourseId(courseId, signal) {
  */
 export function useCourseService(courseId = null) {
 	// Course endpoints
-	const createCourse = useApi("/courses/", { method: "POST" })
-	const getCourses = useApi("/courses/")
+	const createCourse = useApi("/courses", { method: "POST" })
+	const getCourses = useApi("/courses")
 	const getCourse = useApi("/courses/{courseId}")
 	const updateCourse = useApi("/courses/{courseId}", { method: "PATCH" })
 	const selfAssessmentQuestions = useApi("/courses/self-assessment/questions", { method: "POST" })

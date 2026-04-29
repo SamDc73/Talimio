@@ -10,6 +10,7 @@ from .schemas import HighlightCreate, HighlightResponse
 from .service import BookHighlightService
 
 
+# Highlights owns book-scoped collection routes and standalone highlight routes.
 router = APIRouter(prefix="/api/v1", tags=["highlights"])
 
 
