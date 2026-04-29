@@ -8,6 +8,7 @@ import logging
 import uuid
 from typing import Any
 
+from fastapi import BackgroundTasks
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,9 +49,19 @@ class VideosFacade:
         """
         return await self.get_video_with_progress(content_id, user_id)
 
-    async def create_video(self, video_data: VideoCreate, user_id: uuid.UUID) -> VideoResponse:
+    async def create_video(
+        self,
+        video_data: VideoCreate,
+        user_id: uuid.UUID,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> VideoResponse:
         """Create a video record for the authenticated user."""
-        return await self._video_service.create_video(self._session, video_data, user_id)
+        return await self._video_service.create_video(
+            self._session,
+            video_data,
+            user_id,
+            background_tasks=background_tasks,
+        )
 
     async def get_videos(
         self,

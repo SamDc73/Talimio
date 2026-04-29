@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 
 from src.auth import CurrentAuth
 from src.videos.facade import VideosFacade
@@ -28,11 +28,12 @@ def get_videos_facade(auth: CurrentAuth) -> VideosFacade:
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_video(
     video_data: VideoCreate,
+    background_tasks: BackgroundTasks,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoResponse:
     """Add a YouTube video to the library."""
-    return await facade.create_video(video_data=video_data, user_id=auth.user_id)
+    return await facade.create_video(video_data=video_data, user_id=auth.user_id, background_tasks=background_tasks)
 
 
 @router.get("")

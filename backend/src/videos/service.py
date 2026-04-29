@@ -3,13 +3,13 @@ import json
 import logging
 import re
 import uuid
-from collections.abc import Coroutine
 from datetime import UTC, datetime
 from typing import Any, Literal
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
 import yt_dlp
+from fastapi import BackgroundTasks
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,7 +46,6 @@ VIDEO_PIPELINE_STATUS_COMPLETED = "completed"
 VIDEO_PIPELINE_STATUS_FAILED = "failed"
 VIDEO_CHAPTER_STATUS_NOT_STARTED = "not_started"
 VIDEO_CHAPTER_STATUS_COMPLETED = "completed"
-_DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
 
 class VideoNotFoundError(NotFoundError):
@@ -78,36 +77,6 @@ class VideoChapterNotFoundError(NotFoundError):
             return
         resource_id = str(chapter_id) if chapter_id is not None else None
         super().__init__("video_chapter", resource_id, metadata=metadata, feature_area="videos")
-
-
-def _handle_detached_task_done(task: asyncio.Task[Any]) -> None:
-    _DETACHED_TASKS.discard(task)
-    if task.cancelled():
-        return
-    error = task.exception()
-    if error is None:
-        return
-    logger.error("videos.background_task.failed", exc_info=(type(error), error, error.__traceback__))
-
-
-def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
-    """Run background work outside FastAPI response-bound BackgroundTasks."""
-    task = asyncio.create_task(coro)
-    _DETACHED_TASKS.add(task)
-    task.add_done_callback(_handle_detached_task_done)
-
-
-async def cleanup_detached_video_tasks() -> None:
-    """Cancel and await any outstanding detached video tasks."""
-    if not _DETACHED_TASKS:
-        return
-
-    tasks = tuple(_DETACHED_TASKS)
-    for task in tasks:
-        task.cancel()
-
-    await asyncio.gather(*tasks, return_exceptions=True)
-    _DETACHED_TASKS.clear()
 
 
 def _create_downloader(options: dict[str, Any]) -> yt_dlp.YoutubeDL:
@@ -444,7 +413,14 @@ class VideoService:
             "updated_at": video.updated_at,
         }
 
-    async def create_video(self, db: AsyncSession, video_data: VideoCreate, user_id: uuid.UUID) -> VideoResponse:
+    async def create_video(
+        self,
+        db: AsyncSession,
+        video_data: VideoCreate,
+        user_id: uuid.UUID,
+        *,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> VideoResponse:
         """Create a new video by fetching metadata from YouTube."""
         # Get the user ID for creation
         user_id_for_creation = user_id
@@ -513,10 +489,10 @@ class VideoService:
         # Persist before queuing background tasks so they can load the row.
         await db.commit()
 
-        # Trigger background jobs detached from response-bound BackgroundTasks.
-        _spawn_detached_task(_auto_tag_video_background(video_id, user_id))
-        _spawn_detached_task(_extract_chapters_background(video_id, user_id))
-        _spawn_detached_task(_process_transcript_to_jsonb(video_id))
+        if background_tasks is not None:
+            background_tasks.add_task(_auto_tag_video_background, video_id, user_id)
+            background_tasks.add_task(_extract_chapters_background, video_id, user_id)
+            background_tasks.add_task(_process_transcript_to_jsonb, video_id)
 
         # Reload to ensure server-default timestamps are loaded
         refreshed_video = await db.get(Video, video_id, populate_existing=True)

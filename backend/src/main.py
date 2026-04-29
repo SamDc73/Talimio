@@ -121,14 +121,6 @@ async def _shutdown() -> None:
         logger.warning("shutdown.memory.cleanup_failed", exc_info=True)
 
     try:
-        from src.videos.service import cleanup_detached_video_tasks
-
-        await cleanup_detached_video_tasks()
-        logger.debug("shutdown.videos.detached_tasks.cleaned")
-    except (RuntimeError, TimeoutError, TypeError, ValueError):
-        logger.warning("shutdown.videos.detached_tasks.cleanup_failed", exc_info=True)
-
-    try:
         await engine.dispose()
         logger.debug("shutdown.database_engine.disposed")
     except SQLAlchemyError:
