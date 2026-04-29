@@ -40,10 +40,10 @@ class AssistantConversation(Base):
             "context_type IS NULL OR context_type IN ('book', 'video', 'course')",
             name="assistant_conversations_context_type_check",
         ),
-        Index("assistant_conversations_user_id_updated_at_idx", "user_id", "updated_at"),
+        Index("assistant_conversations_user_id_updated_at_idx", "user_id", text("updated_at DESC")),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("app_uuid7()"))
     user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[AssistantConversationStatus] = mapped_column(
@@ -106,7 +106,7 @@ class AssistantActiveProbe(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("app_uuid7()"))
     user_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False, index=True)
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -167,7 +167,7 @@ class AssistantConversationHistoryItem(Base):
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("app_uuid7()"))
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("assistant_conversations.id", ondelete="CASCADE"),

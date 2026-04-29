@@ -114,6 +114,7 @@ class Lesson(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     module_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     module_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -209,13 +210,11 @@ class LessonFeedbackEvent(Base):
         PG_UUID(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     lesson_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("lessons.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     lesson_version_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
