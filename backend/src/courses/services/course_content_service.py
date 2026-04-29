@@ -1,12 +1,3 @@
-
-from collections.abc import Coroutine
-
-from fastapi import BackgroundTasks, UploadFile
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.ai.models import AdaptiveCourseStructure
-
-
 """Course content service for course-specific operations."""
 
 import asyncio
@@ -19,11 +10,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from fastapi import BackgroundTasks, UploadFile
 from opentelemetry import trace
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.models import AdaptiveCourseStructure
 from src.ai.rag.service import RAGService
 from src.ai.service import AIService
 from src.courses.models import (
@@ -41,27 +35,9 @@ from .setup_commands_normalizer import normalize_setup_commands_payload
 
 
 logger = logging.getLogger(__name__)
-_DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
 _DOC_EXTENSIONS = {".pdf", ".epub"}
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
-
-
-def _handle_detached_task_done(task: asyncio.Task[Any]) -> None:
-    _DETACHED_TASKS.discard(task)
-    if task.cancelled():
-        return
-    error = task.exception()
-    if error is None:
-        return
-    logger.error("courses.background_task.failed", exc_info=(type(error), error, error.__traceback__))
-
-
-def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
-    """Run background work outside FastAPI response-bound BackgroundTasks."""
-    task = asyncio.create_task(coro)
-    _DETACHED_TASKS.add(task)
-    task.add_done_callback(_handle_detached_task_done)
 
 
 @dataclass(slots=True)
@@ -133,6 +109,7 @@ class CourseContentService:
                 dict(data),
                 user_id,
                 attachments,
+                background_tasks=background_tasks,
             )
         else:
             await self._generate_course_background(course_id, dict(data), user_id, attachments, raise_errors=True)
@@ -147,6 +124,7 @@ class CourseContentService:
         user_id: uuid.UUID,
         attachments: list[UploadFile] | None = None,
         *,
+        background_tasks: BackgroundTasks | None = None,
         raise_errors: bool = False,
     ) -> None:
         async with async_session_maker() as session:
@@ -227,7 +205,7 @@ class CourseContentService:
                     session=session,
                     course=course,
                     user_id=user_id,
-                    background_tasks=None,
+                    background_tasks=background_tasks,
                 )
                 await session.commit()
             except Exception:
@@ -484,16 +462,9 @@ class CourseContentService:
             )
 
         if background_tasks is not None:
-            self._schedule_background_tagging(course.id, user_id)
+            background_tasks.add_task(self._run_background_auto_tagging, course.id, user_id)
         else:
             await self._auto_tag_course(session, course, user_id)
-
-    def _schedule_background_embeddings(
-        self,
-        course_id: uuid.UUID,
-    ) -> None:
-        """Enqueue background embedding generation so the response can return immediately."""
-        _spawn_detached_task(self._run_background_embeddings(course_id))
 
     async def _handle_adaptive_embeddings(
         self,
@@ -503,7 +474,7 @@ class CourseContentService:
         background_tasks: BackgroundTasks | None,
     ) -> None:
         if background_tasks is not None:
-            self._schedule_background_embeddings(course_id)
+            background_tasks.add_task(self._run_background_embeddings, course_id)
             return
         await self._run_embedding_pipeline(session, course_id)
 
@@ -540,14 +511,6 @@ class CourseContentService:
                 )
         except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError):
             logger.exception("courses.background_embedding.failed", extra={"course_id": str(course_id)})
-
-    def _schedule_background_tagging(
-        self,
-        course_id: uuid.UUID,
-        user_id: uuid.UUID,
-    ) -> None:
-        """Enqueue background tagging so the request can return immediately."""
-        _spawn_detached_task(self._run_background_auto_tagging(course_id, user_id))
 
     async def _run_background_auto_tagging(self, course_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Run auto-tagging in a new session after the response is sent."""
