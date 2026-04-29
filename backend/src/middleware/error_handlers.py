@@ -13,7 +13,7 @@ from psycopg.errors import (
     UniqueViolation as UniqueViolationError,
 )
 from pydantic import ValidationError as PydanticValidationError
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import OperationalError
 
 from src.auth.request_state import get_user_id_from_state
 from src.exceptions import ApiError, ApiErrorEnvelope, DomainError, ErrorCategory, ErrorCode
@@ -137,24 +137,25 @@ def handle_validation_errors(request: Request, exc: PydanticValidationError) -> 
 def handle_database_errors(request: Request, exc: Exception) -> JSONResponse:
     """Handle database-related errors."""
     route = _get_route_path(request)
+    database_error = _get_original_database_error(exc)
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     error_code = str(ErrorCode.INTERNAL)
     detail = "A database error occurred"
     suggestions: list[str] | None = None
     severity = "error"
 
-    if _is_unique_violation_error(exc):
+    if _is_unique_violation_error(database_error):
         status_code = status.HTTP_409_CONFLICT
         error_code = str(ErrorCode.DB_UNIQUE_VIOLATION)
         detail = "This resource already exists"
         suggestions = ["Try using a different identifier"]
         severity = "warning"
-    elif isinstance(exc, ForeignKeyViolationError):
+    elif isinstance(database_error, ForeignKeyViolationError):
         status_code = status.HTTP_400_BAD_REQUEST
         error_code = str(ErrorCode.DB_FOREIGN_KEY_VIOLATION)
         detail = "Referenced resource does not exist"
         severity = "warning"
-    elif isinstance(exc, (NotNullViolationError, CheckViolationError)):
+    elif isinstance(database_error, (NotNullViolationError, CheckViolationError)):
         status_code = status.HTTP_400_BAD_REQUEST
         error_code = str(ErrorCode.DB_CONSTRAINT_VIOLATION)
         detail = "Required data is missing or invalid"
@@ -189,23 +190,24 @@ def handle_database_errors(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+def _get_original_database_error(exc: Exception) -> Exception:
+    """Return the DBAPI error wrapped by SQLAlchemy when present."""
+    original_error = getattr(exc, "orig", None)
+    if isinstance(original_error, Exception):
+        return original_error
+    return exc
+
+
 def _is_unique_violation_error(exc: Exception) -> bool:
     """Return True when exception resolves to SQLSTATE 23505."""
     if isinstance(exc, UniqueViolationError):
         return True
 
-    if not isinstance(exc, IntegrityError):
-        return False
-
-    original_error = getattr(exc, "orig", None)
-    if original_error is None:
-        return False
-
-    sqlstate = getattr(original_error, "sqlstate", None)
+    sqlstate = getattr(exc, "sqlstate", None)
     if isinstance(sqlstate, str):
         return sqlstate == POSTGRES_UNIQUE_VIOLATION_SQLSTATE
 
-    pgcode = getattr(original_error, "pgcode", None)
+    pgcode = getattr(exc, "pgcode", None)
     if isinstance(pgcode, str):
         return pgcode == POSTGRES_UNIQUE_VIOLATION_SQLSTATE
 
