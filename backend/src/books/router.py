@@ -1,12 +1,11 @@
-import asyncio
 import json
 import logging
 import uuid
-from collections.abc import AsyncGenerator, Coroutine
+from collections.abc import AsyncGenerator
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -31,26 +30,8 @@ from .services.book_response_builder import BookResponseBuilder
 
 
 logger = logging.getLogger(__name__)
-_DETACHED_TASKS: set[asyncio.Task[Any]] = set()
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
-
-
-def _handle_detached_task_done(task: asyncio.Task[Any]) -> None:
-    _DETACHED_TASKS.discard(task)
-    if task.cancelled():
-        return
-    error = task.exception()
-    if error is None:
-        return
-    logger.error("books.background_task.failed", exc_info=(type(error), error, error.__traceback__))
-
-
-def _spawn_detached_task(coro: Coroutine[Any, Any, None]) -> None:
-    """Run background work outside FastAPI response-bound BackgroundTasks."""
-    task = asyncio.create_task(coro)
-    _DETACHED_TASKS.add(task)
-    task.add_done_callback(_handle_detached_task_done)
 
 
 def _build_progress_dict(progress_data: BookProgressUpdate) -> dict[str, Any]:
@@ -131,6 +112,7 @@ async def get_book(book_id: uuid.UUID, auth: CurrentAuth) -> BookWithProgress:
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_book(
     auth: CurrentAuth,
+    background_tasks: BackgroundTasks,
     file: Annotated[UploadFile, File(description="Book file (PDF or EPUB)")],
     title: Annotated[str, Form(description="Book title")],
     author: Annotated[str | None, Form(description="Book author")] = None,
@@ -179,9 +161,7 @@ async def create_book(
         publication_year=publication_year,
         publisher=publisher,
         tags=tags_list,
-        spawn_detached_task=_spawn_detached_task,
-        embed_book_background=facade.embed_book_background,
-        auto_tag_book_background=facade.auto_tag_book_background,
+        background_tasks=background_tasks,
     )
 
 

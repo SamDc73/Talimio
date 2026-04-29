@@ -4,10 +4,9 @@ import hashlib
 import json
 import logging
 import uuid
-from collections.abc import Callable, Coroutine
 from typing import Any
 
-from fastapi import status
+from fastapi import BackgroundTasks, status
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -204,9 +203,7 @@ class BooksFacade:
         publication_year: int | None = None,
         publisher: str | None = None,
         tags: list[str] | None = None,
-        spawn_detached_task: Callable[[Coroutine[Any, Any, None]], None] | None = None,
-        embed_book_background: Callable[[uuid.UUID], Coroutine[Any, Any, None]] | None = None,
-        auto_tag_book_background: Callable[[uuid.UUID, uuid.UUID], Coroutine[Any, Any, None]] | None = None,
+        background_tasks: BackgroundTasks | None = None,
     ) -> BookResponse:
         """Create a book from uploaded file bytes and metadata payload."""
         file_extension = filename.lower().split(".")[-1]
@@ -286,14 +283,10 @@ class BooksFacade:
             logger.exception("books.upload.failed", extra={"user_id": str(user_id), "title": final_title})
             raise
 
-        if (
-            spawn_detached_task is not None
-            and embed_book_background is not None
-            and auto_tag_book_background is not None
-        ):
+        if background_tasks is not None:
             await self._session.commit()
-            spawn_detached_task(embed_book_background(book_id))
-            spawn_detached_task(auto_tag_book_background(book_id, user_id))
+            background_tasks.add_task(self.embed_book_background, book_id)
+            background_tasks.add_task(self.auto_tag_book_background, book_id, user_id)
 
         return book_response
 
