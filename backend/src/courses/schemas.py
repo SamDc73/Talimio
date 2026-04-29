@@ -20,6 +20,7 @@ class LessonSummary(BaseModel):
     title: str = Field(..., description="Lesson title")
     description: str | None = Field(None, description="Lesson description")
     order: int = Field(..., description="Lesson order within its module")
+    concept_id: uuid.UUID | None = Field(None, description="Mapped concept ID for adaptive lessons")
 
     model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
 

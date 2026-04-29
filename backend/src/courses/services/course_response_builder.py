@@ -124,4 +124,5 @@ class CourseResponseBuilder:
             title=lesson.title,
             description=lesson.description,
             order=lesson.order,
+            concept_id=lesson.concept_id,
         )
