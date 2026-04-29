@@ -88,7 +88,7 @@ class AuthContext:
 
 
 async def validate_local_auth_state(
-    session: DbSession,
+    session: AsyncSession,
     *,
     user_id: uuid.UUID,
     token_version: int | None,

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestFormStrict
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import RedirectResponse
 
 from src.auth import crud as local_crud
@@ -135,7 +136,7 @@ def _get_request_user_agent(request: Request) -> str | None:
 async def _issue_local_auth_cookie(
     request: Request,
     response: Response,
-    session: DbSession,
+    session: AsyncSession,
     user: User,
 ) -> uuid.UUID:
     """Create a local auth session and set the cookie JWT."""
@@ -235,13 +236,13 @@ def _derive_auto_username_base(source: str) -> str:
     return normalized_base
 
 
-async def _username_exists(session: DbSession, username: str) -> bool:
+async def _username_exists(session: AsyncSession, username: str) -> bool:
     """Return whether a normalized username already exists (case-insensitive)."""
     existing_username = await session.execute(select(User.id).where(func.lower(User.username) == username))
     return existing_username.scalar_one_or_none() is not None
 
 
-async def _ensure_unique_custom_username(session: DbSession, desired: str) -> str:
+async def _ensure_unique_custom_username(session: AsyncSession, desired: str) -> str:
     """Validate and reserve a custom username provided by the user."""
     normalized_username = _normalize_username(desired)
     _validate_username_or_raise(normalized_username)
@@ -252,7 +253,7 @@ async def _ensure_unique_custom_username(session: DbSession, desired: str) -> st
     return normalized_username
 
 
-async def _generate_unique_auto_username(session: DbSession, *, source: str) -> str:
+async def _generate_unique_auto_username(session: AsyncSession, *, source: str) -> str:
     """Generate an available username that always includes numeric suffixes."""
     username_base = _derive_auto_username_base(source)
 
@@ -270,7 +271,7 @@ async def _generate_unique_auto_username(session: DbSession, *, source: str) -> 
     )
 
 
-async def _resolve_signup_username(session: DbSession, *, full_name: str, username: str | None) -> str:
+async def _resolve_signup_username(session: AsyncSession, *, full_name: str, username: str | None) -> str:
     """Resolve signup username from either custom input or backend auto-generation."""
     if username and username.strip():
         return await _ensure_unique_custom_username(session, username)
