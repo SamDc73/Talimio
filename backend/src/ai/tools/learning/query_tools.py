@@ -2,21 +2,19 @@
 
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
-from typing import Any
+from collections.abc import Mapping
 
-from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
+from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget, ToolExecutor
 from src.database.session import async_session_maker
 from src.learning_capabilities.facade import LearningCapabilitiesFacade
 
 
-ToolExecutor = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 logger = logging.getLogger(__name__)
 
 
 def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefinition]:
     """Return assistant read tools backed by the learning capability facade."""
-    tool_specs: list[tuple[str, str, dict[str, Any]]] = [
+    tool_specs: list[tuple[str, str, Mapping[str, object]]] = [
         (
             "search_lessons",
             "Search lessons by title/description in the learner's owned courses.",
@@ -178,7 +176,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
 
 
 def _build_query_executor(*, tool_name: str, user_id: uuid.UUID) -> ToolExecutor:
-    async def _execute(arguments: dict[str, Any]) -> dict[str, Any]:
+    async def _execute(arguments: Mapping[str, object]) -> Mapping[str, object]:
         logger.info(
             "learning_capability.query_tool.execute",
             extra={

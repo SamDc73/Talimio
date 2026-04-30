@@ -1,9 +1,9 @@
 """MCP server configuration helpers."""
 
 
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, ValidationInfo, field_validator
 
 
 class MCPAuthConfig(BaseModel):
@@ -14,7 +14,7 @@ class MCPAuthConfig(BaseModel):
 
     @field_validator("token")
     @classmethod
-    def _ensure_token_for_bearer(cls, token: str | None, info: Any) -> str | None:
+    def _ensure_token_for_bearer(cls, token: str | None, info: ValidationInfo) -> str | None:
         auth_type = info.data.get("type", "none")
         if auth_type == "bearer" and not token:
             msg = "Bearer auth requires a token"

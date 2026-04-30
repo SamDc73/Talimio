@@ -10,16 +10,24 @@ from src.ai.mcp.config import MCPConfig
 
 import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Protocol, cast, runtime_checkable
 
 import httpx
+from pydantic import JsonValue
 
 from src.ai.mcp.client import MCPClientDependencyError, MCPServerNotConfiguredError, get_mcp_client
 from src.ai.mcp.service import get_user_mcp_config, list_user_mcp_tools
 
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class _ModelDumpable(Protocol):
+    def model_dump(self) -> object: ...
+
 
 _MCP_TOOL_EXECUTION_ERROR_TYPES = (
     MCPServerNotConfiguredError,
@@ -39,10 +47,10 @@ class MCPToolBinding:
     server_name: str
     tool_name: str
     description: str
-    input_schema: dict[str, Any]
+    input_schema: dict[str, JsonValue]
     encoded_name: str = ""
 
-    def to_tool_schema(self) -> dict[str, Any]:
+    def to_tool_schema(self) -> dict[str, JsonValue]:
         """Return a LiteLLM-compatible tool schema."""
         schema = self.input_schema or {"type": "object", "properties": {}}
         return {
@@ -72,7 +80,7 @@ async def load_user_tool_bindings(session: AsyncSession, user_id: uuid.UUID) -> 
             continue
         for tool in tool_descriptors:
             name = _get_attr(tool, "name")
-            if not name:
+            if not isinstance(name, str) or not name:
                 continue
             description = _get_attr(tool, "description", "")
             schema = _coerce_schema(_get_attr(tool, "input_schema")) or _coerce_schema(_get_attr(tool, "inputSchema"))
@@ -93,9 +101,9 @@ async def execute_user_tool_call(
     server_name: str,
     tool_name: str,
     encoded_name: str,
-    arguments: dict[str, Any] | None,
+    arguments: dict[str, JsonValue] | None,
     config: MCPConfig,
-) -> Any:
+) -> object:
     """Execute a user MCP tool and record preference stats.
 
     The config must be pre-loaded via get_user_mcp_config() before calling.
@@ -111,7 +119,7 @@ async def execute_user_tool_call(
     )
 
 
-def parse_tool_arguments(payload: dict[str, Any] | str | bytes | None) -> dict[str, Any]:
+def parse_tool_arguments(payload: dict[str, JsonValue] | str | bytes | None) -> dict[str, JsonValue]:
     """Normalize LiteLLM tool arguments into a dict."""
     if payload is None:
         return {}
@@ -131,7 +139,7 @@ def parse_tool_arguments(payload: dict[str, Any] | str | bytes | None) -> dict[s
         if not isinstance(parsed, dict):
             msg = "Tool arguments payload must be a JSON object"
             raise TypeError(msg)
-        return parsed
+        return cast("dict[str, JsonValue]", parsed)
     msg = "Unsupported tool arguments payload type"
     raise TypeError(msg)
 
@@ -150,20 +158,20 @@ def build_tool_instruction(bindings: list[MCPToolBinding]) -> str | None:
     return "\n".join(lines)
 
 
-def _get_attr(obj: Any, name: str, default: Any | None = None) -> Any:
-    if isinstance(obj, dict):
-        return obj.get(name, default)
+def _get_attr(obj: object, name: str, default: object | None = None) -> object | None:
+    if isinstance(obj, Mapping):
+        return cast("Mapping[str, object]", obj).get(name, default)
     return getattr(obj, name, default)
 
 
-def _coerce_schema(schema: Any) -> dict[str, Any]:
+def _coerce_schema(schema: object) -> dict[str, JsonValue]:
     if schema is None:
         return {}
-    if hasattr(schema, "model_dump"):
+    if isinstance(schema, _ModelDumpable):
         schema = schema.model_dump()
     if not isinstance(schema, dict):
         return {}
-    return schema
+    return cast("dict[str, JsonValue]", schema)
 
 
 def _slug_tool_name(server_name: str, tool_name: str) -> str:

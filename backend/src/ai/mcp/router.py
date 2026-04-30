@@ -1,18 +1,19 @@
 """API routes for managing user MCP servers."""
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Query, status
 from pydantic import AnyHttpUrl, TypeAdapter
 
-from src.ai.mcp.schemas import MCPServerCreateRequest, MCPServerListResponse, MCPServerResponse
+from src.ai.mcp.schemas import AuthType, MCPServerCreateRequest, MCPServerListResponse, MCPServerResponse
 from src.ai.mcp.service import (
     create_user_mcp_server,
     delete_user_mcp_server,
     paginate_user_mcp_servers,
 )
 from src.auth import CurrentAuth
+from src.user.models import UserMCPServer
 
 
 router = APIRouter(prefix="/api/v1/mcp", tags=["mcp"])
@@ -24,7 +25,7 @@ def _coerce_url(raw: str) -> AnyHttpUrl:
     return _URL_ADAPTER.validate_python(raw)
 
 
-def _serialize_server(server: Any) -> MCPServerResponse:
+def _serialize_server(server: UserMCPServer) -> MCPServerResponse:
     """Serialize a stored MCP server into the API response shape."""
     url = _coerce_url(server.url)
     masked_headers = dict.fromkeys(server.static_headers or {}, "********")
@@ -32,7 +33,7 @@ def _serialize_server(server: Any) -> MCPServerResponse:
         id=server.id,
         name=server.name,
         url=url,
-        auth_type=server.auth_type,
+        auth_type=cast("AuthType", server.auth_type),
         headers=masked_headers,
         enabled=server.enabled,
         has_token=bool(server.auth_token),

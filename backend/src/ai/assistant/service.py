@@ -6,9 +6,9 @@ import logging
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,10 +18,26 @@ from src.ai.errors import AIRuntimeError
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.exceptions import DomainError
 from src.learning_capabilities.facade import LearningCapabilitiesFacade
-from src.learning_capabilities.schemas import BuildContextBundleCapabilityInput
+from src.learning_capabilities.schemas import (
+    BuildContextBundleCapabilityInput,
+    BuildContextBundleCapabilityOutput,
+    ConceptFocus,
+    ConceptMatch,
+    FocusedConceptState,
+)
 
 from . import conversations_service
-from .schemas import ChatRequest
+from .schemas import ChatRequest, LanguageModelMessage
+
+
+type ChatMessagePayload = dict[str, JsonValue]
+type OpenAIContentBlock = dict[str, JsonValue]
+
+
+def _as_object_dict(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+    return cast("dict[str, object]", value)
 
 
 logger = logging.getLogger(__name__)
@@ -63,33 +79,33 @@ class NormalizedChatRequest(BaseModel):
     """Assistant request normalized from assistant-ui data stream payload."""
 
     latest_user_text: str = Field(default="")
-    latest_user_blocks: list[dict[str, Any]] = Field(default_factory=list)
-    conversation_history: list[dict[str, Any]] = Field(default_factory=list)
+    latest_user_blocks: list[OpenAIContentBlock] = Field(default_factory=list)
+    conversation_history: list[ChatMessagePayload] = Field(default_factory=list)
     model: str | None = None
     thread_id: uuid.UUID
     context_type: Literal["book", "video", "course"] | None = None
     context_id: uuid.UUID | None = None
-    context_meta: dict[str, Any] | None = None
+    context_meta: dict[str, JsonValue] | None = None
 
     model_config = ConfigDict(frozen=True)
 
 
-def _sse_event(payload: dict[str, Any] | str) -> str:
+def _sse_event(payload: dict[str, JsonValue] | str) -> str:
     """Return a single SSE event line block."""
     encoded = payload if isinstance(payload, str) else json.dumps(payload)
     return f"data: {encoded}\n\n"
 
 
-def _stream_chunk_to_sse_payload(chunk: Any) -> tuple[dict[str, Any] | None, str | None]:
+def _stream_chunk_to_sse_payload(chunk: object) -> tuple[dict[str, JsonValue] | None, str | None]:
     if not chunk:
         return None, None
     if isinstance(chunk, dict):
-        return chunk, None
+        return cast("dict[str, JsonValue]", chunk), None
     delta = str(chunk)
     return {"type": "text-delta", "textDelta": delta}, delta
 
 
-def _extract_message_text(content: Any) -> str:
+def _extract_message_text(content: object) -> str:
     """Extract plain text from AI SDK-style message content parts."""
     if isinstance(content, str):
         return content.strip()
@@ -98,24 +114,26 @@ def _extract_message_text(content: Any) -> str:
 
     text_parts: list[str] = []
     for part in content:
-        if not isinstance(part, dict):
+        part_payload = _as_object_dict(part)
+        if part_payload is None:
             continue
-        part_type = part.get("type")
-        if part_type == "text" and isinstance(part.get("text"), str):
-            normalized = part["text"].strip()
+        part_type = part_payload.get("type")
+        text = part_payload.get("text")
+        if part_type == "text" and isinstance(text, str):
+            normalized = text.strip()
             if normalized:
                 text_parts.append(normalized)
 
     return " ".join(text_parts).replace("\n", " ").replace("\t", " ").strip()
 
 
-def _is_image_file_part(media_type: Any, data_url: str) -> bool:
+def _is_image_file_part(media_type: object, data_url: str) -> bool:
     if isinstance(media_type, str) and media_type.startswith("image/"):
         return True
     return data_url.startswith("data:image/")
 
 
-def _convert_user_content_to_openai_blocks(content: Any) -> list[dict[str, Any]]:
+def _convert_user_content_to_openai_blocks(content: object) -> list[OpenAIContentBlock]:
     if isinstance(content, str):
         normalized = content.strip()
         if not normalized:
@@ -125,26 +143,27 @@ def _convert_user_content_to_openai_blocks(content: Any) -> list[dict[str, Any]]
     if not isinstance(content, list):
         return []
 
-    blocks: list[dict[str, Any]] = []
+    blocks: list[OpenAIContentBlock] = []
     for part in content:
-        if not isinstance(part, dict):
+        part_payload = _as_object_dict(part)
+        if part_payload is None:
             continue
 
-        part_type = part.get("type")
+        part_type = part_payload.get("type")
         if part_type == "text":
-            text = part.get("text")
+            text = part_payload.get("text")
             if isinstance(text, str) and text.strip():
                 blocks.append({"type": "text", "text": text})
             continue
 
         if part_type == "file":
-            data = part.get("data")
+            data = part_payload.get("data")
             if not isinstance(data, str) or not data.strip():
                 continue
 
-            media_type = part.get("mediaType")
+            media_type = part_payload.get("mediaType")
             if not isinstance(media_type, str) or not media_type.strip():
-                media_type = part.get("mimeType")
+                media_type = part_payload.get("mimeType")
 
             if not _is_image_file_part(media_type, data):
                 continue
@@ -160,8 +179,8 @@ def _normalize_chat_request(request: ChatRequest) -> NormalizedChatRequest:
         msg = "threadId is required"
         raise ValueError(msg)
 
-    normalized_messages: list[dict[str, Any]] = []
-    latest_user_blocks: list[dict[str, Any]] = []
+    normalized_messages: list[ChatMessagePayload] = []
+    latest_user_blocks: list[OpenAIContentBlock] = []
     latest_user_text = ""
     last_user_index = -1
 
@@ -212,7 +231,7 @@ def _normalize_chat_request(request: ChatRequest) -> NormalizedChatRequest:
     )
 
 
-def _normalize_context_meta(context_meta: dict[str, Any] | None) -> dict[str, Any] | None:
+def _normalize_context_meta(context_meta: dict[str, JsonValue] | None) -> dict[str, JsonValue] | None:
     if context_meta is None:
         return None
     normalized = dict(context_meta)
@@ -222,7 +241,7 @@ def _normalize_context_meta(context_meta: dict[str, Any] | None) -> dict[str, An
     return normalized
 
 
-def _build_thread_message_payload(message: Any) -> dict[str, Any]:
+def _build_thread_message_payload(message: LanguageModelMessage) -> dict[str, JsonValue]:
     payload = message.model_dump(by_alias=True, exclude_none=True, mode="json")
     message_id = payload.get("id")
     if not isinstance(message_id, str) or not message_id.strip():
@@ -230,10 +249,10 @@ def _build_thread_message_payload(message: Any) -> dict[str, Any]:
     created_at = payload.get("createdAt")
     if not isinstance(created_at, str) or not created_at.strip():
         payload["createdAt"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    return payload
+    return cast("dict[str, JsonValue]", payload)
 
 
-def _extract_latest_user_history_item(request: ChatRequest) -> dict[str, Any] | None:
+def _extract_latest_user_history_item(request: ChatRequest) -> dict[str, JsonValue] | None:
     last_user_index = -1
     for index in range(len(request.messages) - 1, -1, -1):
         if request.messages[index].role == "user":
@@ -248,7 +267,9 @@ def _extract_latest_user_history_item(request: ChatRequest) -> dict[str, Any] | 
     )
 
 
-def _attach_pending_quote_to_history_message(message: dict[str, Any], pending_quote: str | None) -> dict[str, Any]:
+def _attach_pending_quote_to_history_message(
+    message: dict[str, JsonValue], pending_quote: str | None
+) -> dict[str, JsonValue]:
     quote = pending_quote.strip() if pending_quote else ""
     if not quote:
         return message
@@ -265,11 +286,11 @@ def _attach_pending_quote_to_history_message(message: dict[str, Any], pending_qu
 
 
 def _build_server_conversation_history(
-    history_payload: dict[str, Any],
+    history_payload: conversations_service.AssistantConversationHistoryPayload,
     *,
     exclude_message_id: str,
-) -> list[dict[str, Any]]:
-    messages: list[dict[str, Any]] = []
+) -> list[ChatMessagePayload]:
+    messages: list[ChatMessagePayload] = []
     history_items = history_payload.get("messages")
     if not isinstance(history_items, list):
         return messages
@@ -298,7 +319,9 @@ def _build_server_conversation_history(
     return messages[-ASSISTANT_MAX_HISTORY_MESSAGES:]
 
 
-def _find_history_message_role(history_payload: dict[str, Any], message_id: str) -> str | None:
+def _find_history_message_role(
+    history_payload: conversations_service.AssistantConversationHistoryPayload, message_id: str
+) -> str | None:
     history_items = history_payload.get("messages")
     if not isinstance(history_items, list):
         return None
@@ -314,16 +337,16 @@ def _find_history_message_role(history_payload: dict[str, Any], message_id: str)
     return None
 
 
-def _model_dump_jsonable(value: Any) -> dict[str, Any]:
+def _model_dump_jsonable(value: BaseModel | None) -> dict[str, JsonValue]:
     if value is None:
         return {}
     if hasattr(value, "model_dump"):
         dumped = value.model_dump(by_alias=True, exclude_none=True, mode="json")
-        return dumped if isinstance(dumped, dict) else {}
+        return cast("dict[str, JsonValue]", dumped) if isinstance(dumped, dict) else {}
     return {}
 
 
-def _add_course_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+def _add_course_routing_state(packet: dict[str, JsonValue], context_bundle: BuildContextBundleCapabilityOutput) -> None:
     if context_bundle.course_state is not None:
         course_state = _model_dump_jsonable(context_bundle.course_state)
         packet["courseState"] = {
@@ -369,56 +392,54 @@ def _add_course_routing_state(packet: dict[str, Any], context_bundle: Any) -> No
         ]
 
     if context_bundle.course_outline is not None:
-        outline = _model_dump_jsonable(context_bundle.course_outline)
-        lessons = outline.get("lessons") or []
+        lessons = context_bundle.course_outline.lessons
         packet["courseOutline"] = {
-            "courseId": outline.get("courseId"),
+            "courseId": str(context_bundle.course_outline.course_id),
             "lessonCount": len(lessons),
-            "currentLessonIds": [lesson.get("lessonId") for lesson in lessons if lesson.get("isCurrent")],
-            "lessonsWithContentCount": sum(1 for lesson in lessons if lesson.get("hasContent")),
+            "currentLessonIds": [str(lesson.lesson_id) for lesson in lessons if lesson.is_current],
+            "lessonsWithContentCount": sum(1 for lesson in lessons if lesson.has_content),
         }
 
 
-def _build_concept_routing_state(concept_focus: Any) -> dict[str, Any]:
-    concept = _model_dump_jsonable(concept_focus)
-    semantic_candidates = concept.get("semanticCandidates") or []
+def _build_concept_routing_state(concept_focus: ConceptFocus) -> dict[str, JsonValue]:
+    semantic_candidates = concept_focus.semantic_candidates
     top_candidate = semantic_candidates[0] if semantic_candidates else None
-    top_match_score = top_candidate.get("matchScore") if isinstance(top_candidate, dict) else None
+    top_match_score = top_candidate.match_score if top_candidate is not None else None
     weak_match = isinstance(top_match_score, (int, float)) and top_match_score < RETRIEVAL_TRIGGER_THRESHOLD
-    concept_packet: dict[str, Any] = {
-        "hasCurrentLessonConcept": concept.get("currentLessonConcept") is not None,
+    concept_packet: dict[str, JsonValue] = {
+        "hasCurrentLessonConcept": concept_focus.current_lesson_concept is not None,
         "semanticCandidateCount": len(semantic_candidates),
         "topSemanticMatchScore": top_match_score,
         "weakSemanticMatch": weak_match,
     }
-    current = concept.get("currentLessonConcept")
-    if isinstance(current, dict):
+    current = concept_focus.current_lesson_concept
+    if current is not None:
         concept_packet["currentLessonConcept"] = {
-            "conceptId": current.get("conceptId"),
-            "name": current.get("name"),
-            "lessonId": current.get("lessonId"),
-            "lessonTitle": current.get("lessonTitle"),
-            "mastery": current.get("mastery"),
-            "exposures": current.get("exposures"),
-            "due": current.get("due"),
-            "confusorCount": len(current.get("confusors") or []),
-            "prerequisiteGapCount": len(current.get("prerequisiteGaps") or []),
+            "conceptId": str(current.concept_id),
+            "name": current.name,
+            "lessonId": str(current.lesson_id) if current.lesson_id is not None else None,
+            "lessonTitle": current.lesson_title,
+            "mastery": current.mastery,
+            "exposures": current.exposures,
+            "due": current.due,
+            "confusorCount": len(current.confusors),
+            "prerequisiteGapCount": len(current.prerequisite_gaps),
         }
-    if isinstance(top_candidate, dict) and not weak_match:
+    if top_candidate is not None and not weak_match:
         concept_packet["topSemanticCandidate"] = {
-            "conceptId": top_candidate.get("conceptId"),
-            "name": top_candidate.get("name"),
-            "lessonId": top_candidate.get("lessonId"),
-            "lessonTitle": top_candidate.get("lessonTitle"),
-            "matchScore": top_candidate.get("matchScore"),
-            "matchSource": top_candidate.get("matchSource"),
-            "mastery": top_candidate.get("mastery"),
-            "exposures": top_candidate.get("exposures"),
+            "conceptId": str(top_candidate.concept_id),
+            "name": top_candidate.name,
+            "lessonId": str(top_candidate.lesson_id) if top_candidate.lesson_id is not None else None,
+            "lessonTitle": top_candidate.lesson_title,
+            "matchScore": top_candidate.match_score,
+            "matchSource": top_candidate.match_source,
+            "mastery": top_candidate.mastery,
+            "exposures": top_candidate.exposures,
         }
     return concept_packet
 
 
-def _add_focus_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+def _add_focus_routing_state(packet: dict[str, JsonValue], context_bundle: BuildContextBundleCapabilityOutput) -> None:
     if context_bundle.learner_profile is not None:
         packet["learnerProfile"] = _model_dump_jsonable(context_bundle.learner_profile)
 
@@ -437,7 +458,7 @@ def _add_focus_routing_state(packet: dict[str, Any], context_bundle: Any) -> Non
         packet["conceptFocus"] = _build_concept_routing_state(context_bundle.concept_focus)
 
 
-def _add_source_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+def _add_source_routing_state(packet: dict[str, JsonValue], context_bundle: BuildContextBundleCapabilityOutput) -> None:
     if context_bundle.source_focus is None:
         return
 
@@ -458,7 +479,7 @@ def _add_source_routing_state(packet: dict[str, Any], context_bundle: Any) -> No
     }
 
 
-def _add_probe_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+def _add_probe_routing_state(packet: dict[str, JsonValue], context_bundle: BuildContextBundleCapabilityOutput) -> None:
     if context_bundle.active_probe_suggestion is not None:
         packet["activeProbeSuggestion"] = _model_dump_jsonable(context_bundle.active_probe_suggestion)
     if context_bundle.active_chat_probe is not None:
@@ -474,7 +495,7 @@ def _add_probe_routing_state(packet: dict[str, Any], context_bundle: Any) -> Non
         }
 
 
-def _add_frontier_routing_state(packet: dict[str, Any], context_bundle: Any) -> None:
+def _add_frontier_routing_state(packet: dict[str, JsonValue], context_bundle: BuildContextBundleCapabilityOutput) -> None:
     if context_bundle.frontier_state is None:
         return
 
@@ -488,7 +509,7 @@ def _add_frontier_routing_state(packet: dict[str, Any], context_bundle: Any) -> 
     }
 
 
-def _compact_frontier_items(items: Any) -> list[dict[str, Any]]:
+def _compact_frontier_items(items: object) -> list[dict[str, JsonValue]]:
     if not isinstance(items, list):
         return []
     compact_items = []
@@ -507,9 +528,9 @@ def _compact_frontier_items(items: Any) -> list[dict[str, Any]]:
     return compact_items
 
 
-def _build_learning_routing_packet(context_bundle: Any) -> dict[str, Any]:
+def _build_learning_routing_packet(context_bundle: BuildContextBundleCapabilityOutput) -> dict[str, JsonValue]:
     """Return metadata for tool routing without embedding answer evidence."""
-    packet: dict[str, Any] = {
+    packet: dict[str, JsonValue] = {
         "contextType": context_bundle.context_type,
         "contextId": str(context_bundle.context_id) if context_bundle.context_id is not None else None,
         "courseMode": context_bundle.course_mode,
@@ -533,7 +554,7 @@ def _build_learning_routing_packet(context_bundle: Any) -> dict[str, Any]:
     return {key: value for key, value in packet.items() if value is not None}
 
 
-def _build_learning_environment_facts(packet: dict[str, Any]) -> str:
+def _build_learning_environment_facts(packet: dict[str, JsonValue]) -> str:
     """Build current state for when-to-call decisions."""
     facts: list[str] = []
     course_mode_facts = {
@@ -552,27 +573,31 @@ def _build_learning_environment_facts(packet: dict[str, Any]) -> str:
         facts.append("No active probe.")
 
     lesson_focus = packet.get("lessonFocus")
-    if isinstance(lesson_focus, dict) and lesson_focus.get("hasLessonContent"):
+    lesson_focus_payload = _as_object_dict(lesson_focus)
+    if lesson_focus_payload is not None and lesson_focus_payload.get("hasLessonContent"):
         facts.append("Lesson content exists: use lesson windows for lesson-specific answers.")
-    elif isinstance(lesson_focus, dict):
+    elif lesson_focus_payload is not None:
         facts.append("Lesson focus exists; packet has metadata only.")
 
     concept_focus = packet.get("conceptFocus")
-    if isinstance(concept_focus, dict):
-        current_concept = concept_focus.get("currentLessonConcept")
-        if isinstance(current_concept, dict):
+    concept_focus_payload = _as_object_dict(concept_focus)
+    if concept_focus_payload is not None:
+        current_concept = _as_object_dict(concept_focus_payload.get("currentLessonConcept"))
+        if current_concept is not None:
             facts.append("Current concept is known.")
             if current_concept.get("confusorCount") or current_concept.get("prerequisiteGapCount"):
                 facts.append("Learner state has diagnostic signals.")
-        elif concept_focus.get("weakSemanticMatch"):
+        elif concept_focus_payload.get("weakSemanticMatch"):
             facts.append("Concept match is weak: search before assuming the target concept.")
 
     if packet.get("hasSourceFocus"):
         facts.append("Source matches exist: retrieve excerpts before source-specific answers.")
 
     frontier_state = packet.get("frontierState")
-    if isinstance(frontier_state, dict) and frontier_state.get("dueCount", 0) > 0:
-        facts.append(f"Due reviews: {frontier_state['dueCount']}.")
+    frontier_state_payload = _as_object_dict(frontier_state)
+    due_count = frontier_state_payload.get("dueCount") if frontier_state_payload is not None else None
+    if isinstance(due_count, (int, float)) and not isinstance(due_count, bool) and due_count > 0:
+        facts.append(f"Due reviews: {due_count}.")
 
     return "\n".join(f"- {fact}" for fact in facts)
 
@@ -582,9 +607,9 @@ def _build_completion_metadata(
     request: NormalizedChatRequest,
     probe_submitted: bool,
     prefetched_learning_tools: list[str],
-) -> dict[str, Any]:
+) -> dict[str, JsonValue]:
     context_meta = request.context_meta or {}
-    metadata: dict[str, Any] = {
+    metadata: dict[str, JsonValue] = {
         "assistant_thread_id": str(request.thread_id),
         "assistant_lesson_id": str(context_meta.get("lesson_id", "")),
         "assistant_probe_context": _build_probe_context(request),
@@ -601,7 +626,9 @@ def _latest_turn_needs_tutor_context(latest_user_text: str) -> bool:
     return any(trigger in lowered for trigger in CONFUSION_TUTOR_TRIGGERS)
 
 
-def _current_concept_from_bundle(context_bundle: Any) -> Any | None:
+def _current_concept_from_bundle(
+    context_bundle: BuildContextBundleCapabilityOutput,
+) -> FocusedConceptState | ConceptMatch | None:
     concept_focus = context_bundle.concept_focus
     if concept_focus is None:
         return None
@@ -612,7 +639,10 @@ def _current_concept_from_bundle(context_bundle: Any) -> Any | None:
     return None
 
 
-def _tutor_context_target(context_bundle: Any, chat_probe_result: dict[str, Any] | None) -> tuple[str, str] | None:
+def _tutor_context_target(
+    context_bundle: BuildContextBundleCapabilityOutput,
+    chat_probe_result: dict[str, object] | None,
+) -> tuple[str, str] | None:
     if chat_probe_result is not None:
         course_id = chat_probe_result.get("courseId")
         concept_id = chat_probe_result.get("conceptId")
@@ -627,7 +657,7 @@ def _tutor_context_target(context_bundle: Any, chat_probe_result: dict[str, Any]
     return course_id, str(current_concept.concept_id)
 
 
-def _context_signals_need_tutor_context(context_bundle: Any) -> bool:
+def _context_signals_need_tutor_context(context_bundle: BuildContextBundleCapabilityOutput) -> bool:
     current_concept = _current_concept_from_bundle(context_bundle)
     if current_concept is None:
         return False
@@ -639,7 +669,7 @@ def _context_signals_need_tutor_context(context_bundle: Any) -> bool:
     return bool(active_suggestion is not None and active_suggestion.repeated_recent_misses)
 
 
-def _submitted_probe_needs_tutor_context(chat_probe_result: dict[str, Any] | None) -> bool:
+def _submitted_probe_needs_tutor_context(chat_probe_result: dict[str, object] | None) -> bool:
     if chat_probe_result is None:
         return False
     if chat_probe_result.get("reason") is not None:
@@ -652,9 +682,9 @@ async def _maybe_get_tutor_context(
     learning_facade: LearningCapabilitiesFacade,
     user_id: uuid.UUID,
     request: NormalizedChatRequest,
-    context_bundle: Any,
-    chat_probe_result: dict[str, Any] | None,
-) -> dict[str, Any] | None:
+    context_bundle: BuildContextBundleCapabilityOutput,
+    chat_probe_result: dict[str, object] | None,
+) -> dict[str, object] | None:
     if context_bundle.course_mode != "adaptive":
         return None
     if _latest_turn_switches_topic(request.latest_user_text):
@@ -695,8 +725,8 @@ async def _maybe_get_tutor_lesson_grounding(
     *,
     learning_facade: LearningCapabilitiesFacade,
     user_id: uuid.UUID,
-    tutor_context: dict[str, Any] | None,
-) -> dict[str, Any] | None:
+    tutor_context: dict[str, object] | None,
+) -> dict[str, object] | None:
     if tutor_context is None:
         return None
     course_id = tutor_context.get("courseId")
@@ -725,7 +755,7 @@ def _latest_turn_asks_what_to_study(latest_user_text: str) -> bool:
     return any(trigger in lowered for trigger in ("what should i study", "what to study", "what is due", "what's due"))
 
 
-def _generated_probe_is_ready(result: dict[str, Any]) -> bool:
+def _generated_probe_is_ready(result: dict[str, object]) -> bool:
     return result.get("activeProbeId") is not None and isinstance(result.get("probe"), dict)
 
 
@@ -741,7 +771,7 @@ def _latest_turn_switches_topic(latest_user_text: str) -> bool:
     )
 
 
-def _course_id_from_context_bundle(context_bundle: Any) -> str | None:
+def _course_id_from_context_bundle(context_bundle: BuildContextBundleCapabilityOutput) -> str | None:
     course_state = context_bundle.course_state
     return str(course_state.course_id) if course_state is not None else None
 
@@ -751,8 +781,8 @@ async def _maybe_get_requested_course_frontier(
     learning_facade: LearningCapabilitiesFacade,
     user_id: uuid.UUID,
     request: NormalizedChatRequest,
-    context_bundle: Any,
-) -> dict[str, Any] | None:
+    context_bundle: BuildContextBundleCapabilityOutput,
+) -> dict[str, object] | None:
     if context_bundle.course_mode != "adaptive" or not _latest_turn_asks_what_to_study(request.latest_user_text):
         return None
     course_id = _course_id_from_context_bundle(context_bundle)
@@ -775,8 +805,8 @@ async def _maybe_search_switched_topic(
     learning_facade: LearningCapabilitiesFacade,
     user_id: uuid.UUID,
     request: NormalizedChatRequest,
-    context_bundle: Any,
-) -> dict[str, Any] | None:
+    context_bundle: BuildContextBundleCapabilityOutput,
+) -> dict[str, object] | None:
     if context_bundle.course_mode != "adaptive" or not _latest_turn_switches_topic(request.latest_user_text):
         return None
     course_id = _course_id_from_context_bundle(context_bundle)
@@ -804,8 +834,8 @@ async def _maybe_generate_topic_switch_probe(
     learning_facade: LearningCapabilitiesFacade,
     user_id: uuid.UUID,
     request: NormalizedChatRequest,
-    topic_switch_concepts: dict[str, Any] | None,
-) -> dict[str, Any] | None:
+    topic_switch_concepts: dict[str, object] | None,
+) -> dict[str, object] | None:
     if (
         topic_switch_concepts is None
         or not _latest_turn_asks_for_follow_up_probe(request.latest_user_text)
@@ -815,15 +845,15 @@ async def _maybe_generate_topic_switch_probe(
     items = topic_switch_concepts.get("items")
     if not isinstance(items, list) or not items:
         return None
-    first_item = items[0]
-    if not isinstance(first_item, dict):
+    first_item = _as_object_dict(items[0])
+    if first_item is None:
         return None
     course_id = topic_switch_concepts.get("courseId")
     concept_id = first_item.get("conceptId")
     if not isinstance(course_id, str) or not isinstance(concept_id, str):
         return None
 
-    payload: dict[str, Any] = {
+    payload: dict[str, JsonValue] = {
         "course_id": course_id,
         "concept_id": concept_id,
         "count": 1,
@@ -854,10 +884,10 @@ async def _maybe_generate_tutor_follow_up_probe(
     learning_facade: LearningCapabilitiesFacade,
     user_id: uuid.UUID,
     request: NormalizedChatRequest,
-    context_bundle: Any,
-    tutor_context: dict[str, Any] | None,
-    chat_probe_result: dict[str, Any] | None,
-) -> dict[str, Any] | None:
+    context_bundle: BuildContextBundleCapabilityOutput,
+    tutor_context: dict[str, object] | None,
+    chat_probe_result: dict[str, object] | None,
+) -> dict[str, object] | None:
     if tutor_context is None or context_bundle.active_chat_probe is not None:
         return None
     if _latest_turn_switches_topic(request.latest_user_text):
@@ -882,7 +912,7 @@ async def _maybe_generate_tutor_follow_up_probe(
             "concept_id": concept_id,
         },
     )
-    payload: dict[str, Any] = {
+    payload: dict[str, JsonValue] = {
         "course_id": course_id,
         "concept_id": concept_id,
         "count": 1,
@@ -920,13 +950,13 @@ async def _persist_completed_assistant_message(
     message_id: str,
     parent_id: str,
     text: str,
-    run_config: dict[str, Any] | None,
+    run_config: dict[str, JsonValue] | None,
 ) -> None:
     normalized_text = text.strip()
     if not normalized_text:
         return
 
-    assistant_message = {
+    assistant_message: dict[str, JsonValue] = {
         "id": message_id,
         "role": "assistant",
         "createdAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -949,9 +979,9 @@ async def _persist_incomplete_assistant_message(
     conversation_id: uuid.UUID,
     message_id: str,
     parent_id: str,
-    run_config: dict[str, Any] | None,
+    run_config: dict[str, JsonValue] | None,
 ) -> None:
-    incomplete_message = {
+    incomplete_message: dict[str, JsonValue] = {
         "id": message_id,
         "role": "assistant",
         "createdAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -971,13 +1001,13 @@ async def _persist_incomplete_assistant_message(
 
 async def _stream_completion_and_persist_history(
     *,
-    stream: AsyncGenerator[Any],
+    stream: AsyncGenerator[object],
     session: AsyncSession,
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     message_id: str,
     parent_id: str,
-    run_config: dict[str, Any] | None,
+    run_config: dict[str, JsonValue] | None,
 ) -> AsyncGenerator[str]:
     assistant_text_parts: list[str] = []
     saw_any_content = False
@@ -1110,12 +1140,15 @@ async def assistant_chat(
             probe_submitted=probe_submitted,
             prefetched_learning_tools=prefetched_learning_tools,
         )
-        stream = await llm_client.get_completion(
-            messages=messages,
-            user_id=user_id,
-            model=normalized_request.model,
-            stream=True,
-            metadata=metadata,
+        stream = cast(
+            "AsyncGenerator[object]",
+            await llm_client.get_completion(
+                messages=messages,
+                user_id=user_id,
+                model=normalized_request.model,
+                stream=True,
+                metadata=metadata,
+            ),
         )
 
         async for event in _stream_completion_and_persist_history(
@@ -1198,10 +1231,10 @@ async def assistant_chat(
 
 def _append_prefetched_learning_blocks(
     *,
-    user_blocks: list[dict[str, Any]],
-    requested_frontier: dict[str, Any] | None,
-    topic_switch_concepts: dict[str, Any] | None,
-    topic_switch_probe: dict[str, Any] | None,
+    user_blocks: list[OpenAIContentBlock],
+    requested_frontier: dict[str, object] | None,
+    topic_switch_concepts: dict[str, object] | None,
+    topic_switch_probe: dict[str, object] | None,
 ) -> None:
     if requested_frontier is not None:
         user_blocks.append(
@@ -1236,7 +1269,7 @@ async def _build_messages(
     request: NormalizedChatRequest,
     user_id: uuid.UUID,
     session: AsyncSession,
-) -> tuple[list[dict[str, Any]], bool, list[str]]:
+) -> tuple[list[ChatMessagePayload], bool, list[str]]:
     """Build message list with capability-backed context packet injection."""
     learning_facade = LearningCapabilitiesFacade(session)
     context_meta = dict(request.context_meta or {})
@@ -1323,7 +1356,7 @@ async def _build_messages(
     if follow_up_probe is not None:
         prefetched_learning_tools.append("generate_concept_probe")
 
-    messages: list[dict[str, Any]] = [{"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}]
+    messages: list[ChatMessagePayload] = [{"role": "system", "content": ASSISTANT_CHAT_SYSTEM_PROMPT}]
     messages.extend(request.conversation_history)
 
     user_blocks = list(request.latest_user_blocks)
@@ -1394,9 +1427,9 @@ async def _maybe_submit_active_chat_probe(
     learning_facade: LearningCapabilitiesFacade,
     user_id: uuid.UUID,
     request: NormalizedChatRequest,
-    context_bundle: Any,
+    context_bundle: BuildContextBundleCapabilityOutput,
     session: AsyncSession,
-) -> dict[str, Any] | None:
+) -> dict[str, object] | None:
     active_probe = context_bundle.active_chat_probe
     learner_answer = _extract_chat_probe_answer(request.latest_user_text)
     if active_probe is None or learner_answer is None:

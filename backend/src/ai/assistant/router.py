@@ -4,10 +4,11 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from src.auth import CurrentAuth
 from src.config.settings import get_settings
@@ -31,7 +32,20 @@ router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 logger = logging.getLogger(__name__)
 
 
-def _sse_event(payload: dict[str, Any] | str) -> str:
+class AssistantModelResponse(BaseModel):
+    """One selectable assistant model."""
+
+    id: str
+    is_default: bool = Field(alias="isDefault")
+
+
+class AssistantModelsResponse(BaseModel):
+    """Available assistant model list."""
+
+    models: list[AssistantModelResponse]
+
+
+def _sse_event(payload: dict[str, object] | str) -> str:
     encoded = payload if isinstance(payload, str) else json.dumps(payload)
     return f"data: {encoded}\n\n"
 
@@ -249,7 +263,7 @@ async def append_conversation_history_item(
 
 
 @router.get("/models")
-async def get_models() -> dict[str, list[dict[str, Any]]]:
+async def get_models() -> AssistantModelsResponse:
     """Return list of available assistant models.
 
     Minimal payload for UI model picker:
@@ -261,17 +275,12 @@ async def get_models() -> dict[str, list[dict[str, Any]]]:
 
     ordered = settings.primary_llm_models
     seen: set[str] = set()
-    models: list[dict[str, Any]] = []
+    models: list[AssistantModelResponse] = []
 
     for i, model_id in enumerate(ordered):
         if model_id in seen:
             continue
-        models.append(
-            {
-                "id": model_id,
-                "isDefault": i == 0,
-            }
-        )
+        models.append(AssistantModelResponse(id=model_id, isDefault=i == 0))
         seen.add(model_id)
 
-    return {"models": models}
+    return AssistantModelsResponse(models=models)

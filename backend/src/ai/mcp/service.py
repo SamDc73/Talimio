@@ -11,7 +11,7 @@ from src.ai.mcp.schemas import AuthType, MCPServerCreateRequest
 import base64
 import hashlib
 import logging
-from typing import Any, cast
+from typing import cast
 from urllib.parse import urlparse
 
 import httpx
@@ -252,7 +252,7 @@ async def list_user_mcp_tools(
     user_id: uuid.UUID,
     server_name: str,
     config: MCPConfig | None = None,
-) -> list[Any]:
+) -> list[object]:
     """List tools exposed by a user's MCP server via the shared client pool."""
     resolved_config = config or await get_user_mcp_config(session, user_id)
     client = get_mcp_client()

@@ -1,8 +1,9 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
+from pydantic import JsonValue
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -51,7 +52,7 @@ class AssistantConversation(Base):
     )
     context_type: Mapped[AssistantConversationContextType | None] = mapped_column(String(20), nullable=True)
     context_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
-    context_meta: Mapped[dict[str, Any]] = mapped_column(
+    context_meta: Mapped[dict[str, JsonValue]] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
@@ -177,8 +178,8 @@ class AssistantConversationHistoryItem(Base):
     seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), nullable=False)
     aui_message_id: Mapped[str] = mapped_column(Text, nullable=False)
     parent_aui_message_id: Mapped[str | None] = mapped_column(Text, nullable=True)
-    message_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    run_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    message_json: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False)
+    run_config: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     inserted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     conversation: Mapped[AssistantConversation] = relationship("AssistantConversation", back_populates="history_items")

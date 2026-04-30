@@ -1,13 +1,14 @@
 """HTTP MCP client utilities."""
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Protocol
+from typing import Protocol, cast
 
 import httpx
+from pydantic import JsonValue
 
 from src.ai.mcp.config import MCPConfig, MCPServerConfig
 
@@ -19,15 +20,26 @@ class MCPClientDependencyError(RuntimeError):
 class ClientSession(Protocol):
     """Minimal protocol for MCP client sessions."""
 
-    async def call_tool(self, tool_name: str, *, arguments: dict[str, Any]) -> Any: ...
+    async def call_tool(self, tool_name: str, *, arguments: dict[str, JsonValue]) -> object: ...
 
-    async def list_tools(self) -> Any: ...
+    async def list_tools(self) -> object: ...
 
-    async def initialize(self) -> Any: ...
+    async def initialize(self) -> object: ...
+
+
+class StreamableHTTPClient(Protocol):
+    """Callable shape used from the MCP SDK streamable HTTP transport."""
+
+    def __call__(
+        self,
+        url: str,
+        *,
+        http_client: httpx.AsyncClient,
+    ) -> AbstractAsyncContextManager[tuple[object, object, object]]: ...
 
 
 _ClientSession: type[ClientSession] | None
-_streamable_http_client: Callable[..., Any] | None
+_streamable_http_client: StreamableHTTPClient | None
 _import_error: ModuleNotFoundError | None
 
 try:
@@ -41,11 +53,11 @@ except ModuleNotFoundError as exc:
     _import_error = exc
 else:
     _ClientSession = _MCPClientSession
-    _streamable_http_client = _sdk_streamable_http_client
+    _streamable_http_client = cast("StreamableHTTPClient", _sdk_streamable_http_client)
     _import_error = None
 
 
-def _ensure_mcp_sdk() -> tuple[type[ClientSession], Callable[..., Any]]:
+def _ensure_mcp_sdk() -> tuple[type[ClientSession], StreamableHTTPClient]:
     if _ClientSession is None or _streamable_http_client is None:
         msg = "The 'mcp' Python package is required for MCP client support. Install it with `uv pip install mcp`."
         raise MCPClientDependencyError(msg) from _import_error
@@ -74,10 +86,10 @@ class MCPClient:
         server_name: str,
         *,
         tool_name: str,
-        arguments: dict[str, Any] | None = None,
+        arguments: dict[str, JsonValue] | None = None,
         call_timeout: float | None = None,
         config: MCPConfig | None = None,
-    ) -> Any:
+    ) -> object:
         """Call a remote MCP tool via streamable HTTP."""
         server = self._require_server(server_name, config=config)
         timeout_seconds = call_timeout or self._default_timeout
@@ -92,16 +104,18 @@ class MCPClient:
                 msg = f"MCP tool '{tool_name}' timed out after {timeout_seconds}s"
                 raise TimeoutError(msg) from exc
 
-    async def list_tools(self, server_name: str, *, config: MCPConfig | None = None) -> list[Any]:
+    async def list_tools(self, server_name: str, *, config: MCPConfig | None = None) -> list[object]:
         """Return tool metadata exposed by the server."""
         server = self._require_server(server_name, config=config)
         async with self._session(server) as session:
             response = await asyncio.wait_for(
                 session.list_tools(),
                 timeout=self._default_timeout,
-            )
+        )
         tools = getattr(response, "tools", response)
-        return list(tools or [])
+        if isinstance(tools, Iterable):
+            return list(tools)
+        return []
 
     def _require_server(self, name: str, config: MCPConfig | None = None) -> MCPServerConfig:
         if config is None:

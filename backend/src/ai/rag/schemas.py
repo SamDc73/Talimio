@@ -2,9 +2,9 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 from src.config.schema_casing import build_camel_config
 
@@ -68,7 +68,7 @@ class SearchResult(BaseModel):
     chunk_id: str = Field(description="Unique chunk identifier")
     content: str = Field(description="Chunk text content")
     similarity_score: float = Field(description="Similarity score (0-1)")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Chunk metadata")
+    metadata: dict[str, JsonValue] = Field(default_factory=dict, description="Chunk metadata")
 
     model_config = build_camel_config()
 
@@ -87,6 +87,6 @@ class DefaultResponse(BaseModel):
 
     status: bool
     message: str
-    details: dict[str, Any] = Field(default_factory=dict)
+    details: dict[str, JsonValue] = Field(default_factory=dict)
 
     model_config = build_camel_config()

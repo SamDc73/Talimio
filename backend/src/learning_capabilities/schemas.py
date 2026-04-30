@@ -2,9 +2,9 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from src.config.schema_casing import to_camel
 
@@ -697,7 +697,7 @@ class BuildContextBundleCapabilityInput(BaseModel):
 
     context_type: ContextType | None = None
     context_id: uuid.UUID | None = None
-    context_meta: dict[str, Any] = Field(default_factory=dict)
+    context_meta: dict[str, JsonValue] = Field(default_factory=dict)
     latest_user_text: str = ""
     selected_quote: str | None = None
 

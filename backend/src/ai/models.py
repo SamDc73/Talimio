@@ -1,12 +1,12 @@
 """Pydantic models for AI-related data structures."""
 
 import json
-from typing import Any, Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 
-def _normalize_slug_text(value: Any) -> str:
+def _normalize_slug_text(value: object) -> str:
     text = str(value or "").strip().lower()
     slug_chars: list[str] = []
     last_was_separator = False
@@ -21,7 +21,7 @@ def _normalize_slug_text(value: Any) -> str:
     return "".join(slug_chars).strip("-")
 
 
-def _coerce_slug(value: Any, *, field: str) -> str:
+def _coerce_slug(value: object, *, field: str) -> str:
     text = _normalize_slug_text(value)
     if not text:
         msg = f"{field} must not be empty"
@@ -29,7 +29,7 @@ def _coerce_slug(value: Any, *, field: str) -> str:
     return text
 
 
-def _coerce_slug_list(values: Any, *, field: str) -> list[str]:
+def _coerce_slug_list(values: object, *, field: str) -> list[str]:
     if values is None:
         return []
     if isinstance(values, str):
@@ -38,6 +38,13 @@ def _coerce_slug_list(values: Any, *, field: str) -> list[str]:
         msg = f"{field} must be provided as a list of slugs"
         raise ValueError(msg)  # noqa: TRY004 - used by Pydantic validators for schema errors.
     return [_coerce_slug(item, field=field) for item in values if str(item or "").strip()]
+
+
+def _float_input(value: object) -> str | int | float:
+    if isinstance(value, bool) or not isinstance(value, str | int | float):
+        msg = "Value must be numeric"
+        raise TypeError(msg)
+    return value
 
 
 class PlanAction(BaseModel):
@@ -116,7 +123,7 @@ class Lesson(BaseModel):
 
     @field_validator("title", "description", "module", mode="before")
     @classmethod
-    def _normalize_text(cls, value: Any, info: ValidationInfo) -> str | None:
+    def _normalize_text(cls, value: object, info: ValidationInfo) -> str | None:
         if value is None:
             return None
         text = str(value).strip()
@@ -127,7 +134,7 @@ class Lesson(BaseModel):
 
     @field_validator("slug", mode="before")
     @classmethod
-    def _normalize_slug_field(cls, value: Any) -> str | None:
+    def _normalize_slug_field(cls, value: object) -> str | None:
         if value is None or str(value).strip() == "":
             return None
         return _coerce_slug(value, field="Lesson slug")
@@ -145,7 +152,7 @@ class CourseOutlineInfo(BaseModel):
 
     @field_validator("title", mode="before")
     @classmethod
-    def _normalize_title(cls, value: Any) -> str:
+    def _normalize_title(cls, value: object) -> str:
         text = str(value or "").strip()
         if not text:
             msg = "Course title must not be empty"
@@ -154,7 +161,7 @@ class CourseOutlineInfo(BaseModel):
 
     @field_validator("description", mode="before")
     @classmethod
-    def _normalize_description(cls, value: Any) -> str | None:
+    def _normalize_description(cls, value: object) -> str | None:
         if value is None:
             return None
         text = str(value).strip()
@@ -162,7 +169,7 @@ class CourseOutlineInfo(BaseModel):
 
     @field_validator("setup_commands", mode="before")
     @classmethod
-    def _ensure_setup_commands(cls, value: Any) -> list[str]:
+    def _ensure_setup_commands(cls, value: object) -> list[str]:
         if value is None:
             return []
         if isinstance(value, list):
@@ -182,20 +189,21 @@ class CourseStructure(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _coerce_legacy_shape(cls, data: Any) -> Any:
+    def _coerce_legacy_shape(cls, data: object) -> object:
         if not isinstance(data, dict):
             return data
-        if "course" in data:
-            return data
+        payload = cast("dict[str, object]", data)
+        if "course" in payload:
+            return payload
         # Legacy shape: title/description/setup_commands at root level
         return {
             "course": {
-                "title": data.get("title"),
-                "description": data.get("description"),
-                "setup_commands": data.get("setup_commands", []),
-                "slug": data.get("slug"),
+                "title": payload.get("title"),
+                "description": payload.get("description"),
+                "setup_commands": payload.get("setup_commands", []),
+                "slug": payload.get("slug"),
             },
-            "lessons": data.get("lessons", []),
+            "lessons": payload.get("lessons", []),
         }
 
 
@@ -210,9 +218,9 @@ class AdaptiveCourseMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-def _coerce_index(value: Any, *, field: str) -> int:
+def _coerce_index(value: object, *, field: str) -> int:
     try:
-        idx = int(float(value))
+        idx = int(float(_float_input(value)))
     except (TypeError, ValueError) as exc:
         msg = f"{field} must be an integer"
         raise ValueError(msg) from exc
@@ -234,12 +242,12 @@ class AdaptiveLessonPlan(BaseModel):
 
     @field_validator("index", mode="before")
     @classmethod
-    def _normalize_index(cls, value: Any) -> int:
+    def _normalize_index(cls, value: object) -> int:
         return _coerce_index(value, field="Lesson index")
 
     @field_validator("title", "description", "module", mode="before")
     @classmethod
-    def _strip_optional_text(cls, value: Any) -> str | None:
+    def _strip_optional_text(cls, value: object) -> str | None:
         if value is None:
             return None
         text = str(value).strip()
@@ -257,7 +265,7 @@ class AdaptiveConceptNode(BaseModel):
 
     @field_validator("title", mode="before")
     @classmethod
-    def _normalize_title(cls, value: Any) -> str:
+    def _normalize_title(cls, value: object) -> str:
         text = str(value or "").strip()
         if not text:
             msg = "Concept title must not be empty"
@@ -266,11 +274,11 @@ class AdaptiveConceptNode(BaseModel):
 
     @field_validator("initial_mastery", mode="before")
     @classmethod
-    def _coerce_initial_mastery(cls, value: Any) -> float | None:
+    def _coerce_initial_mastery(cls, value: object) -> float | None:
         if value is None or value == "":
             return None
         try:
-            mastery = float(value)
+            mastery = float(_float_input(value))
         except (TypeError, ValueError) as exc:
             msg = "initialMastery must be a float between 0.0 and 1.0"
             raise ValueError(msg) from exc
@@ -281,7 +289,7 @@ class AdaptiveConceptNode(BaseModel):
 
     @field_validator("slug", mode="before")
     @classmethod
-    def _normalize_slug(cls, value: Any) -> str | None:
+    def _normalize_slug(cls, value: object) -> str | None:
         if value is None or str(value).strip() == "":
             return None
         return _coerce_slug(value, field="Adaptive concept slug")
@@ -297,14 +305,14 @@ class AdaptiveConfusor(BaseModel):
 
     @field_validator("index", mode="before")
     @classmethod
-    def _normalize_index(cls, value: Any) -> int:
+    def _normalize_index(cls, value: object) -> int:
         return _coerce_index(value, field="Confusor index")
 
     @field_validator("risk", mode="before")
     @classmethod
-    def _coerce_risk(cls, value: Any) -> float:
+    def _coerce_risk(cls, value: object) -> float:
         try:
-            risk = float(value)
+            risk = float(_float_input(value))
         except (TypeError, ValueError) as exc:
             msg = "Risk must be a float between 0.0 and 1.0"
             raise ValueError(msg) from exc
@@ -324,7 +332,7 @@ class AdaptiveConfusorSet(BaseModel):
 
     @field_validator("index", mode="before")
     @classmethod
-    def _normalize_index(cls, value: Any) -> int:
+    def _normalize_index(cls, value: object) -> int:
         return _coerce_index(value, field="Confusor set index")
 
 
@@ -338,12 +346,12 @@ class AdaptiveConceptEdge(BaseModel):
 
     @field_validator("source_index", mode="before")
     @classmethod
-    def _normalize_source(cls, value: Any) -> int:
+    def _normalize_source(cls, value: object) -> int:
         return _coerce_index(value, field="sourceIndex")
 
     @field_validator("prereq_index", mode="before")
     @classmethod
-    def _normalize_prereq(cls, value: Any) -> int:
+    def _normalize_prereq(cls, value: object) -> int:
         return _coerce_index(value, field="prereqIndex")
 
 
@@ -369,7 +377,7 @@ class AdaptiveConceptGraph(BaseModel):
 
     @field_validator("layers", mode="before")
     @classmethod
-    def _normalize_layers(cls, value: Any) -> list[list[int]]:
+    def _normalize_layers(cls, value: object) -> list[list[int]]:
         if value is None:
             return []
         if not isinstance(value, list):
@@ -401,7 +409,7 @@ class AdaptiveOutlineMeta(BaseModel):
 
     @field_validator("concept_tags", mode="before")
     @classmethod
-    def _normalize_concept_tags(cls, value: Any) -> list[list[str]]:
+    def _normalize_concept_tags(cls, value: object) -> list[list[str]]:
         if value is None:
             return []
         if not isinstance(value, list):
@@ -459,7 +467,7 @@ class ConceptNode(BaseModel):
 
     @field_validator("name", "description", mode="before")
     @classmethod
-    def _strip_text(cls, value: Any) -> str:
+    def _strip_text(cls, value: object) -> str:
         text = str(value or "").strip()
         if not text:
             msg = "Concept text must not be empty"
@@ -468,11 +476,11 @@ class ConceptNode(BaseModel):
 
     @field_validator("difficulty", mode="before")
     @classmethod
-    def _normalize_difficulty(cls, value: Any) -> int | None:
+    def _normalize_difficulty(cls, value: object) -> int | None:
         if value is None or value == "":
             return None
         try:
-            difficulty = int(float(value))
+            difficulty = int(float(_float_input(value)))
         except (TypeError, ValueError) as exc:
             msg = "Difficulty must be an integer between 1 and 5"
             raise ValueError(msg) from exc
@@ -483,7 +491,7 @@ class ConceptNode(BaseModel):
 
     @field_validator("slug", mode="before")
     @classmethod
-    def _normalize_slug(cls, value: Any) -> str | None:
+    def _normalize_slug(cls, value: object) -> str | None:
         if value is None:
             return None
         text = str(value).strip().lower()
@@ -500,7 +508,7 @@ class ConceptEdge(BaseModel):
 
     @field_validator("source_slug", "prereq_slug", mode="before")
     @classmethod
-    def _validate_endpoint(cls, value: Any) -> str:
+    def _validate_endpoint(cls, value: object) -> str:
         text = str(value or "").strip().lower()
         if not text:
             msg = "Edge endpoint must not be empty"
@@ -518,14 +526,14 @@ class ConceptConfusor(BaseModel):
 
     @field_validator("slug", mode="before")
     @classmethod
-    def _normalize_slug(cls, value: Any) -> str:
+    def _normalize_slug(cls, value: object) -> str:
         return _coerce_slug(value, field="Confusor slug")
 
     @field_validator("risk", mode="before")
     @classmethod
-    def _coerce_risk(cls, value: Any) -> float:
+    def _coerce_risk(cls, value: object) -> float:
         try:
-            risk = float(value)
+            risk = float(_float_input(value))
         except (TypeError, ValueError) as exc:
             msg = "Risk must be a float between 0.0 and 1.0"
             raise ValueError(msg) from exc
@@ -545,7 +553,7 @@ class ConceptConfusorSet(BaseModel):
 
     @field_validator("slug", mode="before")
     @classmethod
-    def _normalize_slug(cls, value: Any) -> str:
+    def _normalize_slug(cls, value: object) -> str:
         return _coerce_slug(value, field="Confusor set slug")
 
 
@@ -587,7 +595,7 @@ class SelfAssessmentQuestion(BaseModel):
 
     @field_validator("options", mode="before")
     @classmethod
-    def _normalize_options(cls, value: Any) -> list[str]:
+    def _normalize_options(cls, value: object) -> list[str]:
         if value is None:
             return []
         if isinstance(value, list):
@@ -612,11 +620,11 @@ class SelfAssessmentQuiz(BaseModel):
 
     @field_validator("questions", mode="before")
     @classmethod
-    def _normalize_questions(cls, value: Any) -> list[Any]:
+    def _normalize_questions(cls, value: object) -> list[object]:
         if value is None:
             return []
         if isinstance(value, list):
-            return value
+            return list(value)
         return [value]
 
     @field_validator("questions")
@@ -676,7 +684,7 @@ class ExecutionPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @staticmethod
-    def _decode_json_blob(value: Any) -> Any:
+    def _decode_json_blob(value: object) -> object:
         if isinstance(value, str):
             candidate = value.strip()
             if candidate.startswith(("{", "[")):
@@ -687,11 +695,11 @@ class ExecutionPlan(BaseModel):
         return value
 
     @classmethod
-    def _normalize_sequence_input(cls, value: Any) -> list[Any]:
+    def _normalize_sequence_input(cls, value: object) -> list[object]:
         if value is None:
             return []
         if isinstance(value, list):
-            normalized: list[Any] = []
+            normalized: list[object] = []
             for entry in value:
                 decoded = cls._decode_json_blob(entry)
                 if isinstance(decoded, list):
@@ -702,13 +710,13 @@ class ExecutionPlan(BaseModel):
         if isinstance(value, str):
             decoded = cls._decode_json_blob(value)
             if isinstance(decoded, list):
-                return decoded
+                return list(decoded)
             return [decoded]
         return [value]
 
     @field_validator("setup_commands", "install_commands", "run_commands", mode="before")
     @classmethod
-    def _ensure_list(cls, value: Any) -> list[str]:
+    def _ensure_list(cls, value: object) -> list[str]:
         if value is None:
             return []
         if isinstance(value, list):
@@ -719,9 +727,9 @@ class ExecutionPlan(BaseModel):
 
     @field_validator("files", mode="before")
     @classmethod
-    def _normalize_files(cls, value: Any) -> list[Any]:
+    def _normalize_files(cls, value: object) -> list[object]:
         normalized = cls._normalize_sequence_input(value)
-        files: list[Any] = []
+        files: list[object] = []
         for entry in normalized:
             if isinstance(entry, dict):
                 files.append(entry)
@@ -755,9 +763,9 @@ class ExecutionPlan(BaseModel):
 
     @field_validator("actions", mode="before")
     @classmethod
-    def _normalize_actions(cls, value: Any) -> list[Any]:
+    def _normalize_actions(cls, value: object) -> list[object]:
         normalized = cls._normalize_sequence_input(value)
-        actions: list[Any] = []
+        actions: list[object] = []
         for entry in normalized:
             if isinstance(entry, dict):
                 actions.append(entry)

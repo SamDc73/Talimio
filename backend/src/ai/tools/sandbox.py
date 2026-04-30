@@ -1,17 +1,16 @@
 """Sandbox-backed local function tools."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
 
 from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget, ToolExecutor
 
 
-RunCommandCallable = Callable[[str, str | None, str | None, int | None], Awaitable[dict[str, Any]]]
+RunCommandCallable = Callable[[str, str | None, str | None, int | None], Awaitable[Mapping[str, object]]]
 ReadFileCallable = Callable[[str], Awaitable[str]]
-WriteFileCallable = Callable[[str, str], Awaitable[dict[str, Any]]]
-ListDirCallable = Callable[[str, int], Awaitable[list[dict[str, Any]]]]
-ResetCallable = Callable[[], Awaitable[dict[str, Any]]]
+WriteFileCallable = Callable[[str, str], Awaitable[Mapping[str, object]]]
+ListDirCallable = Callable[[str, int], Awaitable[Sequence[Mapping[str, object]]]]
+ResetCallable = Callable[[], Awaitable[Mapping[str, object]]]
 
 
 @dataclass(slots=True)
@@ -43,7 +42,7 @@ def build_sandbox_function_tools(context: SandboxToolContext) -> list[FunctionTo
 
 
 def _build_run_command_executor(context: SandboxToolContext) -> ToolExecutor:
-    async def executor(arguments: dict[str, Any]) -> dict[str, Any]:
+    async def executor(arguments: Mapping[str, object]) -> Mapping[str, object]:
         if context.run_command is None:
             msg = "Sandbox command execution is unavailable for this request"
             raise RuntimeError(msg)
@@ -58,7 +57,7 @@ def _build_run_command_executor(context: SandboxToolContext) -> ToolExecutor:
         user_raw = arguments.get("user")
         user = str(user_raw).strip() if isinstance(user_raw, str) and user_raw.strip() else None
         timeout_raw = arguments.get("timeout_seconds")
-        timeout_seconds = int(timeout_raw) if timeout_raw is not None else None
+        timeout_seconds = int(timeout_raw) if isinstance(timeout_raw, str | int | float) else None
         if timeout_seconds is not None and timeout_seconds <= 0:
             msg = "Field `timeout_seconds` must be greater than 0"
             raise ValueError(msg)
@@ -69,7 +68,7 @@ def _build_run_command_executor(context: SandboxToolContext) -> ToolExecutor:
 
 
 def _build_read_file_executor(context: SandboxToolContext) -> ToolExecutor:
-    async def executor(arguments: dict[str, Any]) -> dict[str, Any]:
+    async def executor(arguments: Mapping[str, object]) -> Mapping[str, object]:
         if context.read_file is None:
             msg = "Sandbox file reads are unavailable for this request"
             raise RuntimeError(msg)
@@ -85,7 +84,7 @@ def _build_read_file_executor(context: SandboxToolContext) -> ToolExecutor:
 
 
 def _build_write_file_executor(context: SandboxToolContext) -> ToolExecutor:
-    async def executor(arguments: dict[str, Any]) -> dict[str, Any]:
+    async def executor(arguments: Mapping[str, object]) -> Mapping[str, object]:
         if context.write_file is None:
             msg = "Sandbox file writes are unavailable for this request"
             raise RuntimeError(msg)
@@ -102,7 +101,7 @@ def _build_write_file_executor(context: SandboxToolContext) -> ToolExecutor:
 
 
 def _build_list_dir_executor(context: SandboxToolContext) -> ToolExecutor:
-    async def executor(arguments: dict[str, Any]) -> dict[str, Any]:
+    async def executor(arguments: Mapping[str, object]) -> Mapping[str, object]:
         if context.list_dir is None:
             msg = "Sandbox directory listing is unavailable for this request"
             raise RuntimeError(msg)
@@ -110,7 +109,7 @@ def _build_list_dir_executor(context: SandboxToolContext) -> ToolExecutor:
         path_raw = arguments.get("path")
         path = str(path_raw).strip() if isinstance(path_raw, str) and path_raw.strip() else "."
         depth_raw = arguments.get("depth")
-        depth = int(depth_raw) if depth_raw is not None else 2
+        depth = int(depth_raw) if isinstance(depth_raw, str | int | float) else 2
         if depth < 1 or depth > 10:
             msg = "Field `depth` must be between 1 and 10"
             raise ValueError(msg)
@@ -121,7 +120,7 @@ def _build_list_dir_executor(context: SandboxToolContext) -> ToolExecutor:
 
 
 def _build_reset_executor(context: SandboxToolContext) -> ToolExecutor:
-    async def executor(_: dict[str, Any]) -> dict[str, Any]:
+    async def executor(_: Mapping[str, object]) -> Mapping[str, object]:
         if context.reset is None:
             msg = "Sandbox reset is unavailable for this request"
             raise RuntimeError(msg)
@@ -130,7 +129,7 @@ def _build_reset_executor(context: SandboxToolContext) -> ToolExecutor:
     return executor
 
 
-def _run_command_schema() -> dict[str, Any]:
+def _run_command_schema() -> Mapping[str, object]:
     return {
         "type": "function",
         "function": {
@@ -151,7 +150,7 @@ def _run_command_schema() -> dict[str, Any]:
     }
 
 
-def _read_file_schema() -> dict[str, Any]:
+def _read_file_schema() -> Mapping[str, object]:
     return {
         "type": "function",
         "function": {
@@ -167,7 +166,7 @@ def _read_file_schema() -> dict[str, Any]:
     }
 
 
-def _write_file_schema() -> dict[str, Any]:
+def _write_file_schema() -> Mapping[str, object]:
     return {
         "type": "function",
         "function": {
@@ -186,7 +185,7 @@ def _write_file_schema() -> dict[str, Any]:
     }
 
 
-def _list_dir_schema() -> dict[str, Any]:
+def _list_dir_schema() -> Mapping[str, object]:
     return {
         "type": "function",
         "function": {
@@ -204,7 +203,7 @@ def _list_dir_schema() -> dict[str, Any]:
     }
 
 
-def _reset_schema() -> dict[str, Any]:
+def _reset_schema() -> Mapping[str, object]:
     return {
         "type": "function",
         "function": {

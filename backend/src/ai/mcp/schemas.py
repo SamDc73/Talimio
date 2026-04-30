@@ -3,10 +3,10 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import AliasChoices, AnyHttpUrl, BaseModel, Field, SecretStr, field_validator
+from pydantic import AliasChoices, AnyHttpUrl, BaseModel, Field, SecretStr, ValidationInfo, field_validator
 
 from src.config.schema_casing import build_camel_config
 
@@ -45,7 +45,7 @@ class MCPServerCreateRequest(BaseModel):
 
     @field_validator("auth_token")
     @classmethod
-    def _validate_token(cls, token: SecretStr | None, info: Any) -> SecretStr | None:
+    def _validate_token(cls, token: SecretStr | None, info: ValidationInfo) -> SecretStr | None:
         auth_type = info.data.get("auth_type", "none")
         if auth_type == "bearer":
             if token is None:

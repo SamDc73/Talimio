@@ -1,14 +1,15 @@
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypedDict, cast
 
+from pydantic import JsonValue
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.exceptions import NotFoundError, ValidationError
 
-from .models import AssistantConversation, AssistantConversationHistoryItem
+from .models import AssistantConversation, AssistantConversationContextType, AssistantConversationHistoryItem
 
 
 DEFAULT_CONVERSATIONS_PAGE_SIZE = 20
@@ -16,6 +17,38 @@ MAX_CONVERSATIONS_PAGE_SIZE = 100
 CONVERSATION_PREVIEW_LENGTH = 140
 CONVERSATION_STATUS_REGULAR = "regular"
 CONVERSATION_STATUS_ARCHIVED = "archived"
+
+
+class AssistantConversationHistoryItemPayload(TypedDict):
+    """Assistant-ui history item payload returned by the service."""
+
+    message: dict[str, JsonValue]
+    parent_id: str | None
+    run_config: dict[str, JsonValue] | None
+
+
+class AssistantConversationHistoryPayload(TypedDict):
+    """Assistant-ui conversation history payload returned by the service."""
+
+    head_id: str | None
+    messages: list[AssistantConversationHistoryItemPayload]
+
+
+class AssistantConversationPayload(TypedDict):
+    """Assistant conversation summary payload returned by the service."""
+
+    remote_id: uuid.UUID
+    external_id: None
+    status: str
+    title: str | None
+    context_type: AssistantConversationContextType | None
+    context_id: uuid.UUID | None
+    context_meta: dict[str, JsonValue]
+    head_message_id: str | None
+    updated_at: datetime
+    created_at: datetime
+    message_count: int
+    last_message_preview: str | None
 
 
 class AssistantConversationNotFoundError(NotFoundError):
@@ -35,8 +68,8 @@ class AssistantConversationValidationError(ValidationError):
 def _normalize_context_seed(
     context_type: str | None,
     context_id: uuid.UUID | None,
-    context_meta: dict[str, Any] | None,
-) -> tuple[str | None, uuid.UUID | None, dict[str, Any]]:
+    context_meta: dict[str, JsonValue] | None,
+) -> tuple[str | None, uuid.UUID | None, dict[str, JsonValue]]:
     if context_id is not None and context_type is None:
         msg = "contextType is required when contextId is provided"
         raise AssistantConversationValidationError(msg)
@@ -48,7 +81,7 @@ def _normalize_context_seed(
     return context_type, context_id, context_meta or {}
 
 
-def _extract_message_preview(message_json: dict[str, Any]) -> str | None:
+def _extract_message_preview(message_json: dict[str, JsonValue]) -> str | None:
     content = message_json.get("content")
     if isinstance(content, str):
         preview = content.strip()
@@ -74,7 +107,7 @@ def _extract_message_preview(message_json: dict[str, Any]) -> str | None:
     return preview[:CONVERSATION_PREVIEW_LENGTH] if preview else None
 
 
-def _parse_message_created_at(message_json: dict[str, Any]) -> datetime:
+def _parse_message_created_at(message_json: dict[str, JsonValue]) -> datetime:
     raw_value = message_json.get("createdAt")
     if isinstance(raw_value, str) and raw_value:
         normalized = raw_value.replace("Z", "+00:00")
@@ -96,7 +129,7 @@ def _parse_message_created_at(message_json: dict[str, Any]) -> datetime:
     return datetime.now(UTC)
 
 
-def _extract_message_id(message_json: dict[str, Any]) -> str:
+def _extract_message_id(message_json: dict[str, JsonValue]) -> str:
     raw_message_id = message_json.get("id")
     if isinstance(raw_message_id, str) and raw_message_id.strip():
         return raw_message_id
@@ -105,8 +138,8 @@ def _extract_message_id(message_json: dict[str, Any]) -> str:
     raise AssistantConversationValidationError(msg)
 
 
-def _normalize_history_message_metadata(role: str | None, metadata_value: Any) -> dict[str, Any]:
-    metadata = dict(metadata_value) if isinstance(metadata_value, dict) else {}
+def _normalize_history_message_metadata(role: str | None, metadata_value: object) -> dict[str, JsonValue]:
+    metadata = cast("dict[str, JsonValue]", dict(metadata_value)) if isinstance(metadata_value, dict) else {}
 
     custom = metadata.get("custom")
     if not isinstance(custom, dict):
@@ -131,7 +164,7 @@ def _normalize_history_message_metadata(role: str | None, metadata_value: Any) -
     return metadata
 
 
-def _normalize_history_message_payload(message_json: dict[str, Any]) -> dict[str, Any]:
+def _normalize_history_message_payload(message_json: dict[str, JsonValue]) -> dict[str, JsonValue]:
     normalized_message = dict(message_json)
     role = normalized_message.get("role")
     role_value = role if isinstance(role, str) else None
@@ -153,7 +186,7 @@ def _conversation_to_payload(
     conversation: AssistantConversation,
     message_count: int,
     last_message_preview: str | None,
-) -> dict[str, Any]:
+) -> AssistantConversationPayload:
     return {
         "remote_id": conversation.id,
         "external_id": None,
@@ -202,7 +235,7 @@ async def create_assistant_conversation(
     title: str | None,
     context_type: str | None,
     context_id: uuid.UUID | None,
-    context_meta: dict[str, Any] | None,
+    context_meta: dict[str, JsonValue] | None,
 ) -> AssistantConversation:
     """Create a new assistant conversation for the authenticated user."""
     normalized_context_type, normalized_context_id, normalized_context_meta = _normalize_context_seed(
@@ -248,7 +281,7 @@ async def get_assistant_conversation_with_summary(
     session: AsyncSession,
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
-) -> dict[str, Any]:
+) -> AssistantConversationPayload:
     """Fetch a conversation with preview and message count fields."""
     conversation = await get_assistant_conversation(session=session, user_id=user_id, conversation_id=conversation_id)
     message_count, preview = await _get_history_count_and_preview(session=session, conversation_id=conversation.id)
@@ -265,7 +298,7 @@ async def list_assistant_conversations(
     user_id: uuid.UUID,
     page: int = 1,
     limit: int = DEFAULT_CONVERSATIONS_PAGE_SIZE,
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[AssistantConversationPayload], int]:
     """Return paginated assistant conversations ordered by most recent update."""
     normalized_page = max(page, 1)
     normalized_limit = min(max(limit, 1), MAX_CONVERSATIONS_PAGE_SIZE)
@@ -395,7 +428,7 @@ async def load_assistant_conversation_history(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     lock_for_update: bool = False,
-) -> dict[str, Any]:
+) -> AssistantConversationHistoryPayload:
     """Load assistant-ui exported history in stable insertion order."""
     if lock_for_update:
         conversation = await session.scalar(
@@ -423,7 +456,7 @@ async def load_assistant_conversation_history(
         .all()
     )
 
-    messages = [
+    messages: list[AssistantConversationHistoryItemPayload] = [
         {
             "message": _normalize_history_message_payload(row.message_json),
             "parent_id": row.parent_aui_message_id,
@@ -447,9 +480,9 @@ async def append_assistant_conversation_history_item(
     session: AsyncSession,
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
-    message: dict[str, Any],
+    message: dict[str, JsonValue],
     parent_id: str | None,
-    run_config: dict[str, Any] | None,
+    run_config: dict[str, JsonValue] | None,
 ) -> bool:
     """Append one history item and ignore duplicates idempotently."""
     conversation = await get_assistant_conversation(session=session, user_id=user_id, conversation_id=conversation_id)

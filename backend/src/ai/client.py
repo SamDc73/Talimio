@@ -2,14 +2,14 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Coroutine, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import TypeVar, cast
 
 import litellm
 from opentelemetry import trace
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_DEFAULT
@@ -52,7 +52,7 @@ from src.ai.tools.plan import (
 from src.ai.tools.runtime import ExecutedToolCall, PlannedToolCall, execute_planned_tool_calls
 from src.ai.tools.sandbox import SandboxToolContext, build_sandbox_function_tools
 from src.ai.tools.search import build_web_search_function_tool
-from src.config.settings import get_settings
+from src.config.settings import Settings, get_settings
 from src.database.session import async_session_maker
 from src.observability.log_context import get_log_context
 
@@ -61,12 +61,14 @@ configure_litellm()
 
 
 T = TypeVar("T", bound=BaseModel)
-StreamChunk = str | dict[str, Any]
+JsonDict = Mapping[str, object]
+ChatMessage = Mapping[str, object]
+StreamChunk = str | JsonDict
 
 _MAX_AUTONOMY_ROUNDS = 8
 _MAX_STRUCTURED_GENERATION_ATTEMPTS = 2
 _BACKGROUND_TASK_SHUTDOWN_TIMEOUT_SECONDS = 5.0
-_BACKGROUND_TASKS: set[asyncio.Task[Any]] = set()
+_BACKGROUND_TASKS: set[asyncio.Task[object]] = set()
 
 _LITELLM_PROVIDER_ERROR_TYPES = (
     litellm.APIError,
@@ -116,7 +118,20 @@ _GENERATION_WRAPPER_ERROR_TYPES = (
 )
 
 
-def _handle_background_task_done(task: asyncio.Task[Any]) -> None:
+def _extract_text_content(payload: Sequence[object]) -> str | None:
+    text_parts: list[str] = []
+    for item in payload:
+        if not isinstance(item, Mapping):
+            continue
+        item_payload = cast("Mapping[str, object]", item)
+        text = item_payload.get("text")
+        if item_payload.get("type") == "text" and isinstance(text, str):
+            text_parts.append(text)
+
+    return "".join(text_parts) if text_parts else None
+
+
+def _handle_background_task_done(task: asyncio.Task[object]) -> None:
     _BACKGROUND_TASKS.discard(task)
     if task.cancelled():
         return
@@ -128,7 +143,7 @@ def _handle_background_task_done(task: asyncio.Task[Any]) -> None:
     logging.getLogger(__name__).error("ai.background_task.failed", exc_info=(type(error), error, error.__traceback__))
 
 
-def _schedule_background_task(coro: Any) -> None:
+def _schedule_background_task(coro: Coroutine[object, object, object]) -> None:
     task = asyncio.create_task(coro)
     _BACKGROUND_TASKS.add(task)
     task.add_done_callback(_handle_background_task_done)
@@ -204,10 +219,10 @@ _LEARNING_INTENT_KEYWORDS = (
 class _LLMRequest:
     """Internal request contract consumed by the shared orchestration pipeline."""
 
-    messages: list[dict[str, Any]]
+    messages: list[ChatMessage]
     response_model: type[BaseModel] | None
     temperature: float | None
-    tools: list[dict[str, Any]] | None
+    tools: list[JsonDict] | None
     function_tools: list[FunctionToolDefinition]
     sandbox_context: SandboxToolContext | None
     tool_choice: str | None
@@ -216,9 +231,9 @@ class _LLMRequest:
     num_retries: int | None
     max_completion_tokens: int | None
     stream: bool
-    metadata: dict[str, Any] | None = None
-    tool_schemas: list[dict[str, Any]] | None = None
-    responses_tools: list[dict[str, Any]] | None = None
+    metadata: JsonDict | None = None
+    tool_schemas: list[JsonDict] | None = None
+    responses_tools: list[JsonDict] | None = None
     tool_targets: dict[str, ToolTarget] = field(default_factory=dict)
     mcp_config: MCPConfig | None = None
     use_responses_transport: bool = False
@@ -264,7 +279,12 @@ def _contains_timeout_hint(error: Exception) -> bool:
     return False
 
 
-def _metadata_uuid(metadata: dict[str, Any] | None, key: str) -> uuid.UUID | None:
+def _runtime_error_message(error: Exception, default_message: str) -> str:
+    message = str(error).strip()
+    return message or default_message
+
+
+def _metadata_uuid(metadata: JsonDict | None, key: str) -> uuid.UUID | None:
     if not isinstance(metadata, dict):
         return None
     raw_value = metadata.get(key)
@@ -278,7 +298,7 @@ def _metadata_uuid(metadata: dict[str, Any] | None, key: str) -> uuid.UUID | Non
     return None
 
 
-def _metadata_text(metadata: dict[str, Any] | None, key: str) -> str | None:
+def _metadata_text(metadata: JsonDict | None, key: str) -> str | None:
     if not isinstance(metadata, dict):
         return None
     raw_value = metadata.get(key)
@@ -288,7 +308,7 @@ def _metadata_text(metadata: dict[str, Any] | None, key: str) -> str | None:
     return normalized or None
 
 
-def _metadata_text_list(metadata: dict[str, Any] | None, key: str) -> list[str]:
+def _metadata_text_list(metadata: JsonDict | None, key: str) -> list[str]:
     if not isinstance(metadata, dict):
         return []
     raw_value = metadata.get(key)
@@ -332,10 +352,10 @@ class LLMClient:
     def _build_request(
         self,
         *,
-        messages: list[dict[str, Any]],
+        messages: Sequence[ChatMessage],
         response_model: type[BaseModel] | None,
         temperature: float | None,
-        tools: list[dict[str, Any]] | None,
+        tools: list[JsonDict] | None,
         function_tools: list[FunctionToolDefinition] | None,
         sandbox_context: SandboxToolContext | None,
         tool_choice: str | None,
@@ -344,12 +364,12 @@ class LLMClient:
         num_retries: int | None,
         max_completion_tokens: int | None,
         stream: bool,
-        metadata: dict[str, Any] | None,
+        metadata: JsonDict | None,
         enable_memory: bool,
     ) -> _LLMRequest:
         settings = get_settings()
         return _LLMRequest(
-            messages=list(messages),
+            messages=[dict(message) for message in messages],
             response_model=response_model,
             temperature=temperature,
             tools=tools,
@@ -384,9 +404,9 @@ class LLMClient:
                 return AISchemaValidationError("Structured response failed schema validation")
 
             if isinstance(current, _LITELLM_PROVIDER_ERROR_TYPES):
-                return AIProviderError(default_message)
+                return AIProviderError(_runtime_error_message(current, default_message))
 
-        return AIProviderError(default_message)
+        return AIProviderError(_runtime_error_message(error, default_message))
 
     def _log_runtime_error(self, error: AIRuntimeError, *, operation: str) -> None:
         if isinstance(error, (AIRateLimitOrQuotaError, AITimeoutError)):
@@ -394,7 +414,7 @@ class LLMClient:
             return
         self._logger.error("%s failed: %s (%s)", operation, error, error.category.value)
 
-    def _extract_latest_user_text(self, conversation: list[dict[str, Any]]) -> str:
+    def _extract_latest_user_text(self, conversation: list[ChatMessage]) -> str:
         for message in reversed(conversation):
             if message.get("role") != "user":
                 continue
@@ -407,8 +427,9 @@ class LLMClient:
 
             text_parts: list[str] = []
             for part in content:
-                if not isinstance(part, dict):
+                if not isinstance(part, Mapping):
                     continue
+                part = cast("Mapping[str, object]", part)
                 if part.get("type") != "text":
                     continue
                 text = part.get("text")
@@ -428,7 +449,7 @@ class LLMClient:
         tool_targets: dict[str, ToolTarget],
         used_tool_names: set[str],
         probe_submitted: bool = False,
-        conversation: list[dict[str, Any]],
+        conversation: list[ChatMessage],
         user_id: uuid.UUID | None,
         phase: str,
     ) -> None:
@@ -564,7 +585,7 @@ class LLMClient:
             counts[base_name] = count
             encoded_name = base_name if count == 1 else f"{base_name}_{count}"
 
-            schema = {
+            schema: dict[str, JsonValue] = {
                 "type": "function",
                 "function": {
                     "name": encoded_name,
@@ -589,7 +610,7 @@ class LLMClient:
             return False
         return normalized not in blocked
 
-    def _inject_tool_instruction(self, messages: list[dict[str, Any]], instruction: str) -> list[dict[str, Any]]:
+    def _inject_tool_instruction(self, messages: list[ChatMessage], instruction: str) -> list[ChatMessage]:
         if not instruction:
             return messages
         tool_message = {"role": "system", "content": instruction}
@@ -597,7 +618,7 @@ class LLMClient:
             return [messages[0], tool_message, *messages[1:]]
         return [tool_message, *messages]
 
-    def _schedule_memory_save(self, user_id: uuid.UUID | None, messages: list[dict[str, Any]], response: Any) -> None:
+    def _schedule_memory_save(self, user_id: uuid.UUID | None, messages: list[ChatMessage], response: object) -> None:
         if user_id is None:
             return
         _schedule_background_task(self._save_conversation_to_memory(user_id, messages, response))
@@ -611,7 +632,7 @@ class LLMClient:
             return "unknown"
         return provider
 
-    def _collect_tool_names(self, tools: list[dict[str, Any]] | None) -> list[str]:
+    def _collect_tool_names(self, tools: list[JsonDict] | None) -> list[str]:
         if not tools:
             return []
 
@@ -622,8 +643,8 @@ class LLMClient:
             tool_type = tool.get("type")
             if tool_type == "function":
                 function_payload = tool.get("function")
-                if isinstance(function_payload, dict):
-                    tool_name = function_payload.get("name")
+                if isinstance(function_payload, Mapping):
+                    tool_name = cast("Mapping[str, object]", function_payload).get("name")
                     if isinstance(tool_name, str) and tool_name.strip():
                         names.append(tool_name.strip())
                         continue
@@ -644,13 +665,13 @@ class LLMClient:
     def _build_completion_metadata(  # noqa: C901, PLR0912
         self,
         *,
-        metadata: dict[str, Any] | None,
+        metadata: JsonDict | None,
         model: str,
-        tools: list[dict[str, Any]] | None,
+        tools: list[JsonDict] | None,
         user_id: str | uuid.UUID | None,
-        settings: Any,
-    ) -> dict[str, Any]:
-        merged: dict[str, Any] = dict(metadata or {})
+        settings: Settings,
+    ) -> JsonDict:
+        merged: JsonDict = dict(metadata or {})
         context = get_log_context()
 
         generation_name = merged.get("generation_name")
@@ -699,7 +720,7 @@ class LLMClient:
         elif isinstance(existing_tags, str) and existing_tags.strip():
             tags = [existing_tags.strip()]
 
-        default_tags = [f"platform_mode:{settings.PLATFORM_MODE}"]
+        default_tags: list[str] = [f"platform_mode:{settings.PLATFORM_MODE}"]
         if feature_area:
             default_tags.append(f"feature_area:{feature_area}")
         for tag in default_tags:
@@ -710,7 +731,7 @@ class LLMClient:
 
         return merged
 
-    def _record_response_observability_fields(self, response: Any, *, tool_names: list[str]) -> None:
+    def _record_response_observability_fields(self, response: object, *, tool_names: list[str]) -> None:
         span = trace.get_current_span()
         if not span.is_recording():
             return
@@ -719,15 +740,16 @@ class LLMClient:
             span.set_attribute("llm.tool_names", json.dumps(tool_names))
 
         usage = getattr(response, "usage", None)
-        if usage is None and isinstance(response, dict):
-            usage = response.get("usage")
-        prompt_tokens: Any = None
-        completion_tokens: Any = None
-        total_tokens: Any = None
-        if isinstance(usage, dict):
-            prompt_tokens = usage.get("prompt_tokens")
-            completion_tokens = usage.get("completion_tokens")
-            total_tokens = usage.get("total_tokens")
+        if usage is None and isinstance(response, Mapping):
+            usage = cast("Mapping[str, object]", response).get("usage")
+        prompt_tokens: object = None
+        completion_tokens: object = None
+        total_tokens: object = None
+        if isinstance(usage, Mapping):
+            usage_payload = cast("Mapping[str, object]", usage)
+            prompt_tokens = usage_payload.get("prompt_tokens")
+            completion_tokens = usage_payload.get("completion_tokens")
+            total_tokens = usage_payload.get("total_tokens")
         elif usage is not None:
             prompt_tokens = getattr(usage, "prompt_tokens", None)
             completion_tokens = getattr(usage, "completion_tokens", None)
@@ -741,23 +763,23 @@ class LLMClient:
             span.set_attribute("llm.total_tokens", total_tokens)
 
         hidden_params = getattr(response, "_hidden_params", None)
-        if hidden_params is None and isinstance(response, dict):
-            hidden_params = response.get("_hidden_params")
-        if isinstance(hidden_params, dict):
-            response_cost = hidden_params.get("response_cost")
+        if hidden_params is None and isinstance(response, Mapping):
+            hidden_params = cast("Mapping[str, object]", response).get("_hidden_params")
+        if isinstance(hidden_params, Mapping):
+            response_cost = cast("Mapping[str, object]", hidden_params).get("response_cost")
             if isinstance(response_cost, (int, float)):
                 span.set_attribute("llm.cost_usd", float(response_cost))
 
     async def complete(  # noqa: C901, PLR0912
         self,
-        messages: list[dict[str, Any]],
+        messages: Sequence[ChatMessage],
         temperature: float | None = None,
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[JsonDict] | None = None,
         tool_choice: str | None = None,
         user_id: str | uuid.UUID | None = None,
-        response_format: Any | None = None,
-        extra_body: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None,
+        response_format: JsonDict | None = None,
+        extra_body: JsonDict | None = None,
+        metadata: JsonDict | None = None,
         stream: bool = False,
         model: str | None = None,
         num_retries: int | None = None,
@@ -765,14 +787,14 @@ class LLMClient:
         parallel_tool_calls: bool = False,
         use_responses_transport: bool = False,
         previous_response_id: str | None = None,
-    ) -> Any:
+    ) -> object:
         """Low-level completion method using LiteLLM directly."""
         try:
             settings = get_settings()
             request_model = model or settings.primary_llm_model
             tool_names = self._collect_tool_names(tools)
 
-            common_kwargs: dict[str, Any] = {"model": request_model, "timeout": settings.ai_request_timeout}
+            common_kwargs: dict[str, object] = {"model": request_model, "timeout": settings.ai_request_timeout}
             if user_id:
                 common_kwargs["user"] = str(user_id)
             if stream:
@@ -804,7 +826,7 @@ class LLMClient:
 
             if use_responses_transport:
                 response_kwargs = dict(common_kwargs)
-                response_kwargs["input"] = messages
+                response_kwargs["input"] = list(messages)
                 if previous_response_id is not None:
                     response_kwargs["previous_response_id"] = previous_response_id
                 response = await asyncio.wait_for(litellm.responses(**response_kwargs), timeout=settings.ai_request_timeout)
@@ -813,7 +835,7 @@ class LLMClient:
                 return response
 
             completion_kwargs = dict(common_kwargs)
-            completion_kwargs["messages"] = messages
+            completion_kwargs["messages"] = list(messages)
             if response_format is not None:
                 completion_kwargs["response_format"] = response_format
             response = await asyncio.wait_for(litellm.acompletion(**completion_kwargs), timeout=settings.ai_request_timeout)
@@ -828,10 +850,10 @@ class LLMClient:
 
     async def get_completion(
         self,
-        messages: list[dict[str, Any]],
+        messages: Sequence[ChatMessage],
         response_model: type[BaseModel] | None = None,
         temperature: float | None = None,
-        tools: list[dict[str, Any]] | None = None,
+        tools: list[JsonDict] | None = None,
         function_tools: list[FunctionToolDefinition] | None = None,
         sandbox_context: SandboxToolContext | None = None,
         tool_choice: str | None = None,
@@ -840,9 +862,9 @@ class LLMClient:
         num_retries: int | None = None,
         max_completion_tokens: int | None = None,
         stream: bool = False,
-        metadata: dict[str, Any] | None = None,
+        metadata: JsonDict | None = None,
         enable_memory: bool = True,
-    ) -> Any:
+    ) -> object:
         """Shared execution engine for free-form and structured generation."""
         request = self._build_request(
             messages=messages,
@@ -901,7 +923,7 @@ class LLMClient:
             self._log_runtime_error(mapped, operation="Completion")
             raise mapped from error
 
-    async def _run_structured_completion_with_retries(self, request: _LLMRequest) -> tuple[Any, list[dict[str, Any]]]:
+    async def _run_structured_completion_with_retries(self, request: _LLMRequest) -> tuple[object, list[ChatMessage]]:
         """Retry full structured generation from the original request on contract/schema failure."""
         last_error: AISchemaValidationError | None = None
 
@@ -925,7 +947,7 @@ class LLMClient:
         msg = "Structured response failed schema validation"
         raise AISchemaValidationError(msg)
 
-    async def _run_autonomy_loop(self, request: _LLMRequest) -> tuple[Any, list[dict[str, Any]]]:  # noqa: PLR0914
+    async def _run_autonomy_loop(self, request: _LLMRequest) -> tuple[object, list[ChatMessage]]:  # noqa: PLR0914
         """Run the shared non-stream autonomy loop for structured and free-form calls."""
         conversation = list(request.messages)
         tool_round = 0
@@ -943,7 +965,7 @@ class LLMClient:
 
             effective_tool_choice = request.tool_choice if available_tool_schemas else None
 
-            response_format: dict[str, Any] | None = None
+            response_format: JsonDict | None = None
             if request.response_model is not None:
                 # Keep the provider-enforced schema active for structured tool turns too.
                 response_format = self._build_response_format(request.response_model)
@@ -962,9 +984,9 @@ class LLMClient:
                 parallel_tool_calls=bool(available_tool_schemas),
             )
 
-            assistant_message = response.choices[0].message
-            assistant_content = assistant_message.content or ""
-            tool_calls = getattr(assistant_message, "tool_calls", None)
+            assistant_message = self._extract_first_choice_message(response)
+            assistant_content = self._extract_message_content(assistant_message)
+            tool_calls = self._extract_message_tool_calls(assistant_message)
 
             if tool_calls:
                 normalized_tool_calls = self._normalize_chat_tool_calls(tool_calls)
@@ -1011,7 +1033,7 @@ class LLMClient:
                 msg = "Structured response failed schema validation"
                 raise AISchemaValidationError(msg) from parse_error
 
-    async def _run_responses_autonomy_loop(self, request: _LLMRequest) -> tuple[str, list[dict[str, Any]]]:
+    async def _run_responses_autonomy_loop(self, request: _LLMRequest) -> tuple[str, list[ChatMessage]]:
         """Run the non-stream autonomy loop using LiteLLM Responses transport."""
         conversation = list(request.messages)
         response_input = list(request.messages)
@@ -1104,13 +1126,13 @@ class LLMClient:
             conversation.append({"role": "assistant", "content": assistant_content})
             return assistant_content, conversation
 
-    def _extract_responses_response_id(self, response: Any) -> str | None:
+    def _extract_responses_response_id(self, response: object) -> str | None:
         response_id = self._read_attr_or_key(response, "id")
         if isinstance(response_id, str) and response_id.strip():
             return response_id
         return None
 
-    def _extract_responses_function_calls(self, response: Any) -> list[PlannedToolCall]:
+    def _extract_responses_function_calls(self, response: object) -> list[PlannedToolCall]:
         output_items = self._extract_responses_output_items(response)
         calls: list[PlannedToolCall] = []
         for item in output_items:
@@ -1128,10 +1150,16 @@ class LLMClient:
                 continue
             if not isinstance(name, str) or not name.strip():
                 continue
-            calls.append(PlannedToolCall(call_id=call_id, name=name.strip(), arguments=arguments))
+            calls.append(
+                PlannedToolCall(
+                    call_id=call_id,
+                    name=name.strip(),
+                    arguments=cast("dict[str, JsonValue] | str | bytes | None", arguments),
+                )
+            )
         return calls
 
-    def _extract_responses_text(self, response: Any) -> str:
+    def _extract_responses_text(self, response: object) -> str:
         output_text = self._read_attr_or_key(response, "output_text")
         if isinstance(output_text, str):
             return output_text
@@ -1154,33 +1182,34 @@ class LLMClient:
                     collected.append(text_value)
         return "".join(collected)
 
-    def _extract_responses_output_items(self, response: Any) -> list[Any]:
+    def _extract_responses_output_items(self, response: object) -> list[object]:
         output = self._read_attr_or_key(response, "output")
         if isinstance(output, list):
-            return output
+            return cast("list[object]", output)
         return []
 
-    def _read_attr_or_key(self, payload: Any, name: str) -> Any:
+    def _read_attr_or_key(self, payload: object, name: str) -> object:
         value = getattr(payload, name, None)
         if value is not None:
             return value
-        if isinstance(payload, dict):
-            return payload.get(name)
+        if isinstance(payload, Mapping):
+            mapping = cast("Mapping[str, object]", payload)
+            return mapping.get(name)
         return None
 
     async def _stream_unstructured_completion(  # noqa: PLR0914
         self,
         *,
-        messages: list[dict[str, Any]],
+        messages: Sequence[ChatMessage],
         temperature: float | None,
-        tools: list[dict[str, Any]] | None,
+        tools: list[JsonDict] | None,
         tool_choice: str | None,
         user_id: uuid.UUID | None,
         model: str,
         num_retries: int | None,
         tool_targets: dict[str, ToolTarget],
         mcp_config: MCPConfig | None,
-        metadata: dict[str, Any] | None,
+        metadata: JsonDict | None,
     ) -> AsyncGenerator[StreamChunk]:
         """Stream an unstructured chat completion, optionally executing tool calls.
 
@@ -1204,21 +1233,24 @@ class LLMClient:
                     break
 
                 # Stream from the model.
-                stream = await self.complete(
-                    messages=conversation,
-                    temperature=temperature,
-                    tools=available_tools,
-                    tool_choice=tool_choice if available_tools else None,
-                    user_id=user_id,
-                    metadata=metadata,
-                    stream=True,
-                    model=model,
-                    num_retries=num_retries,
-                    max_completion_tokens=None,
-                    parallel_tool_calls=bool(available_tools),
+                stream = cast(
+                    "AsyncGenerator[object]",
+                    await self.complete(
+                        messages=conversation,
+                        temperature=temperature,
+                        tools=available_tools,
+                        tool_choice=tool_choice if available_tools else None,
+                        user_id=user_id,
+                        metadata=metadata,
+                        stream=True,
+                        model=model,
+                        num_retries=num_retries,
+                        max_completion_tokens=None,
+                        parallel_tool_calls=bool(available_tools),
+                    ),
                 )
 
-                chunks: list[Any] = []
+                chunks: list[object] = []
                 round_text: list[str] = []
                 async for chunk in stream:
                     chunks.append(chunk)
@@ -1284,7 +1316,7 @@ class LLMClient:
         # Save conversation to memory (non-blocking). Keep this best-effort.
         self._schedule_memory_save(user_id, conversation, "".join(full_text))
 
-    def _build_tool_call_stream_events(self, call: PlannedToolCall) -> list[dict[str, Any]]:
+    def _build_tool_call_stream_events(self, call: PlannedToolCall) -> list[JsonDict]:
         return [
             {
                 "type": "tool-call-start",
@@ -1297,7 +1329,7 @@ class LLMClient:
             },
         ]
 
-    def _build_tool_result_stream_event(self, executed_call: ExecutedToolCall) -> dict[str, Any]:
+    def _build_tool_result_stream_event(self, executed_call: ExecutedToolCall) -> JsonDict:
         result: dict[str, str] = {}
         if executed_call.failed:
             result["message"] = "Tool failed. The assistant will try to recover."
@@ -1308,7 +1340,7 @@ class LLMClient:
             "isError": executed_call.failed,
         }
 
-    def _rebuild_stream_message(self, chunks: list[Any], conversation: list[dict[str, Any]]) -> Any | None:
+    def _rebuild_stream_message(self, chunks: list[object], conversation: list[ChatMessage]) -> object | None:
         try:
             built = litellm.stream_chunk_builder(chunks, messages=conversation)
         except litellm.APIError:
@@ -1316,53 +1348,53 @@ class LLMClient:
             return None
         return self._extract_first_choice_message(built)
 
-    def _extract_first_choice_message(self, payload: Any) -> Any | None:
+    def _extract_first_choice_message(self, payload: object) -> object | None:
         choices = getattr(payload, "choices", None)
-        if choices is None and isinstance(payload, dict):
-            choices = payload.get("choices")
+        if choices is None and isinstance(payload, Mapping):
+            choices = cast("Mapping[str, object]", payload).get("choices")
         if not isinstance(choices, list) or not choices:
             return None
 
         choice0 = choices[0]
         message = getattr(choice0, "message", None)
-        if message is None and isinstance(choice0, dict):
-            message = choice0.get("message")
+        if message is None and isinstance(choice0, Mapping):
+            message = cast("Mapping[str, object]", choice0).get("message")
         return message
 
-    def _extract_message_tool_calls(self, message: Any) -> Any | None:
+    def _extract_message_tool_calls(self, message: object) -> list[object] | None:
         if message is None:
             return None
         tool_calls = getattr(message, "tool_calls", None)
-        if tool_calls is None and isinstance(message, dict):
-            tool_calls = message.get("tool_calls")
-        return tool_calls
+        if tool_calls is None and isinstance(message, Mapping):
+            tool_calls = cast("Mapping[str, object]", message).get("tool_calls")
+        return cast("list[object]", tool_calls) if isinstance(tool_calls, list) else None
 
-    def _extract_message_content(self, message: Any) -> str:
+    def _extract_message_content(self, message: object) -> str:
         if message is None:
             return ""
         content = getattr(message, "content", None)
-        if content is None and isinstance(message, dict):
-            content = message.get("content")
+        if content is None and isinstance(message, Mapping):
+            content = cast("Mapping[str, object]", message).get("content")
         return content if isinstance(content, str) else ""
 
-    def _extract_stream_delta_content(self, chunk: Any) -> str:
+    def _extract_stream_delta_content(self, chunk: object) -> str:
         """Extract the streamed text delta from a LiteLLM/OpenAI-style chunk."""
         choices = getattr(chunk, "choices", None)
-        if choices is None and isinstance(chunk, dict):
-            choices = chunk.get("choices")
+        if choices is None and isinstance(chunk, Mapping):
+            choices = cast("Mapping[str, object]", chunk).get("choices")
         if not isinstance(choices, list) or not choices:
             return ""
 
         choice0 = choices[0]
         delta = getattr(choice0, "delta", None)
-        if delta is None and isinstance(choice0, dict):
-            delta = choice0.get("delta")
+        if delta is None and isinstance(choice0, Mapping):
+            delta = cast("Mapping[str, object]", choice0).get("delta")
         if delta is None:
             return ""
 
         content = getattr(delta, "content", None)
-        if content is None and isinstance(delta, dict):
-            content = delta.get("content")
+        if content is None and isinstance(delta, Mapping):
+            content = cast("Mapping[str, object]", delta).get("content")
         return content if isinstance(content, str) else ""
 
     def _normalize_user_id(self, user_id: str | uuid.UUID | None) -> uuid.UUID | None:
@@ -1376,7 +1408,7 @@ class LLMClient:
             self._logger.warning("Ignoring invalid user_id: %s", user_id)
             return None
 
-    def _build_response_format(self, response_model: type[BaseModel]) -> dict[str, Any]:
+    def _build_response_format(self, response_model: type[BaseModel]) -> JsonDict:
         schema = response_model.model_json_schema()
         return {
             "type": "json_schema",
@@ -1388,14 +1420,14 @@ class LLMClient:
 
     def _coerce_response_model(
         self,
-        raw_response: Any,
+        raw_response: object,
         response_model: type[BaseModel],
     ) -> BaseModel:
         message = self._extract_first_choice_message(raw_response)
         if message is not None:
             parsed_candidate = getattr(message, "parsed", None)
-            if parsed_candidate is None and isinstance(message, dict):
-                parsed_candidate = message.get("parsed")
+            if parsed_candidate is None and isinstance(message, Mapping):
+                parsed_candidate = cast("Mapping[str, object]", message).get("parsed")
             parsed_result = self._try_convert_payload(parsed_candidate, response_model)
             if parsed_result is not None:
                 return parsed_result
@@ -1417,44 +1449,39 @@ class LLMClient:
 
     def _try_convert_payload(
         self,
-        payload: Any,
+        payload: object,
         response_model: type[BaseModel],
     ) -> BaseModel | None:
         if payload is None:
             return None
 
         converted: BaseModel | None = None
-
         if isinstance(payload, response_model):
             converted = payload
         elif isinstance(payload, BaseModel):
             converted = self._safe_model_construct(response_model, payload.model_dump())
-        elif isinstance(payload, dict):
-            converted = self._safe_model_construct(response_model, payload)
+        elif isinstance(payload, Mapping):
+            converted = self._safe_model_construct(response_model, cast("Mapping[str, object]", payload))
         elif isinstance(payload, list):
-            text_parts = [
-                item["text"]
-                for item in payload
-                if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str)
-            ]
-            if text_parts:
-                converted = self._try_convert_payload("".join(text_parts), response_model)
+            converted = self._try_convert_payload(_extract_text_content(payload), response_model)
         elif isinstance(payload, str):
-            content = payload.strip()
-            if content:
-                try:
-                    decoded = json.loads(content)
-                except json.JSONDecodeError:
-                    decoded = None
-                if isinstance(decoded, dict):
-                    converted = self._safe_model_construct(response_model, decoded)
+            converted = self._try_convert_json_payload(payload, response_model)
 
         return converted
+
+    def _try_convert_json_payload(self, payload: str, response_model: type[BaseModel]) -> BaseModel | None:
+        content = payload.strip()
+        if not content:
+            return None
+        try:
+            return response_model.model_validate_json(content)
+        except ValidationError:
+            return None
 
     def _safe_model_construct(
         self,
         response_model: type[BaseModel],
-        data: dict[str, Any],
+        data: Mapping[str, object],
     ) -> BaseModel | None:
         try:
             return response_model.model_validate(data)
@@ -1463,10 +1490,10 @@ class LLMClient:
 
     async def _append_tool_calls(
         self,
-        conversation: list[dict[str, Any]],
+        conversation: list[ChatMessage],
         *,
         assistant_content: str,
-        tool_calls: list[Any],
+        tool_calls: list[object],
         user_id: uuid.UUID | None,
         tool_targets: dict[str, ToolTarget],
         mcp_config: MCPConfig | None,
@@ -1555,9 +1582,9 @@ class LLMClient:
 
     def _filter_tool_schemas(
         self,
-        tool_schemas: list[dict[str, Any]] | None,
+        tool_schemas: list[JsonDict] | None,
         disabled_tool_names: set[str],
-    ) -> list[dict[str, Any]] | None:
+    ) -> list[JsonDict] | None:
         if not tool_schemas:
             return None
         filtered = [
@@ -1567,41 +1594,42 @@ class LLMClient:
         ]
         return filtered or None
 
-    def _extract_function_tool_name(self, schema: dict[str, Any]) -> str | None:
+    def _extract_function_tool_name(self, schema: JsonDict) -> str | None:
         if not isinstance(schema, dict):
             return None
         if schema.get("type") != "function":
             return None
         function_payload = schema.get("function")
-        if not isinstance(function_payload, dict):
+        if not isinstance(function_payload, Mapping):
             return None
-        name = function_payload.get("name")
+        name = cast("Mapping[str, object]", function_payload).get("name")
         if not isinstance(name, str):
             return None
         normalized = name.strip()
         return normalized or None
 
-    def _serialize_tool_call_payload(self, tool_call: Any) -> dict[str, Any]:
-        if hasattr(tool_call, "model_dump"):
-            dumped = tool_call.model_dump()
-            if isinstance(dumped, dict):
-                return dumped
-        if isinstance(tool_call, dict):
-            return tool_call
+    def _serialize_tool_call_payload(self, tool_call: object) -> JsonDict:
+        model_dump = getattr(tool_call, "model_dump", None)
+        if callable(model_dump):
+            dumped = model_dump()
+            if isinstance(dumped, Mapping):
+                return cast("JsonDict", dumped)
+        if isinstance(tool_call, Mapping):
+            return cast("JsonDict", dict(tool_call))
         tool_id = self._read_attr_or_key(tool_call, "id")
         function_payload = self._read_attr_or_key(tool_call, "function")
         function_name = self._read_attr_or_key(function_payload, "name")
         function_arguments = self._read_attr_or_key(function_payload, "arguments")
-        return {
+        return cast("JsonDict", {
             "id": tool_id,
             "type": "function",
             "function": {
                 "name": function_name,
                 "arguments": function_arguments,
             },
-        }
+        })
 
-    def _normalize_chat_tool_calls(self, tool_calls: list[Any]) -> list[PlannedToolCall]:
+    def _normalize_chat_tool_calls(self, tool_calls: list[object]) -> list[PlannedToolCall]:
         normalized: list[PlannedToolCall] = []
         for tool_call in tool_calls:
             function_payload = self._read_attr_or_key(tool_call, "function")
@@ -1612,10 +1640,16 @@ class LLMClient:
                 continue
             if not isinstance(name, str) or not name.strip():
                 continue
-            normalized.append(PlannedToolCall(call_id=call_id, name=name.strip(), arguments=arguments))
+            normalized.append(
+                PlannedToolCall(
+                    call_id=call_id,
+                    name=name.strip(),
+                    arguments=cast("dict[str, JsonValue] | str | bytes | None", arguments),
+                )
+            )
         return normalized
 
-    async def _inject_memory_into_messages(self, messages: list[dict[str, Any]], user_id: uuid.UUID) -> list[dict[str, Any]]:
+    async def _inject_memory_into_messages(self, messages: list[ChatMessage], user_id: uuid.UUID) -> list[ChatMessage]:
         """Inject user memory context into the conversation."""
         query_text = self._build_memory_query(messages)
         if not query_text:
@@ -1662,7 +1696,7 @@ class LLMClient:
             return [messages[0], memory_message, *messages[1:]]
         return [memory_message, *messages]
 
-    def _build_memory_query(self, messages: list[dict[str, Any]]) -> str | None:
+    def _build_memory_query(self, messages: Sequence[ChatMessage]) -> str | None:
         """Return the most recent user utterance to drive mem0 vector search."""
         for message in reversed(messages):
             if message.get("role") != "user":
@@ -1675,8 +1709,9 @@ class LLMClient:
             if isinstance(content, list):
                 text_parts: list[str] = []
                 for part in content:
-                    if not isinstance(part, dict):
+                    if not isinstance(part, Mapping):
                         continue
+                    part = cast("Mapping[str, object]", part)
                     if part.get("type") != "text":
                         continue
                     text = part.get("text")
@@ -1691,7 +1726,7 @@ class LLMClient:
         base = f"{server_name}_{tool_name}".lower()
         return "".join(char if char.isalnum() or char == "_" else "_" for char in base)
 
-    def _normalize_user_prompt_content(self, user_prompt: str | list[dict[str, Any]]) -> str | list[dict[str, Any]]:
+    def _normalize_user_prompt_content(self, user_prompt: str | Sequence[Mapping[str, object]]) -> str | Sequence[Mapping[str, object]]:
         if isinstance(user_prompt, str):
             prompt_text = user_prompt.strip()
             if not prompt_text:
@@ -1700,11 +1735,13 @@ class LLMClient:
             return prompt_text
 
         if isinstance(user_prompt, list):
-            text_parts = [
-                part.get("text", "").strip()
-                for part in user_prompt
-                if isinstance(part, dict) and part.get("type") == "text"
-            ]
+            text_parts: list[str] = []
+            for part in user_prompt:
+                if not isinstance(part, Mapping) or part.get("type") != "text":
+                    continue
+                text = part.get("text")
+                if isinstance(text, str):
+                    text_parts.append(text.strip())
             prompt_text = " ".join(part for part in text_parts if part)
             if not prompt_text:
                 msg = "User prompt must not be empty"
@@ -1716,7 +1753,7 @@ class LLMClient:
 
     async def generate_course_structure(
         self,
-        user_prompt: str | list[dict[str, Any]],
+        user_prompt: str | Sequence[Mapping[str, object]],
         user_id: str | uuid.UUID | None = None,
     ) -> CourseStructure:
         """Generate a structured learning course using LiteLLM structured output (Pydantic)."""
@@ -1755,7 +1792,7 @@ class LLMClient:
 
     async def generate_adaptive_course_structure(
         self,
-        user_prompt: str | list[dict[str, Any]],
+        user_prompt: str | Sequence[Mapping[str, object]],
         user_id: str | uuid.UUID | None = None,
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload used by ConceptFlow."""
@@ -1895,7 +1932,7 @@ class LLMClient:
         source_code: str,
         stderr: str | None = None,
         stdin: str | None = None,
-        sandbox_state: dict[str, Any] | None = None,
+        sandbox_state: JsonDict | None = None,
         user_id: str | uuid.UUID | None = None,
         workspace_entry: str | None = None,
         workspace_root: str | None = None,
@@ -1904,7 +1941,7 @@ class LLMClient:
         sandbox_context: SandboxToolContext | None = None,
     ) -> ExecutionPlan:
         """Create a sandbox execution plan using Instructor-bound JSON output."""
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "language": language,
             "source_code": source_code[:6000],
             "source_code_truncated": len(source_code) > 6000,
@@ -1952,7 +1989,7 @@ class LLMClient:
         self,
         *,
         prompt: str,
-        payload: dict[str, Any],
+        payload: Mapping[str, object],
         response_model: type[T],
         user_id: str | uuid.UUID | None = None,
         model: str | None = None,
@@ -2070,7 +2107,7 @@ class LLMClient:
         return result
 
     async def _save_conversation_to_memory(
-        self, user_id: uuid.UUID | None, messages: list[dict[str, Any]], response: Any
+        self, user_id: uuid.UUID | None, messages: Sequence[ChatMessage], response: object
     ) -> None:
         """Save conversation to memory using mem0.
 
@@ -2089,7 +2126,7 @@ class LLMClient:
         user_message = self._build_memory_query(messages) or ""
         ai_response = self._extract_memory_response_text(response)
 
-        memory_messages: list[dict[str, Any]] = []
+        memory_messages: list[JsonDict] = []
         if user_message:
             memory_messages.append({"role": "user", "content": user_message})
         if ai_response:
@@ -2112,13 +2149,14 @@ class LLMClient:
             # Never fail the main request due to memory issues
             self._logger.warning("Failed to save conversation to memory: %s", error)
 
-    def _extract_memory_response_text(self, response: Any) -> str:
+    def _extract_memory_response_text(self, response: object) -> str:
         if isinstance(response, str):
             return response[:1000]
         if hasattr(response, "choices"):
             message = self._extract_first_choice_message(response)
             content = self._extract_message_content(message)
             return content[:1000]
-        if hasattr(response, "model_dump"):
-            return str(response.model_dump())[:1000]
+        model_dump = getattr(response, "model_dump", None)
+        if callable(model_dump):
+            return str(model_dump())[:1000]
         return str(response)[:1000]

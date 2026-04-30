@@ -15,7 +15,7 @@ in the application, providing a clean interface that hides implementation detail
 
 
 import logging
-from typing import Any
+from collections.abc import Mapping, Sequence
 
 from sqlalchemy import select
 
@@ -23,6 +23,9 @@ from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_COURSE_PLANNER
 from src.ai.client import LLMClient
 from src.ai.rag.embeddings import VectorRAG
 from src.books.models import Book
+
+
+JsonDict = Mapping[str, object]
 from src.videos.models import Video
 
 
@@ -41,7 +44,7 @@ class AIService:
         self,
         *,
         user_id: uuid.UUID,
-        user_prompt: str | list[dict[str, Any]],
+        user_prompt: str | Sequence[JsonDict],
     ) -> CourseStructure:
         """Generate a course outline."""
         return await self._course_llm.generate_course_structure(
@@ -53,7 +56,7 @@ class AIService:
         self,
         *,
         user_id: uuid.UUID,
-        user_prompt: str | list[dict[str, Any]],
+        user_prompt: str | Sequence[JsonDict],
     ) -> AdaptiveCourseStructure:
         """Generate the unified adaptive course payload."""
         return await self._course_llm.generate_adaptive_course_structure(
@@ -83,7 +86,7 @@ class AIService:
         source_code: str,
         stderr: str | None = None,
         stdin: str | None = None,
-        sandbox_state: dict[str, Any] | None = None,
+        sandbox_state: Mapping[str, object] | None = None,
         user_id: str | uuid.UUID | None = None,
         workspace_entry: str | None = None,
         workspace_root: str | None = None,
@@ -114,7 +117,7 @@ class AIService:
         query: str,
         user_id: uuid.UUID,
         limit: int = 5,
-    ) -> list[dict]:
+    ) -> list[JsonDict]:
         """Search book chunks via VectorRAG.search with ownership enforcement.
 
         Returns a list of result dicts with content and metadata (e.g., page).
@@ -135,7 +138,7 @@ class AIService:
         query: str,
         user_id: uuid.UUID,
         limit: int = 5,
-    ) -> list[dict]:
+    ) -> list[JsonDict]:
         """Search video transcript chunks via VectorRAG.search with ownership enforcement.
 
         Returns a list of result dicts with content and metadata (e.g., start/end).

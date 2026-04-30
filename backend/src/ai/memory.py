@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 
 
 """
@@ -15,7 +15,7 @@ Key design:
 """
 
 import logging
-from typing import Any, Literal
+from typing import Literal, cast
 
 import psycopg
 from psycopg_pool import ConnectionPool
@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 MemoryDeleteResult = Literal["deleted", "not_found", "unavailable"]
 MemoryClearResult = Literal["cleared", "unavailable"]
+MemoryRecord = Mapping[str, object]
 
 # Module-level instance - initialized lazily and cleaned up during app shutdown.
 _memory_client: AsyncMemory | None = None
@@ -47,6 +48,21 @@ _MEMORY_POOL_MIN_CONNECTIONS = 1
 _MEMORY_POOL_MAX_CONNECTIONS = 3
 _MEMORY_DB_MAX_ATTEMPTS = 2
 _MEMORY_HISTORY_DB_PATH = ":memory:"
+
+
+def _build_memory_filters(
+    user_id: uuid.UUID,
+    *,
+    agent_id: str | None = None,
+    run_id: str | None = None,
+) -> dict[str, str]:
+    """Build mem0 filters without passing empty entity IDs."""
+    filters = {"user_id": str(user_id)}
+    if agent_id is not None:
+        filters["agent_id"] = agent_id
+    if run_id is not None:
+        filters["run_id"] = run_id
+    return filters
 
 
 def _memory_is_configured() -> bool:
@@ -60,7 +76,7 @@ def _resolve_embedding_dims() -> int | None:
     return get_settings().MEMORY_EMBEDDING_OUTPUT_DIM
 
 
-def _get_memory_config() -> dict[str, Any]:
+def _get_memory_config() -> dict[str, object]:
     """Build mem0 configuration from environment."""
     settings = get_settings()
 
@@ -77,7 +93,7 @@ def _get_memory_config() -> dict[str, Any]:
 
     embedding_dims = _resolve_embedding_dims()
 
-    vector_store_config: dict[str, Any] = {
+    vector_store_config: dict[str, object] = {
         "connection_string": connection_string,
         "collection_name": "learning_memories",
     }
@@ -132,11 +148,14 @@ def get_memory_client() -> AsyncMemory:
             apply_mem0_litellm_embedder_patch()
             config = _get_memory_config()
             vector_store = config.get("vector_store")
-            vector_store_config = vector_store.get("config") if isinstance(vector_store, dict) else None
+            vector_store_config = (
+                cast("Mapping[str, object]", vector_store).get("config") if isinstance(vector_store, Mapping) else None
+            )
             if not isinstance(vector_store_config, dict):
                 msg = "Invalid mem0 vector store configuration type"
                 raise TypeError(msg)
-            connection_string = vector_store_config.get("connection_string")
+            mutable_vector_store_config = cast("dict[str, object]", vector_store_config)
+            connection_string = mutable_vector_store_config.get("connection_string")
             if not isinstance(connection_string, str):
                 msg = "Invalid mem0 vector store connection string type"
                 raise TypeError(msg)
@@ -144,8 +163,8 @@ def get_memory_client() -> AsyncMemory:
                 msg = "Missing mem0 vector store connection string"
                 raise ValueError(msg)
             pool = _build_checked_connection_pool(connection_string)
-            vector_store_config["connection_pool"] = pool
-            _memory_client = AsyncMemory(config=MemoryConfig(**config))
+            mutable_vector_store_config["connection_pool"] = pool
+            _memory_client = AsyncMemory(config=MemoryConfig(**config))  # ty: ignore[invalid-argument-type]
             logger.debug("memory.client.initialized")
         except (RuntimeError, TypeError, ValueError, OSError, psycopg.Error):
             if pool is not None:
@@ -192,26 +211,26 @@ async def _run_memory_operation[MemoryResultT](
 
 async def add_memory(
     user_id: uuid.UUID,
-    messages: str | dict[str, Any] | list[dict[str, Any]],
-    metadata: dict[str, Any] | None = None,
+    messages: str | MemoryRecord | list[MemoryRecord],
+    metadata: MemoryRecord | None = None,
     *,
     agent_id: str | None = None,
     run_id: str | None = None,
-) -> dict[str, Any]:
+) -> MemoryRecord:
     """Add memory for a user."""
     if not _memory_is_configured():
         return {}
 
-    async def _execute(client: AsyncMemory) -> dict[str, Any]:
+    async def _execute(client: AsyncMemory) -> MemoryRecord:
         result = await client.add(
             messages=messages,
             user_id=str(user_id),
             agent_id=agent_id,
             run_id=run_id,
-            metadata=metadata,
+            metadata=dict(metadata) if metadata is not None else None,
         )
         logger.debug("Added memory for user %s", user_id)
-        return result or {}
+        return cast("MemoryRecord", result) if isinstance(result, dict) else {}
 
     return await _run_memory_operation(
         operation=f"add for user {user_id}",
@@ -226,21 +245,20 @@ async def get_memories(
     *,
     agent_id: str | None = None,
     run_id: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[MemoryRecord]:
     """Get all memories for a user."""
     if not _memory_is_configured():
         return []
 
-    async def _execute(client: AsyncMemory) -> list[dict[str, Any]]:
+    async def _execute(client: AsyncMemory) -> list[MemoryRecord]:
         results = await client.get_all(
-            user_id=str(user_id),
-            agent_id=agent_id,
-            run_id=run_id,
-            limit=limit,
+            filters=_build_memory_filters(user_id, agent_id=agent_id, run_id=run_id),
+            top_k=limit,
         )
 
         if isinstance(results, dict):
-            return results.get("results", [])
+            result_items = results.get("results")
+            return cast("list[MemoryRecord]", result_items) if isinstance(result_items, list) else []
         return []
 
     return await _run_memory_operation(
@@ -258,34 +276,31 @@ async def search_memories(
     *,
     agent_id: str | None = None,
     run_id: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[MemoryRecord]:
     """Search memories for a user."""
     if not _memory_is_configured():
         return []
     if not query or not query.strip():
         return []
 
-    async def _execute(client: AsyncMemory) -> list[dict[str, Any]]:
+    async def _execute(client: AsyncMemory) -> list[MemoryRecord]:
         if threshold is not None:
             results = await client.search(
                 query=query,
-                user_id=str(user_id),
-                agent_id=agent_id,
-                run_id=run_id,
-                limit=limit,
+                filters=_build_memory_filters(user_id, agent_id=agent_id, run_id=run_id),
+                top_k=limit,
                 threshold=threshold,
             )
         else:
             results = await client.search(
                 query=query,
-                user_id=str(user_id),
-                agent_id=agent_id,
-                run_id=run_id,
-                limit=limit,
+                filters=_build_memory_filters(user_id, agent_id=agent_id, run_id=run_id),
+                top_k=limit,
             )
 
         if isinstance(results, dict):
-            return results.get("results", [])
+            result_items = results.get("results")
+            return cast("list[MemoryRecord]", result_items) if isinstance(result_items, list) else []
         return []
 
     return await _run_memory_operation(

@@ -2,6 +2,7 @@
 
 import logging
 import os
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, cast
 
@@ -55,7 +56,7 @@ class _LLMCompletionLogger(CustomLogger):
 _LLM_COMPLETION_LOGGER = _LLMCompletionLogger()
 
 
-def _normalize_callbacks(raw_callbacks: Any) -> list[Any]:
+def _normalize_callbacks(raw_callbacks: object) -> list[object]:
     """Normalize LiteLLM callback config to a mutable list."""
     if raw_callbacks is None:
         return []
@@ -66,7 +67,7 @@ def _normalize_callbacks(raw_callbacks: Any) -> list[Any]:
     return [raw_callbacks]
 
 
-def _calculate_duration_ms(start_time: Any, end_time: Any) -> float | None:
+def _calculate_duration_ms(start_time: object, end_time: object) -> float | None:
     if isinstance(start_time, datetime) and isinstance(end_time, datetime):
         return round((end_time - start_time).total_seconds() * 1000, 2)
     if isinstance(start_time, (int, float)) and isinstance(end_time, (int, float)):
@@ -74,7 +75,7 @@ def _calculate_duration_ms(start_time: Any, end_time: Any) -> float | None:
     return None
 
 
-def _get_model_name(kwargs: dict[str, Any], response_obj: Any) -> str | None:
+def _get_model_name(kwargs: Mapping[str, object], response_obj: object) -> str | None:
     model = kwargs.get("model")
     if isinstance(model, str) and model.strip():
         return model
@@ -86,14 +87,14 @@ def _get_model_name(kwargs: dict[str, Any], response_obj: Any) -> str | None:
     return None
 
 
-def _get_call_type(kwargs: dict[str, Any]) -> str | None:
+def _get_call_type(kwargs: Mapping[str, object]) -> str | None:
     call_type = kwargs.get("call_type")
     if isinstance(call_type, str) and call_type.strip():
         return call_type
 
     litellm_params = kwargs.get("litellm_params")
     if isinstance(litellm_params, dict):
-        params_call_type = litellm_params.get("call_type")
+        params_call_type = cast("Mapping[str, object]", litellm_params).get("call_type")
         if isinstance(params_call_type, str) and params_call_type.strip():
             return params_call_type
 
@@ -104,7 +105,7 @@ def _configure_llm_completion_logger_callback() -> None:
     callbacks = _normalize_callbacks(getattr(litellm, "callbacks", []))
     if not any(isinstance(callback, _LLMCompletionLogger) for callback in callbacks):
         callbacks.append(_LLM_COMPLETION_LOGGER)
-    litellm.callbacks = callbacks
+    cast("Any", litellm).callbacks = callbacks
 
 
 def _configure_langfuse_otel_callback() -> None:
@@ -123,7 +124,7 @@ def _configure_langfuse_otel_callback() -> None:
     resolved_host = configured_host or base_url
 
     if not is_cloud or not has_credentials or not resolved_host:
-        litellm.callbacks = callbacks_without_langfuse
+        cast("Any", litellm).callbacks = callbacks_without_langfuse
         return
 
     if not configured_host and base_url:
@@ -132,7 +133,7 @@ def _configure_langfuse_otel_callback() -> None:
 
     if "langfuse_otel" not in callbacks_without_langfuse:
         callbacks_without_langfuse.append("langfuse_otel")
-    litellm.callbacks = callbacks_without_langfuse
+    cast("Any", litellm).callbacks = callbacks_without_langfuse
 
 
 def configure_litellm() -> None:

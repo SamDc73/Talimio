@@ -22,7 +22,6 @@ LiteLLM embedder patch.
 import sys
 import types
 from collections.abc import Callable
-from typing import Any, cast
 
 
 _POSTHOG_PATCHED = False
@@ -32,14 +31,14 @@ _MEM0_HOOKS_PATCHED = False
 class _NoOpPosthog:
     """Drop-in replacement for `posthog.Posthog` that never spawns workers."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: object, **kwargs: object) -> None:
         del args, kwargs
         self.disabled = True
 
-    def capture(self, *args: Any, **kwargs: Any) -> None:
+    def capture(self, *args: object, **kwargs: object) -> None:
         del args, kwargs
 
-    def shutdown(self, *args: Any, **kwargs: Any) -> None:
+    def shutdown(self, *args: object, **kwargs: object) -> None:
         del args, kwargs
 
 
@@ -47,8 +46,7 @@ def _install_noop_posthog_module() -> None:
     """Ensure future `import posthog` resolves to a no-op implementation."""
     existing = sys.modules.get("posthog")
     if existing is not None:
-        existing_module = cast("Any", existing)
-        existing_module.Posthog = _NoOpPosthog
+        existing.__dict__["Posthog"] = _NoOpPosthog
         return
 
     module = types.ModuleType("posthog")
@@ -56,7 +54,7 @@ def _install_noop_posthog_module() -> None:
     sys.modules["posthog"] = module
 
 
-def _noop(*_args: Any, **_kwargs: Any) -> None:
+def _noop(*_args: object, **_kwargs: object) -> None:
     return None
 
 
@@ -73,20 +71,18 @@ def apply_mem0_telemetry_disable_patch() -> None:
         try:
             import mem0.memory.main as mem0_main
 
-            mem0_main_module = cast("Any", mem0_main)
-            mem0_main_module.capture_event = _noop
+            mem0_main.__dict__["capture_event"] = _noop
         except ImportError:
             pass
 
         try:
             import mem0.memory.telemetry as mem0_telemetry
 
-            mem0_telemetry_module = cast("Any", mem0_telemetry)
-            mem0_telemetry_module.capture_event = _noop
-            mem0_telemetry_module.capture_client_event = _noop
+            mem0_telemetry.__dict__["capture_event"] = _noop
+            mem0_telemetry.__dict__["capture_client_event"] = _noop
 
-            client = getattr(mem0_telemetry_module, "client_telemetry", None)
-            close_client: Callable[[], Any] | None = getattr(client, "close", None) if client is not None else None
+            client = getattr(mem0_telemetry, "client_telemetry", None)
+            close_client: Callable[[], object] | None = getattr(client, "close", None) if client is not None else None
             if callable(close_client):
                 close_client()
         except ImportError:

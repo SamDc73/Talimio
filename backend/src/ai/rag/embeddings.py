@@ -6,9 +6,10 @@ import logging
 import math
 import uuid
 from collections.abc import Iterator, Sequence
-from typing import Any
+from typing import cast
 
 import litellm
+from pydantic import JsonValue
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +56,16 @@ _VECTOR_SEARCH_FALLBACK_ERROR_TYPES = (
     SQLAlchemyError,
     *_EMBEDDING_RUNTIME_ERROR_TYPES,
 )
+
+
+def _is_json_value(value: object) -> bool:
+    if value is None or isinstance(value, str | int | float | bool):
+        return True
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+        return all(_is_json_value(item) for item in value)
+    if isinstance(value, dict):
+        return all(isinstance(key, str) and _is_json_value(item) for key, item in value.items())
+    return False
 
 
 class VectorRAG:
@@ -106,21 +117,21 @@ class VectorRAG:
         title: str,
         chunks: Sequence[str],
         course_id: uuid.UUID | None = None,
-        extra_metadata: dict[str, Any] | None = None,
-        per_chunk_metadata: Sequence[dict[str, Any]] | None = None,
+        extra_metadata: dict[str, object] | None = None,
+        per_chunk_metadata: Sequence[dict[str, object]] | None = None,
     ) -> None:
         """Store document chunks with their embeddings in pgvector."""
         try:
             await self._ensure_dimensions(session)
 
-            chunk_payloads: list[tuple[int, str, dict[str, Any]]] = []
+            chunk_payloads: list[tuple[int, str, dict[str, JsonValue]]] = []
             total_chunks = len(chunks)
             for index, raw_chunk in enumerate(chunks):
                 chunk_text = raw_chunk.strip()
                 if not chunk_text:
                     continue
 
-                metadata: dict[str, Any] = {
+                metadata: dict[str, object] = {
                     "title": title,
                     "chunk_index": index,
                     "total_chunks": total_chunks,
@@ -132,8 +143,8 @@ class VectorRAG:
                 if per_chunk_metadata and index < len(per_chunk_metadata):
                     metadata.update(per_chunk_metadata[index])
 
-                metadata = self._normalize_metadata(metadata)
-                chunk_payloads.append((index, chunk_text, metadata))
+                normalized_metadata = self._normalize_metadata(metadata)
+                chunk_payloads.append((index, chunk_text, normalized_metadata))
 
             if not chunk_payloads:
                 logger.warning("No valid chunks to store for doc_id=%s doc_type=%s", doc_id, doc_type)
@@ -151,7 +162,7 @@ class VectorRAG:
                 texts = [payload[1] for payload in batch]
                 embeddings = await self._embed_texts(texts)
 
-                for (chunk_index, chunk_text, metadata), embedding in zip(batch, embeddings, strict=True):
+                for (chunk_index, chunk_text, chunk_metadata), embedding in zip(batch, embeddings, strict=True):
                     embedding_str = self._format_vector(embedding)
                     await session.execute(
                         text(
@@ -172,7 +183,7 @@ class VectorRAG:
                             "doc_type": doc_type,
                             "chunk_index": chunk_index,
                             "content": chunk_text,
-                            "metadata": json.dumps(metadata),
+                            "metadata": json.dumps(chunk_metadata),
                             "embedding": embedding_str,
                         },
                     )
@@ -205,7 +216,7 @@ class VectorRAG:
             query_embedding = await self.generate_embedding(query)
             embedding_str = self._format_vector(query_embedding)
 
-            params: dict[str, Any] = {
+            params: dict[str, object] = {
                 "doc_type": doc_type,
                 "query_embedding": embedding_str,
                 "limit": limit,
@@ -414,9 +425,9 @@ class VectorRAG:
         msg = "Exhausted embedding retries unexpectedly"
         raise RuntimeError(msg)
 
-    def _build_embedding_kwargs(self, texts: Sequence[str]) -> dict[str, Any]:
+    def _build_embedding_kwargs(self, texts: Sequence[str]) -> dict[str, object]:
         """Construct kwargs for LiteLLM embedding call."""
-        embed_kwargs: dict[str, Any] = {
+        embed_kwargs: dict[str, object] = {
             "model": self.embedding_model,
             "input": list(texts),
             "timeout": 30,
@@ -431,12 +442,12 @@ class VectorRAG:
 
         return embed_kwargs
 
-    async def _invoke_embedding(self, embed_kwargs: dict[str, Any]) -> Any:
+    async def _invoke_embedding(self, embed_kwargs: dict[str, object]) -> object:
         """Call LiteLLM embedding endpoint."""
         return await litellm.aembedding(**embed_kwargs)
 
     @staticmethod
-    def _normalize_embedding_response(response: Any) -> list[list[float]]:
+    def _normalize_embedding_response(response: object) -> list[list[float]]:
         """Normalize LiteLLM embedding response to list of float vectors."""
         data = getattr(response, "data", None)
         embeddings = [item.get("embedding", item) for item in data] if data else response
@@ -450,7 +461,13 @@ class VectorRAG:
             if not embedding or not isinstance(embedding, Sequence):
                 msg = f"Invalid embedding payload of type {type(embedding)}"
                 raise ValueError(msg)
-            normalized_embeddings.append([float(value) for value in embedding])
+            normalized_embedding: list[float] = []
+            for value in embedding:
+                if not isinstance(value, (str, int, float)):
+                    msg = f"Invalid embedding value of type {type(value)}"
+                    raise TypeError(msg)
+                normalized_embedding.append(float(value))
+            normalized_embeddings.append(normalized_embedding)
 
         return normalized_embeddings
 
@@ -460,20 +477,20 @@ class VectorRAG:
         return "[" + ",".join(str(value) for value in values) + "]"
 
     @staticmethod
-    def _normalize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_metadata(metadata: dict[str, object]) -> dict[str, JsonValue]:
         """Ensure metadata values are JSON-serializable."""
-        normalized: dict[str, Any] = {}
+        normalized: dict[str, JsonValue] = {}
         for key, value in metadata.items():
             if isinstance(value, uuid.UUID):
                 normalized[key] = str(value)
             else:
-                normalized[key] = value
+                normalized[key] = cast("JsonValue", value) if _is_json_value(value) else str(value)
         return normalized
 
     @staticmethod
     def _batched(
-        sequence: Sequence[tuple[int, str, dict[str, Any]]], batch_size: int
-    ) -> Iterator[list[tuple[int, str, dict[str, Any]]]]:
+        sequence: Sequence[tuple[int, str, dict[str, JsonValue]]], batch_size: int
+    ) -> Iterator[list[tuple[int, str, dict[str, JsonValue]]]]:
         """Yield fixed-size batches from sequence."""
         if batch_size <= 1:
             for item in sequence:

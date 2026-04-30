@@ -2,9 +2,9 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 
 class LanguageModelMessage(BaseModel):
@@ -14,7 +14,7 @@ class LanguageModelMessage(BaseModel):
 
     id: str | None = None
     role: Literal["system", "user", "assistant", "tool"]
-    content: Any
+    content: JsonValue
     created_at: str | None = Field(default=None, alias="createdAt")
 
 
@@ -28,9 +28,9 @@ class ChatRequest(BaseModel):
         description="Conversation history + latest user message",
     )
     system: str | None = Field(default=None, description="Optional system message")
-    tools: list[dict[str, Any]] | dict[str, Any] | None = Field(default=None)
-    run_config: dict[str, Any] | None = Field(default=None, alias="runConfig")
-    state: dict[str, Any] | None = Field(default=None)
+    tools: list[dict[str, JsonValue]] | dict[str, JsonValue] | None = Field(default=None)
+    run_config: dict[str, JsonValue] | None = Field(default=None, alias="runConfig")
+    state: dict[str, JsonValue] | None = Field(default=None)
 
     # Model context from assistant-ui runtime
     model_name: str | None = Field(default=None, alias="modelName", description="Model override from model context")
@@ -42,7 +42,7 @@ class ChatRequest(BaseModel):
         None, alias="contextType", description="Type of resource providing context"
     )
     context_id: uuid.UUID | None = Field(None, alias="contextId", description="ID of the context resource")
-    context_meta: dict[str, Any] | None = Field(
+    context_meta: dict[str, JsonValue] | None = Field(
         None, alias="contextMeta", description="Additional context metadata (page number, timestamp, etc.)"
     )
     pending_quote: str | None = Field(
@@ -58,7 +58,7 @@ class CreateConversationRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     context_type: Literal["book", "video", "course"] | None = Field(default=None, alias="contextType")
     context_id: uuid.UUID | None = Field(default=None, alias="contextId")
-    context_meta: dict[str, Any] | None = Field(default=None, alias="contextMeta")
+    context_meta: dict[str, JsonValue] | None = Field(default=None, alias="contextMeta")
 
 
 class CreateConversationResponse(BaseModel):
@@ -88,7 +88,7 @@ class ConversationThreadResponse(BaseModel):
     title: str | None = None
     context_type: Literal["book", "video", "course"] | None = Field(default=None, alias="contextType")
     context_id: uuid.UUID | None = Field(default=None, alias="contextId")
-    context_meta: dict[str, Any] = Field(default_factory=dict, alias="contextMeta")
+    context_meta: dict[str, JsonValue] = Field(default_factory=dict, alias="contextMeta")
     head_message_id: str | None = Field(default=None, alias="headMessageId")
     last_message_preview: str | None = Field(default=None, alias="lastMessagePreview")
     message_count: int = Field(default=0, alias="messageCount")
@@ -112,13 +112,13 @@ class ConversationHistoryItemRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    message: dict[str, Any]
+    message: dict[str, JsonValue]
     parent_id: str | None = Field(default=None, alias="parentId")
-    run_config: dict[str, Any] | None = Field(default=None, alias="runConfig")
+    run_config: dict[str, JsonValue] | None = Field(default=None, alias="runConfig")
 
     @field_validator("message")
     @classmethod
-    def _require_message_id(cls, value: dict[str, Any]) -> dict[str, Any]:
+    def _require_message_id(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]:
         message_id = value.get("id")
         if isinstance(message_id, str) and message_id.strip():
             return value
@@ -131,9 +131,9 @@ class ConversationHistoryItemResponse(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    message: dict[str, Any]
+    message: dict[str, JsonValue]
     parent_id: str | None = Field(default=None, alias="parentId")
-    run_config: dict[str, Any] | None = Field(default=None, alias="runConfig")
+    run_config: dict[str, JsonValue] | None = Field(default=None, alias="runConfig")
 
 
 class ConversationHistoryResponse(BaseModel):

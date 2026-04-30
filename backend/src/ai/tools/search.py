@@ -1,8 +1,10 @@
 """Local web search function tool (Exa-backed)."""
 
-from typing import Any
+from collections.abc import Mapping
+from typing import cast
 
 import httpx
+from pydantic import JsonValue
 
 from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
 
@@ -24,14 +26,14 @@ class ExaWebSearchTool:
         self._timeout_seconds = timeout_seconds
         self._default_max_results = default_max_results
 
-    async def execute(self, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, arguments: Mapping[str, object]) -> dict[str, JsonValue]:
         """Execute a local Exa search and return normalized result snippets."""
         query, limit, include_domains = _parse_web_search_arguments(arguments, self._default_max_results)
         payload = _build_exa_payload(query=query, limit=limit, include_domains=include_domains)
         body = await self._request_exa(payload)
         return {"query": query, "results": _extract_results(body)}
 
-    async def _request_exa(self, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _request_exa(self, payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
         headers = {"x-api-key": self._api_key, "Content-Type": "application/json"}
         try:
             async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
@@ -49,7 +51,7 @@ class ExaWebSearchTool:
         if not isinstance(body, dict):
             msg = "Local web_search returned an invalid Exa response shape"
             raise TypeError(msg)
-        return body
+        return cast("dict[str, JsonValue]", body)
 
 
 def build_web_search_function_tool(
@@ -96,7 +98,7 @@ def build_web_search_function_tool(
     )
 
 
-def _normalize_domain_list(raw_value: Any) -> list[str]:
+def _normalize_domain_list(raw_value: object) -> list[str]:
     if raw_value is None:
         return []
     if isinstance(raw_value, str):
@@ -114,14 +116,14 @@ def _normalize_domain_list(raw_value: Any) -> list[str]:
     return domains
 
 
-def _parse_web_search_arguments(arguments: dict[str, Any], default_max_results: int) -> tuple[str, int, list[str]]:
+def _parse_web_search_arguments(arguments: Mapping[str, object], default_max_results: int) -> tuple[str, int, list[str]]:
     query = str(arguments.get("query", "")).strip()
     if not query:
         msg = "Field `query` is required"
         raise ValueError(msg)
 
     raw_limit = arguments.get("num_results")
-    limit = int(raw_limit) if raw_limit is not None else default_max_results
+    limit = int(raw_limit) if isinstance(raw_limit, str | int | float) else default_max_results
     if limit < 1:
         msg = "Field `num_results` must be >= 1"
         raise ValueError(msg)
@@ -130,8 +132,8 @@ def _parse_web_search_arguments(arguments: dict[str, Any], default_max_results: 
     return query, limit, include_domains
 
 
-def _build_exa_payload(*, query: str, limit: int, include_domains: list[str]) -> dict[str, Any]:
-    payload: dict[str, Any] = {
+def _build_exa_payload(*, query: str, limit: int, include_domains: list[str]) -> dict[str, JsonValue]:
+    payload: dict[str, JsonValue] = {
         "query": query,
         "numResults": limit,
         "type": "auto",
@@ -142,11 +144,11 @@ def _build_exa_payload(*, query: str, limit: int, include_domains: list[str]) ->
     return payload
 
 
-def _extract_results(body: dict[str, Any]) -> list[dict[str, Any]]:
+def _extract_results(body: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
     raw_results = body.get("results")
     if not isinstance(raw_results, list):
         return []
-    results: list[dict[str, Any]] = []
+    results: list[dict[str, JsonValue]] = []
     for item in raw_results:
         if not isinstance(item, dict):
             continue
@@ -160,7 +162,7 @@ def _extract_results(body: dict[str, Any]) -> list[dict[str, Any]]:
     return results
 
 
-def _extract_snippet(item: dict[str, Any], fallback_text: str) -> str:
+def _extract_snippet(item: dict[str, JsonValue], fallback_text: str) -> str:
     highlights = item.get("highlights")
     if isinstance(highlights, list):
         for highlight in highlights:

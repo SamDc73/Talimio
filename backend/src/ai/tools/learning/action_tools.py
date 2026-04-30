@@ -2,15 +2,13 @@
 
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
-from typing import Any
+from collections.abc import Mapping
 
-from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
+from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget, ToolExecutor
 from src.database.session import async_session_maker
 from src.learning_capabilities.facade import LearningCapabilitiesFacade
 
 
-ToolExecutor = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +20,7 @@ def build_learning_action_tools(
     learner_context: str | None = None,
 ) -> list[FunctionToolDefinition]:
     """Return assistant write tools backed by learning capabilities."""
-    tool_specs: list[tuple[str, str, dict[str, Any]]] = [
+    tool_specs: list[tuple[str, str, Mapping[str, object]]] = [
         (
             "create_course",
             "Create a new course from a learner prompt. Requires confirmation.",
@@ -151,7 +149,7 @@ def _build_action_executor(
     lesson_id: uuid.UUID | None,
     learner_context: str | None,
 ) -> ToolExecutor:
-    async def _execute(arguments: dict[str, Any]) -> dict[str, Any]:
+    async def _execute(arguments: Mapping[str, object]) -> Mapping[str, object]:
         logger.info(
             "learning_capability.action_tool.execute",
             extra={

@@ -1,7 +1,7 @@
 """Facade entrypoint for learning capability execution."""
 
 import uuid
-from typing import Any
+from collections.abc import Mapping
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -230,8 +230,8 @@ class LearningCapabilitiesFacade:  # noqa: PLR0904
         *,
         user_id: uuid.UUID,
         capability_name: str,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
+        payload: Mapping[str, object],
+    ) -> dict[str, object]:
         """Execute a read capability by name."""
         if capability_name == "search_lessons":
             result = await self.search_lessons(
@@ -298,8 +298,8 @@ class LearningCapabilitiesFacade:  # noqa: PLR0904
         *,
         user_id: uuid.UUID,
         capability_name: str,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
+        payload: Mapping[str, object],
+    ) -> dict[str, object]:
         """Execute a write capability by name."""
         if capability_name == "create_course":
             result = await self.create_course(

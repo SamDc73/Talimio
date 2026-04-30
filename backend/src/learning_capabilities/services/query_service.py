@@ -4,15 +4,16 @@ import logging
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
 
 import litellm
+from pydantic import JsonValue
 from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.assistant.models import AssistantActiveProbe
 from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.exceptions import RagUnavailableError
+from src.ai.rag.schemas import SearchResult
 from src.ai.rag.service import RAGService
 from src.config.settings import get_settings
 from src.courses.models import (
@@ -446,7 +447,7 @@ class LearningCapabilityQueryService:
                     title=course.title,
                     description=course.description,
                     adaptive_enabled=course.adaptive_enabled,
-                    completion_percentage=float(progress.get("completion_percentage", 0.0)),
+                    completion_percentage=_float_or_none(progress.get("completion_percentage")) or 0.0,
                 )
             )
         return ListRelevantCoursesCapabilityOutput(items=items)
@@ -470,8 +471,8 @@ class LearningCapabilityQueryService:
             title=course.title,
             description=course.description,
             adaptive_enabled=course.adaptive_enabled,
-            completion_percentage=float(progress.get("completion_percentage", 0.0)),
-            total_lessons=int(progress.get("total_lessons", len(course.modules))),
+            completion_percentage=_float_or_none(progress.get("completion_percentage")) or 0.0,
+            total_lessons=_int_or_none(progress.get("total_lessons")) or len(course.modules),
             completed_lessons=completed_lessons,
             current_lesson_id=current_lesson_id,
         )
@@ -543,7 +544,7 @@ class LearningCapabilityQueryService:
                 AdaptiveCatalogEntry(
                     course_id=course.id,
                     title=course.title,
-                    completion_percentage=float(progress.get("completion_percentage", 0.0)),
+                    completion_percentage=_float_or_none(progress.get("completion_percentage")) or 0.0,
                     current_lesson_id=current_lesson_id,
                     current_lesson_title=lesson_title_by_id.get(current_lesson_id) if current_lesson_id is not None else None,
                     due_count=frontier.state.due_count,
@@ -1385,7 +1386,7 @@ def _compact_text(value: str | None, limit: int) -> str | None:
     return f"{compacted[: max(0, limit - 3)].rstrip()}..."
 
 
-def _build_source_excerpt(*, course_id: uuid.UUID, result: Any) -> CourseSourceExcerpt:
+def _build_source_excerpt(*, course_id: uuid.UUID, result: SearchResult) -> CourseSourceExcerpt:
     metadata = result.metadata if isinstance(result.metadata, dict) else {}
     return CourseSourceExcerpt(
         course_id=course_id,
@@ -1399,14 +1400,14 @@ def _build_source_excerpt(*, course_id: uuid.UUID, result: Any) -> CourseSourceE
     )
 
 
-def _metadata_str(metadata: dict[str, Any], key: str) -> str | None:
+def _metadata_str(metadata: dict[str, JsonValue], key: str) -> str | None:
     value = metadata.get(key)
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
 
 
-def _metadata_int(metadata: dict[str, Any], key: str) -> int | None:
+def _metadata_int(metadata: dict[str, JsonValue], key: str) -> int | None:
     value = metadata.get(key)
     if isinstance(value, bool) or value is None:
         return None
@@ -1600,12 +1601,12 @@ def _learner_profile_from_state(state: UserConceptState | None) -> LearnerProfil
     return profile
 
 
-def _payload_text(payload: dict[str, Any], key: str) -> str | None:
+def _payload_text(payload: dict[str, JsonValue], key: str) -> str | None:
     value = payload.get(key)
     return value if isinstance(value, str) and value.strip() else None
 
 
-def _payload_string_list(payload: dict[str, Any], key: str) -> list[str]:
+def _payload_string_list(payload: dict[str, JsonValue], key: str) -> list[str]:
     value = payload.get(key)
     if not isinstance(value, list):
         return []
@@ -1621,3 +1622,16 @@ def _float_or_none(value: object) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _int_or_none(value: object) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None

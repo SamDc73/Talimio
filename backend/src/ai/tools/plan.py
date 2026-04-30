@@ -1,11 +1,11 @@
 """Request-scoped tool planning for the LLM runtime."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
 
-ToolExecutor = Callable[[dict[str, Any]], Awaitable[Any]]
+ToolExecutor = Callable[[Mapping[str, object]], Awaitable[object]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +30,7 @@ ToolTarget = LocalToolTarget | MCPToolTarget
 class FunctionToolDefinition:
     """Function tool schema plus an optional app-owned execution target."""
 
-    schema: dict[str, Any]
+    schema: Mapping[str, object]
     target: ToolTarget | None = None
 
 
@@ -46,8 +46,8 @@ class ModelRuntimeProfile:
 class RequestToolPlan:
     """Single-request runtime tool plan consumed by LLMClient."""
 
-    tool_schemas: list[dict[str, Any]] | None
-    responses_tools: list[dict[str, Any]] | None
+    tool_schemas: list[Mapping[str, object]] | None
+    responses_tools: list[Mapping[str, object]] | None
     tool_targets: dict[str, ToolTarget]
     tool_instruction: str | None
     default_tool_choice: str | None
@@ -71,7 +71,7 @@ def build_model_runtime_profile(model: str) -> ModelRuntimeProfile:
 def build_request_tool_plan(
     *,
     model: str,
-    explicit_tool_schemas: list[dict[str, Any]] | None,
+    explicit_tool_schemas: list[Mapping[str, object]] | None,
     function_tools: list[FunctionToolDefinition],
     allowed_tools: set[str] | None,
     blocked_tools: set[str],
@@ -79,7 +79,7 @@ def build_request_tool_plan(
 ) -> RequestToolPlan:
     """Assemble a request-scoped tool inventory and transport decision."""
     profile = build_model_runtime_profile(model)
-    filtered_function_schemas: list[dict[str, Any]] = []
+    filtered_function_schemas: list[Mapping[str, object]] = []
     tool_targets: dict[str, ToolTarget] = {}
 
     merged_definitions: list[FunctionToolDefinition] = []
@@ -123,13 +123,12 @@ def build_request_tool_plan(
     )
 
 
-def _extract_function_name(schema: dict[str, Any]) -> str | None:
-    if not isinstance(schema, dict):
-        return None
+def _extract_function_name(schema: Mapping[str, object]) -> str | None:
     function_block = schema.get("function")
     if not isinstance(function_block, dict):
         return None
-    raw_name = function_block.get("name")
+    function_payload = cast("Mapping[str, object]", function_block)
+    raw_name = function_payload.get("name")
     if not isinstance(raw_name, str):
         return None
     normalized = raw_name.strip()

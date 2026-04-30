@@ -1,11 +1,12 @@
 """Wikipedia page resolution tool for lesson-writing side context."""
 
 import asyncio
-from collections.abc import Sequence
-from typing import Any
+from collections.abc import Mapping, Sequence
+from typing import cast
 from urllib.parse import quote
 
 import httpx
+from pydantic import JsonValue
 
 from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
 
@@ -23,21 +24,21 @@ class WikipediaPageResolverTool:
     def __init__(self, *, timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS) -> None:
         self._timeout_seconds = timeout_seconds
 
-    async def execute(self, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, arguments: Mapping[str, object]) -> dict[str, JsonValue]:
         """Resolve one or more terms against Wikipedia."""
         terms = _parse_terms(arguments)
         pages = await self._resolve_terms(terms)
         return {"pages": pages}
 
-    async def _resolve_terms(self, terms: Sequence[str]) -> list[dict[str, Any]]:
+    async def _resolve_terms(self, terms: Sequence[str]) -> list[dict[str, JsonValue]]:
         return await asyncio.gather(*(self._resolve_term(term) for term in terms))
 
-    async def _resolve_term(self, term: str) -> dict[str, Any]:
+    async def _resolve_term(self, term: str) -> dict[str, JsonValue]:
         summary = await self._fetch_summary(term)
         if summary is not None:
             return _build_result(term, summary)
 
-        disambiguation_result: dict[str, Any] | None = None
+        disambiguation_result: dict[str, JsonValue] | None = None
         for candidate_title in await self._search_candidate_titles(term):
             candidate_summary = await self._fetch_summary(candidate_title)
             if candidate_summary is None:
@@ -50,7 +51,7 @@ class WikipediaPageResolverTool:
 
         return disambiguation_result or _missing_result(term)
 
-    async def _fetch_summary(self, title: str) -> dict[str, Any] | None:
+    async def _fetch_summary(self, title: str) -> dict[str, JsonValue] | None:
         normalized_title = quote(title.replace(" ", "_"), safe="")
         return await self._request_json(url=_WIKIPEDIA_SUMMARY_URL.format(title=normalized_title))
 
@@ -69,9 +70,10 @@ class WikipediaPageResolverTool:
         if body is None:
             return []
         query_block = body.get("query")
-        if not isinstance(query_block, dict):
+        if not isinstance(query_block, Mapping):
             return []
-        search_results = query_block.get("search")
+        query_payload = cast("Mapping[str, JsonValue]", query_block)
+        search_results = query_payload.get("search")
         if not isinstance(search_results, list):
             return []
 
@@ -84,7 +86,9 @@ class WikipediaPageResolverTool:
                 titles.append(title.strip())
         return titles
 
-    async def _request_json(self, *, url: str, params: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    async def _request_json(
+        self, *, url: str, params: dict[str, str | int] | None = None
+    ) -> dict[str, JsonValue] | None:
         headers = {"Accept": "application/json"}
         try:
             async with httpx.AsyncClient(timeout=self._timeout_seconds, headers=headers) as client:
@@ -104,7 +108,7 @@ class WikipediaPageResolverTool:
         if not isinstance(body, dict):
             msg = "Wikipedia returned an invalid response shape"
             raise TypeError(msg)
-        return body
+        return cast("dict[str, JsonValue]", body)
 
 
 def build_wikipedia_resolver_function_tool(*, timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS) -> FunctionToolDefinition:
@@ -139,7 +143,7 @@ def build_wikipedia_resolver_function_tool(*, timeout_seconds: float = _DEFAULT_
     )
 
 
-def _parse_terms(arguments: dict[str, Any]) -> list[str]:
+def _parse_terms(arguments: Mapping[str, object]) -> list[str]:
     raw_terms = arguments.get("terms")
     if not isinstance(raw_terms, list):
         msg = "Field `terms` must be an array of strings"
@@ -164,7 +168,7 @@ def _parse_terms(arguments: dict[str, Any]) -> list[str]:
     return terms
 
 
-def _build_result(original_term: str, summary: dict[str, Any]) -> dict[str, Any]:
+def _build_result(original_term: str, summary: dict[str, JsonValue]) -> dict[str, JsonValue]:
     page_title = _extract_page_title(summary)
     page_type = str(summary.get("type", "")).strip().lower()
     if page_type == "disambiguation":
@@ -188,10 +192,11 @@ def _build_result(original_term: str, summary: dict[str, Any]) -> dict[str, Any]
     }
 
 
-def _extract_page_title(summary: dict[str, Any]) -> str | None:
+def _extract_page_title(summary: dict[str, JsonValue]) -> str | None:
     titles_block = summary.get("titles")
-    if isinstance(titles_block, dict):
-        canonical_title = titles_block.get("canonical")
+    if isinstance(titles_block, Mapping):
+        titles_payload = cast("Mapping[str, JsonValue]", titles_block)
+        canonical_title = titles_payload.get("canonical")
         if isinstance(canonical_title, str) and canonical_title.strip():
             return canonical_title.strip()
 
@@ -201,7 +206,7 @@ def _extract_page_title(summary: dict[str, Any]) -> str | None:
     return None
 
 
-def _missing_result(original_term: str) -> dict[str, Any]:
+def _missing_result(original_term: str) -> dict[str, JsonValue]:
     return {
         "original_term": original_term,
         "found": False,

@@ -5,9 +5,10 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import cast
 
 from opentelemetry import trace
+from pydantic import JsonValue
 
 from src.ai.mcp.config import MCPConfig
 from src.ai.mcp.tooling import execute_user_tool_call
@@ -20,7 +21,7 @@ class PlannedToolCall:
 
     call_id: str
     name: str
-    arguments: dict[str, Any] | str | bytes | None
+    arguments: dict[str, JsonValue] | str | bytes | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +47,7 @@ async def execute_planned_tool_calls(
         return []
 
     formatted: list[ExecutedToolCall | None] = []
-    pending: list[tuple[int, PlannedToolCall, ToolTarget, dict[str, Any]]] = []
+    pending: list[tuple[int, PlannedToolCall, ToolTarget, dict[str, JsonValue]]] = []
 
     for index, call in enumerate(calls):
         target = tool_targets.get(call.name)
@@ -112,7 +113,7 @@ async def execute_planned_tool_calls(
     return [entry for entry in formatted if entry is not None]
 
 
-def parse_tool_arguments(payload: dict[str, Any] | str | bytes | None) -> dict[str, Any]:
+def parse_tool_arguments(payload: dict[str, JsonValue] | str | bytes | None) -> dict[str, JsonValue]:
     """Normalize function-call arguments into a dictionary."""
     if payload is None:
         return {}
@@ -132,12 +133,12 @@ def parse_tool_arguments(payload: dict[str, Any] | str | bytes | None) -> dict[s
         if not isinstance(parsed, dict):
             msg = "Tool arguments payload must be a JSON object"
             raise TypeError(msg)
-        return parsed
+        return cast("dict[str, JsonValue]", parsed)
     msg = "Unsupported tool arguments payload type"
     raise TypeError(msg)
 
 
-def format_tool_result(result: Any) -> str:
+def format_tool_result(result: object) -> str:
     """Serialize tool output to the standard tool message string."""
     if isinstance(result, (dict, list)):
         try:
@@ -151,10 +152,10 @@ async def _invoke_target(
     *,
     call: PlannedToolCall,
     target: ToolTarget,
-    arguments: dict[str, Any],
+    arguments: dict[str, JsonValue],
     user_id: uuid.UUID | None,
     mcp_config: MCPConfig | None,
-) -> Any:
+) -> object:
     tracer = trace.get_tracer(__name__)
     with tracer.start_as_current_span("llm.tool.execution") as span:
         span.set_attribute("llm.tool.name", call.name)
