@@ -30,11 +30,11 @@ export default function ContentGrid({
 
 	return (
 		<>
-			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{gridContent}</div>
+			<div className="grid grid-cols-1 gap-lg md:grid-cols-2 lg:grid-cols-3">{gridContent}</div>
 
 			{!isLoading && unpinned.length > 3 && (
-				<div className="mt-8">
-					<Button variant="outline" onClick={onShowMoreToggle} className="text-sm font-medium px-4 py-2 gap-1">
+				<div className="mt-xl">
+					<Button variant="outline" onClick={onShowMoreToggle} className="gap-2xs px-md py-2xs text-sm font-medium">
 						{showAll ? (
 							<>
 								<ChevronUp className="size-4  -mt-px" />
@@ -51,11 +51,11 @@ export default function ContentGrid({
 			)}
 
 			{!isLoading && filteredAndSortedContent.length === 0 && (
-				<div className="text-center py-12">
-					<div className="inline-block bg-completed/10 p-4 rounded-full mb-4">
-						<Check className="size-8  text-completed" />
+				<div className="py-xl text-center">
+					<div className="mb-md inline-block rounded-full bg-completed/10 p-md">
+						<Check className="size-xl text-completed" />
 					</div>
-					<h3 className="text-xl font-bold text-completed mb-2">All Caught Up!</h3>
+					<h3 className="mb-2xs text-xl font-bold text-completed">All Caught Up!</h3>
 					<p className="text-muted-foreground">You've completed all your learning tasks. Great job!</p>
 				</div>
 			)}

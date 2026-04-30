@@ -4,6 +4,9 @@ import { X } from "lucide-react"
 import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
 
+const FILTER_BADGE_REMOVE_BUTTON_CLASS_NAME =
+	"ml-3xs size-md p-0 text-muted-foreground/65 hover:bg-transparent hover:text-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+
 export default function FilterBadges({
 	activeFilter,
 	archiveFilter,
@@ -27,7 +30,7 @@ export default function FilterBadges({
 			initial={{ opacity: 0, y: 10 }}
 			animate={{ opacity: 1, y: 0 }}
 			transition={{ duration: 0.3, delay: 0.2 }}
-			className="max-w-2xl mx-auto mb-8 flex flex-wrap items-center gap-2"
+			className="mx-auto mb-xl flex max-w-container-2xl flex-wrap items-center gap-2xs"
 		>
 			{activeFilter !== "all" && (
 				<Badge variant="outline" className="bg-card">
@@ -36,7 +39,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onFilterChange("all")}
-						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className={FILTER_BADGE_REMOVE_BUTTON_CLASS_NAME}
 					>
 						<X className="size-3 " />
 						<span className="sr-only">Remove filter</span>
@@ -51,7 +54,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onArchiveFilterChange("active")}
-						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className={FILTER_BADGE_REMOVE_BUTTON_CLASS_NAME}
 					>
 						<X className="size-3 " />
 						<span className="sr-only">Reset archive filter</span>
@@ -66,7 +69,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onSortChange("last-accessed")}
-						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className={FILTER_BADGE_REMOVE_BUTTON_CLASS_NAME}
 					>
 						<X className="size-3 " />
 						<span className="sr-only">Remove sort</span>
@@ -81,7 +84,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onSortDirectionChange("desc")}
-						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className={FILTER_BADGE_REMOVE_BUTTON_CLASS_NAME}
 					>
 						<X className="size-3 " />
 						<span className="sr-only">Remove sort direction</span>
@@ -96,7 +99,7 @@ export default function FilterBadges({
 						variant="ghost"
 						size="sm"
 						onClick={() => onTagFilterChange("")}
-						className="size-4  p-0 ml-1 text-muted-foreground hover:text-muted-foreground"
+						className={FILTER_BADGE_REMOVE_BUTTON_CLASS_NAME}
 					>
 						<X className="size-3 " />
 						<span className="sr-only">Remove tag filter</span>
@@ -109,7 +112,7 @@ export default function FilterBadges({
 					variant="ghost"
 					size="sm"
 					onClick={onResetAll}
-					className="text-xs text-muted-foreground h-7 px-2 ml-auto"
+					className="ml-auto h-lg px-xs text-xs text-muted-foreground"
 				>
 					Reset All
 				</Button>

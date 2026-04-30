@@ -194,9 +194,9 @@ function TagInput({
 								setHighlightedIndex(-1)
 								inputRef.current?.focus()
 							}}
-							className="mr-2 p-1 hover:bg-muted/40 rounded-sm"
+							className="mr-2 p-1 text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none"
 						>
-							<X className="size-3  text-muted-foreground" />
+							<X className="size-3" />
 						</button>
 					)}
 				</div>

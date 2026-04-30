@@ -93,68 +93,66 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 				transition={{ duration: 0.4, delay: 0.1 * index }}
 				whileHover={{ y: -5, transition: { duration: 0.2 } }}
 				className={`bg-background rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
-					pinned
-						? "shadow-md border-2 border-primary/15 bg-primary/5"
-						: "shadow-sm hover:shadow-md border border-border"
+					pinned ? "shadow-md border-2 border-primary/15 bg-primary/5" : "shadow-sm hover:shadow-md"
 				}`}
 				onMouseEnter={() => setHover(true)}
 				onMouseLeave={() => setHover(false)}
 				onClick={onClick}
 			>
-				{pinned && <div className="absolute top-0 left-6 w-6 h-1 bg-primary rounded-b-full" />}
-				<div className="p-6 flex flex-col justify-between h-full">
-					<div className="flex justify-between items-start mb-4">
+				{pinned && <div className="absolute top-0 left-lg h-3xs w-lg rounded-b-full bg-primary" />}
+				<div className="flex h-full flex-col justify-between p-lg">
+					<div className="mb-md flex items-start justify-between">
 						<div
-							className={`${VARIANTS[item.type].badge} text-xs font-medium px-3 py-1 rounded-full flex items-center gap-2`}
+							className={`${VARIANTS[item.type].badge} flex items-center gap-2xs rounded-full px-xs py-3xs text-xs font-medium`}
 						>
 							{(() => {
 								const V = VARIANTS[item.type]
 								const Icon = V.icon
 								return (
 									<>
-										<Icon className="size-3 " />
+										<Icon className="size-xs" />
 										<span>{V.label}</span>
 									</>
 								)
 							})()}
 						</div>
 					</div>
-					<h3 className="text-xl font-bold text-foreground hover:underline line-clamp-2 mb-1">{item.title}</h3>
+					<h3 className="mb-3xs line-clamp-2 text-xl font-bold text-foreground hover:underline">{item.title}</h3>
 
 					{/* Video metadata */}
 					{item.type === "video" && (
-						<p className="text-muted-foreground text-sm mb-4">
+						<p className="mb-md text-sm text-muted-foreground">
 							by {item.channel || "Unknown Channel"} • {formatDuration(item.duration)}
 						</p>
 					)}
 
 					{/* Book metadata */}
 					{item.type === "book" && (
-						<p className="text-muted-foreground text-sm mb-4">
+						<p className="mb-md text-sm text-muted-foreground">
 							by {item.author || "Unknown Author"} • {item.pageCount || "Unknown"} pages
 						</p>
 					)}
 
 					{/* Description for other types */}
 					{item.type !== "video" && item.type !== "book" && item.description && (
-						<p className="text-muted-foreground text-sm line-clamp-2 mb-4">{item.description}</p>
+						<p className="mb-md line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
 					)}
 
-					<div className="flex flex-wrap items-center gap-2 mb-3">
+					<div className="mb-xs flex flex-wrap items-center gap-2xs">
 						{item.tags?.slice(0, 2).map((t) => (
 							<TagChip key={t} tag={t} contentType={item.type} />
 						))}
 						{item.tags?.length > 2 && (
-							<span className="inline-flex text-xs font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-sm">
+							<span className="inline-flex rounded-sm bg-muted px-xs py-3xs text-xs font-medium text-muted-foreground">
 								+{item.tags.length - 2}
 							</span>
 						)}
 					</div>
 					<div>
-						<div className="flex justify-between text-xs text-muted-foreground mb-2">
+						<div className="mb-2xs flex justify-between text-xs text-muted-foreground">
 							<span>{Math.round(progressValue)}%</span>
 						</div>
-						<div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+						<div className="h-2xs w-full overflow-hidden rounded-full bg-muted">
 							<div
 								style={{ width: `${progressValue}%` }}
 								className={`h-full bg-linear-to-r ${VARIANTS[item.type].grad} rounded-full transition-all duration-500`}
@@ -163,11 +161,11 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 					</div>
 				</div>
 				{hover && (
-					<div className="absolute top-4 right-4 z-10">
+					<div className="absolute top-md right-md z-10">
 						<Popover>
 							<PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
-								<Button variant="ghost" size="icon" className="size-10  rounded-full">
-									<MoreHorizontal className="size-4 " />
+								<Button variant="ghost" size="icon" className="size-xl rounded-full">
+									<MoreHorizontal className="size-md" />
 								</Button>
 							</PopoverTrigger>
 							<PopoverContent align="end" className="w-40 p-0">

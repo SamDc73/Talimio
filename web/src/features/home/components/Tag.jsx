@@ -82,7 +82,7 @@ function Tag({
 				<button
 					type="button"
 					onClick={handleRemove}
-					className="ml-1 hover:bg-destructive/10 hover:text-destructive rounded-full p-0.5 transition-colors"
+					className="ml-1 p-0.5 text-current/70 transition-colors hover:text-destructive focus-visible:outline-none"
 					aria-label="Remove tag"
 				>
 					<X size={removeIconSize} />

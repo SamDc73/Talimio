@@ -121,9 +121,9 @@ export default function HomePage() {
 		return (
 			<div className="min-h-screen bg-linear-to-b from-background to-muted/40">
 				<MainHeader transparent />
-				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
+				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-xl pt-3xl">
 					<WelcomeHeader />
-					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-lg mt-lg">
 						<SkeletonGrid count={6} />
 					</div>
 				</div>
@@ -136,7 +136,7 @@ export default function HomePage() {
 			<ErrorBoundary>
 				<div className="min-h-screen bg-linear-to-b from-background to-muted/40">
 					<MainHeader transparent />
-					<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pt-28">
+					<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-xl pt-3xl">
 						<WelcomeHeader />
 
 						<SearchBar
@@ -221,24 +221,24 @@ export default function HomePage() {
 							/>
 							{/* Add pagination if we have more than one page */}
 							{totalPages > 1 && (
-								<div className="mt-8 flex justify-center">
-									<div className="flex gap-2">
+								<div className="mt-xl flex justify-center">
+									<div className="flex gap-2xs">
 										<button
 											type="button"
 											onClick={() => setPage(Math.max(0, page - 1))}
 											disabled={page === 0}
-											className="px-4 py-2 rounded-md bg-muted hover:bg-muted/70 disabled:opacity-50"
+											className="rounded-md bg-muted px-md py-2xs hover:bg-muted/70 disabled:opacity-50"
 										>
 											Previous
 										</button>
-										<span className="px-4 py-2">
+										<span className="px-md py-2xs">
 											Page {page + 1} of {totalPages}
 										</span>
 										<button
 											type="button"
 											onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
 											disabled={page >= totalPages - 1}
-											className="px-4 py-2 rounded-md bg-muted hover:bg-muted/70 disabled:opacity-50"
+											className="rounded-md bg-muted px-md py-2xs hover:bg-muted/70 disabled:opacity-50"
 										>
 											Next
 										</button>

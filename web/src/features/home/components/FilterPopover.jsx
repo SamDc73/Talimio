@@ -58,8 +58,8 @@ function FilterPopover({
 	return (
 		<Popover>
 			<PopoverTrigger asChild>
-				<Button variant="outline" size="sm" className="flex items-center gap-1">
-					<SlidersHorizontal className="mr-1 size-3.5" />
+				<Button variant="outline" size="sm" className="h-9 flex items-center gap-2xs border-border/60">
+					<SlidersHorizontal className="size-md" />
 					Filters
 				</Button>
 			</PopoverTrigger>

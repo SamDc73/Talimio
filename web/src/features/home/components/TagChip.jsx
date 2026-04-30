@@ -18,7 +18,7 @@ function TagChip({ tag, contentType }) {
 		}
 	}
 
-	return <div className={`text-xs font-medium px-2 py-1 rounded-full ${getTagClasses(contentType)}`}>{tag}</div>
+	return <div className={`rounded-full px-xs py-3xs text-xs font-medium ${getTagClasses(contentType)}`}>{tag}</div>
 }
 
 export default TagChip

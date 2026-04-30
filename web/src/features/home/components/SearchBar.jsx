@@ -45,15 +45,15 @@ function SearchBar({
 		if (isGenerateMode) {
 			return (
 				<>
-					<div className="h-8 w-px bg-border" />
-					<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
+					<div className="h-8 w-px bg-border/60" />
+					<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="h-9 text-muted-foreground">
 						Cancel
 					</Button>
 					<Button
 						size="sm"
 						onClick={onGenerateCourse}
 						disabled={!searchQuery.trim() || isGenerating}
-						className="bg-course text-course-text hover:bg-course-accent"
+						className="h-9 bg-course text-course-text hover:bg-course-accent"
 					>
 						{isGenerating ? "Generating..." : "Generate"}
 					</Button>
@@ -64,8 +64,8 @@ function SearchBar({
 		if (isYoutubeMode) {
 			return (
 				<>
-					<div className="h-8 w-px bg-border" />
-					<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="text-muted-foreground">
+					<div className="h-8 w-px bg-border/60" />
+					<Button variant="ghost" size="sm" onClick={() => onSetMode(null)} className="h-9 text-muted-foreground">
 						Cancel
 					</Button>
 					<Button
@@ -77,7 +77,7 @@ function SearchBar({
 							}
 						}}
 						disabled={!searchQuery.trim()}
-						className="bg-video text-video-text hover:bg-video-accent"
+						className="h-9 bg-video text-video-text hover:bg-video-accent"
 					>
 						Add Video
 					</Button>
@@ -87,11 +87,11 @@ function SearchBar({
 
 		return (
 			<>
-				<Button onClick={onGenerateCourse} size="sm" className="gap-1 shadow-sm">
-					<Sparkles className="size-3.5 " />
+				<Button size="sm" onClick={onGenerateCourse} className="h-9 gap-2xs shadow-sm">
+					<Sparkles className="size-4" />
 					Generate Course
 				</Button>
-				<div className="h-8 w-px bg-border" />
+				<div className="h-8 w-px bg-border/60" />
 				<FilterPopover
 					filterOptions={filterOptions}
 					sortOptions={sortOptions}
@@ -115,30 +115,30 @@ function SearchBar({
 			initial={{ opacity: 0, y: 20 }}
 			animate={{ opacity: 1, y: 0 }}
 			transition={{ duration: 0.5, delay: 0.1 }}
-			className="max-w-2xl mx-auto mb-6"
+			className="mx-auto mb-lg max-w-container-2xl"
 		>
-			<div className="bg-card rounded-2xl shadow-sm p-2 border border-border transition-all hover:shadow-md">
-				<div className="flex items-center">
-					<div
-						className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl transition-all ${searchModeBackgroundClass}`}
+			<div
+				className={`flex items-center gap-3 rounded-xl border border-border/50 bg-card/95 px-3 py-2 shadow-sm transition-colors hover:border-border/70 ${searchModeBackgroundClass}`}
+			>
+				{searchModeIcon}
+				<Input
+					type="text"
+					placeholder={searchPlaceholder}
+					className="h-9 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+					value={searchQuery}
+					onChange={(e) => setSearchQuery(e.target.value)}
+				/>
+				{searchQuery && (
+					<Button
+						variant="ghost"
+						size="icon"
+						onClick={() => setSearchQuery("")}
+						className="size-8 rounded-md text-muted-foreground/70 hover:bg-transparent hover:text-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
 					>
-						{searchModeIcon}
-						<Input
-							type="text"
-							placeholder={searchPlaceholder}
-							className="border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent"
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-						/>
-						{searchQuery && (
-							<Button variant="ghost" size="icon" onClick={() => setSearchQuery("")} className="size-8 ">
-								<X className="size-4 " />
-							</Button>
-						)}
-					</div>
-
-					<div className="flex items-center gap-2 pl-2">{renderActionControls()}</div>
-				</div>
+						<X className="size-4" />
+					</Button>
+				)}
+				{renderActionControls()}
 			</div>
 		</motion.div>
 	)

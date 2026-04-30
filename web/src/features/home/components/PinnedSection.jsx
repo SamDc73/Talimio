@@ -10,19 +10,19 @@ export default function PinnedSection({ pinnedItems, renderCard }) {
 				initial={{ opacity: 0, height: 0 }}
 				animate={{ opacity: 1, height: "auto" }}
 				exit={{ opacity: 0, height: 0 }}
-				className="mb-8"
+				className="mb-xl"
 			>
-				<div className="flex items-center gap-2 mb-4">
-					<Pin className="size-4  text-completed" />
+				<div className="mb-md flex items-center gap-2xs">
+					<Pin className="size-md text-completed" />
 
 					<h2 className="text-xl font-semibold">Pinned</h2>
 				</div>
-				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+				<div className="grid grid-cols-1 gap-lg md:grid-cols-2 lg:grid-cols-3">
 					<AnimatePresence mode="popLayout">
 						{pinnedItems.map((item, index) => renderCard(item, index))}
 					</AnimatePresence>
 				</div>
-				<div className="border-b border-border my-8" />
+				<div className="my-xl border-b border-border" />
 			</motion.section>
 		</AnimatePresence>
 	)
