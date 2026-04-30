@@ -180,7 +180,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--tb=short -v --failed-first"
+addopts = "--tb=short -v --failed-first --strict-markers --import-mode=importlib"
 pythonpath = [".", "tests/fixtures"]
 markers = [
     "smoke: Critical tests for quick validation",
@@ -211,16 +211,32 @@ exclude_lines = [
 [tool.ty.rules]
 invalid-assignment = "error"
 invalid-argument-type = "error"
+invalid-attribute-access = "error"
+invalid-await = "error"
+invalid-context-manager = "error"
 invalid-return-type = "error"
 call-non-callable = "error"
 unresolved-reference = "error"
+unresolved-attribute = "error"
 conflicting-declarations = "error"
 duplicate-base = "error"
 division-by-zero = "error"
 unresolved-import = "warn"
 invalid-type-checking-constant = "error"
 invalid-type-form = "error"
+missing-argument = "error"
+unknown-argument = "error"
+unsupported-operator = "error"
+unused-awaitable = "error"
+unused-ignore-comment = "error"
+unused-type-ignore-comment = "error"
+ignore-comment-unknown-rule = "error"
+invalid-ignore-comment = "error"
 deprecated = "warn"
+possibly-missing-attribute = "warn"
+possibly-missing-import = "warn"
+possibly-missing-submodule = "warn"
+possibly-unresolved-reference = "warn"
 redundant-cast = "warn"
 
 [tool.ty.environment]
