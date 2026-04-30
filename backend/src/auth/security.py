@@ -4,7 +4,6 @@
 import hashlib
 import hmac
 from datetime import UTC, datetime
-from typing import Any
 
 import jwt
 from pwdlib import PasswordHash
@@ -44,10 +43,10 @@ def get_csrf_signing_key() -> str:
 
 
 def create_access_token(
-    subject: str | Any,
+    subject: object,
     *,
     token_version: int = 0,
-    session_id: str | Any | None = None,
+    session_id: object | None = None,
 ) -> str:
     """Create a signed JWT access token for cookie transport."""
     now = datetime.now(UTC)

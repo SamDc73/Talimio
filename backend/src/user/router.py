@@ -4,9 +4,11 @@ This router handles endpoints that operate on the currently authenticated user,
 eliminating the need to pass user_id in the URL.
 """
 
-from typing import Annotated, Any
+from collections.abc import Sequence
+from typing import Annotated
 
 from fastapi import APIRouter, Query
+from pydantic import BaseModel
 
 from src.auth import CurrentAuth
 from src.user.schemas import (
@@ -28,6 +30,13 @@ router = APIRouter(
     prefix="/api/v1/user",
     tags=["current-user"],
 )
+
+
+class UserMemoriesResponse(BaseModel):
+    """Current user's memory list response."""
+
+    memories: Sequence[object]
+    total: int
 
 
 @router.get("/settings")
@@ -66,7 +75,7 @@ async def update_current_user_instructions(
 async def get_current_user_memories(
     auth: CurrentAuth,
     limit: Annotated[int, Query(ge=1, le=100, description="Max memories to return")] = 100,
-) -> dict[str, Any]:
+) -> UserMemoriesResponse:
     """
     Get all memories for the current user.
 
@@ -75,7 +84,7 @@ async def get_current_user_memories(
         Dict with memories list and total count
     """
     memories = await get_user_memories(auth.user_id, limit=limit)
-    return {"memories": memories, "total": len(memories)}
+    return UserMemoriesResponse(memories=memories, total=len(memories))
 
 
 @router.delete("/memories")

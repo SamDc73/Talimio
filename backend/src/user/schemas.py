@@ -1,8 +1,6 @@
 """User-related schemas for API endpoints."""
 
-from typing import Any
-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 from src.config.schema_casing import build_camel_config
 
@@ -11,7 +9,7 @@ class UserPreferences(BaseModel):
     """User preferences model."""
 
     theme: str = "system"
-    user_preferences: dict[str, Any] | None = None
+    user_preferences: dict[str, JsonValue] | None = None
 
     model_config = build_camel_config()
 

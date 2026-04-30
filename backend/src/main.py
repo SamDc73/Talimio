@@ -31,7 +31,7 @@ from .books.router import router as books_router
 
 # Setup logging
 from .config.logging import setup_logging
-from .config.settings import get_settings
+from .config.settings import Settings, get_settings
 from .content.router import router as content_router
 from .courses.router import router as courses_router
 from .database.migrate import apply_migrations, assert_migrations_current, validate_vector_schema_dimensions
@@ -136,17 +136,16 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     await _shutdown()
 
 
-def _get_cors_allow_origins(settings: Any) -> list[str]:
-    configured = (getattr(settings, "CORS_ALLOW_ORIGINS", "") or "").strip()
+def _get_cors_allow_origins(settings: Settings) -> list[str]:
+    configured = settings.CORS_ALLOW_ORIGINS.strip()
     if configured:
         origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
         if origins:
             return origins
 
     origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
-    frontend_url = getattr(settings, "FRONTEND_URL", "")
-    if isinstance(frontend_url, str) and frontend_url:
-        parsed = urlsplit(frontend_url)
+    if settings.FRONTEND_URL:
+        parsed = urlsplit(settings.FRONTEND_URL)
         if parsed.scheme and parsed.netloc:
             frontend_origin = f"{parsed.scheme}://{parsed.netloc}"
             if frontend_origin not in origins:
@@ -154,7 +153,7 @@ def _get_cors_allow_origins(settings: Any) -> list[str]:
     return origins
 
 
-def _configure_middlewares(app: FastAPI, settings: Any) -> None:
+def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
     """Register built-in middlewares."""
     session_secret = get_session_signing_key()
     csrf_secret = get_csrf_signing_key()

@@ -1,5 +1,5 @@
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any
 
 from fastapi import status
 from pydantic import BaseModel
@@ -64,7 +64,7 @@ class ApiError(BaseModel):
     code: str
     detail: str
     suggestions: list[str] | None = None
-    metadata: dict[str, Any] | None = None
+    metadata: Mapping[str, object] | None = None
 
 
 class ApiErrorEnvelope(BaseModel):
@@ -87,7 +87,7 @@ class DomainError(Exception):
         message: str,
         *,
         error_code: str | ErrorCode | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: Mapping[str, object] | None = None,
         suggestions: list[str] | None = None,
         feature_area: str | None = None,
         status_code: int | None = None,
@@ -150,7 +150,7 @@ class NotFoundError(DomainError):
         resource_id: str | None = None,
         *,
         message: str | None = None,
-        metadata: dict[str, Any] | None = None,
+        metadata: Mapping[str, object] | None = None,
         suggestions: list[str] | None = None,
         feature_area: str | None = None,
     ) -> None:

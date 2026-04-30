@@ -1,7 +1,6 @@
 """HTTP request middleware and route helpers for observability."""
 
 import time
-from typing import Any
 
 import structlog
 from fastapi import FastAPI, Request
@@ -12,6 +11,7 @@ from src.auth.request_state import get_local_session_id_from_state, get_user_id_
 from src.config.settings import Settings
 from src.observability.event_fields import get_feature_area
 from src.observability.log_context import (
+    LogContextValue,
     get_log_context,
     reset_log_context,
     set_log_context,
@@ -31,7 +31,7 @@ def get_request_route(request: Request) -> str:
     return request.url.path
 
 
-def _set_request_span_attributes(attributes: dict[str, Any]) -> None:
+def _set_request_span_attributes(attributes: dict[str, LogContextValue]) -> None:
     """Attach request-level attributes to the active span when recording."""
     span = trace.get_current_span()
     if not span.is_recording():
@@ -46,7 +46,7 @@ def _set_request_span_attributes(attributes: dict[str, Any]) -> None:
         span.set_attribute(key, str(value))
 
 
-def _build_request_context(request: Request, route: str) -> dict[str, Any]:
+def _build_request_context(request: Request, route: str) -> dict[str, LogContextValue]:
     """Build the request-scoped context used by logging processors."""
     return {
         "route": route,
@@ -61,7 +61,7 @@ def _build_request_context(request: Request, route: str) -> dict[str, Any]:
     }
 
 
-def _log_completed_request(request: Request, started_at: float, request_context: dict[str, Any]) -> None:
+def _log_completed_request(request: Request, started_at: float, request_context: dict[str, LogContextValue]) -> None:
     resolved_route = get_request_route(request)
     status_code = request_context.get("status_code")
 

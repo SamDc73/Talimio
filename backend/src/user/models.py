@@ -3,8 +3,8 @@
 
 import uuid
 from datetime import datetime
-from typing import Any
 
+from pydantic import JsonValue
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -50,7 +50,7 @@ class UserPreferences(Base):
     __tablename__ = "user_preferences"
 
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    preferences: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    preferences: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -70,7 +70,7 @@ class UserMCPServer(Base):
     url: Mapped[str] = mapped_column(String(1024), nullable=False)
     auth_type: Mapped[str] = mapped_column(String(20), nullable=False, default="none")
     auth_token: Mapped[str | None] = mapped_column(Text, nullable=True)
-    static_headers: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    static_headers: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False, default=dict)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

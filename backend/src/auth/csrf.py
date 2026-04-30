@@ -3,15 +3,15 @@
 
 import http.cookies
 import ipaddress
+import re
 import secrets
-from collections.abc import Awaitable, Callable, MutableMapping
-from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import Response
 from itsdangerous import URLSafeSerializer
 from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
+from starlette.types import ASGIApp, Message, Scope, Send
 from starlette_csrf import CSRFMiddleware
 
 from src.auth.security import get_csrf_signing_key
@@ -76,20 +76,44 @@ class CSRFMiddlewareWithMaxAge(CSRFMiddleware):
 
     def __init__(
         self,
-        app: Any,
+        app: ASGIApp,
         secret: str,
         *,
         cookie_max_age: int | None = CSRF_COOKIE_MAX_AGE,
-        **kwargs: Any,
+        required_urls: list[re.Pattern[str]] | None = None,
+        exempt_urls: list[re.Pattern[str]] | None = None,
+        sensitive_cookies: set[str] | None = None,
+        safe_methods: set[str] | None = None,
+        cookie_name: str = CSRF_COOKIE_NAME,
+        cookie_path: str = CSRF_COOKIE_PATH,
+        cookie_domain: str | None = None,
+        cookie_secure: bool = False,
+        cookie_httponly: bool = False,
+        cookie_samesite: str = CSRF_COOKIE_SAMESITE,
+        header_name: str = "x-csrftoken",
     ) -> None:
         self.cookie_max_age = cookie_max_age
-        super().__init__(app, secret, **kwargs)
+        super().__init__(
+            app,
+            secret,
+            required_urls=required_urls,
+            exempt_urls=exempt_urls,
+            sensitive_cookies=sensitive_cookies,
+            safe_methods=safe_methods or {"GET", "HEAD", "OPTIONS", "TRACE"},
+            cookie_name=cookie_name,
+            cookie_path=cookie_path,
+            cookie_domain=cookie_domain,
+            cookie_secure=cookie_secure,
+            cookie_httponly=cookie_httponly,
+            cookie_samesite=cookie_samesite,
+            header_name=header_name,
+        )
 
     async def send(
         self,
-        message: MutableMapping[str, Any],
-        send: Callable[[MutableMapping[str, Any]], Awaitable[None]],
-        scope: MutableMapping[str, Any],
+        message: Message,
+        send: Send,
+        scope: Scope,
     ) -> None:
         """Intercept response to set CSRF cookie with Max-Age when missing."""
         request = Request(scope)

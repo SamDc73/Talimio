@@ -13,7 +13,7 @@ prefer passing `CurrentAuth` instead of separate user_id/session pairs over time
 """
 
 import uuid
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, TypeVar
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -45,7 +45,7 @@ class AuthContext:
     async def get_owned(
         self,
         model: type[T],
-        record_id: Any,
+        record_id: object,
         *,
         id_field: str = "id",
     ) -> T | None:
@@ -69,7 +69,7 @@ class AuthContext:
     async def get_or_404(
         self,
         model: type[T],
-        record_id: Any,
+        record_id: object,
         resource_name: str = "resource",
         *,
         id_field: str = "id",

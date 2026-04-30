@@ -34,7 +34,7 @@ async def _load_user_preferences(user_id: uuid.UUID, db_session: AsyncSession) -
         db_preferences = result.scalar_one_or_none()
 
         if db_preferences:
-            return UserPreferences(**db_preferences.preferences)
+            return UserPreferences.model_validate(db_preferences.preferences)
         return UserPreferences()
     except SQLAlchemyError:
         logger.exception("Failed to load preferences for user %s", user_id)
@@ -95,9 +95,10 @@ async def get_user_settings(user_id: uuid.UUID, db_session: AsyncSession) -> Use
         UserSettingsResponse: User's settings, memory information, and preferences
     """
     preferences = await _load_user_preferences(user_id, db_session)
-    custom_instructions = ""
+    raw_custom_instructions = None
     if preferences.user_preferences:
-        custom_instructions = preferences.user_preferences.get("custom_instructions", "")
+        raw_custom_instructions = preferences.user_preferences.get("custom_instructions")
+    custom_instructions = raw_custom_instructions if isinstance(raw_custom_instructions, str) else ""
 
     memory_count = 0
     try:

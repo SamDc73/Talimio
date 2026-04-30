@@ -1,7 +1,5 @@
 """Shared casing helpers for API schema serialization."""
 
-from typing import Any
-
 from pydantic import ConfigDict
 
 
@@ -14,6 +12,6 @@ def to_camel(field_name: str) -> str:
     return head + "".join(part.capitalize() for part in tail)
 
 
-def build_camel_config(**overrides: Any) -> ConfigDict:
+def build_camel_config(**overrides: object) -> ConfigDict:
     """Build a consistent camelCase Pydantic config."""
     return ConfigDict(alias_generator=to_camel, populate_by_name=True, **overrides)

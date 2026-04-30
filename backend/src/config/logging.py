@@ -5,10 +5,11 @@ import logging
 import logging.config
 import re
 from collections.abc import MutableMapping
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from opentelemetry import trace
+from structlog.typing import Processor
 
 from src.config.settings import Settings, get_settings
 from src.observability.event_fields import get_feature_area
@@ -67,7 +68,10 @@ _RUNTIME_METADATA: dict[str, str] = {
 }
 
 
-def _normalize_event_name(raw_value: Any, fallback: str) -> str:
+type ProcessorEventDict = MutableMapping[str, object]
+
+
+def _normalize_event_name(raw_value: object, fallback: str) -> str:
     text_value = str(raw_value).strip() if raw_value is not None else ""
     if not text_value:
         text_value = fallback
@@ -91,10 +95,10 @@ def _set_runtime_metadata(*, env: str, release: str) -> None:
 
 
 def _attach_request_context(
-    _logger: Any,
+    _logger: object,
     _method_name: str,
-    event_dict: MutableMapping[str, Any],
-) -> MutableMapping[str, Any]:
+    event_dict: ProcessorEventDict,
+) -> ProcessorEventDict:
     context = get_log_context()
     for field_name in _CONTEXT_EVENT_FIELDS:
         current_value = event_dict.get(field_name)
@@ -106,10 +110,10 @@ def _attach_request_context(
 
 
 def _attach_access_log_context(
-    _logger: Any,
+    _logger: object,
     _method_name: str,
-    event_dict: MutableMapping[str, Any],
-) -> MutableMapping[str, Any]:
+    event_dict: ProcessorEventDict,
+) -> ProcessorEventDict:
     record = event_dict.get("_record")
     if not isinstance(record, logging.LogRecord) or record.name != _UVICORN_ACCESS_LOGGER_NAME:
         return event_dict
@@ -118,7 +122,7 @@ def _attach_access_log_context(
     if not isinstance(raw_args, tuple) or len(raw_args) < 5:
         return event_dict
 
-    args = cast("tuple[Any, ...]", raw_args)
+    args = cast("tuple[object, ...]", raw_args)
     route = event_dict.get("route") or str(args[2])
     if event_dict.get("route") in {None, ""}:
         event_dict["route"] = route
@@ -130,10 +134,10 @@ def _attach_access_log_context(
 
 
 def _attach_trace_context(
-    _logger: Any,
+    _logger: object,
     _method_name: str,
-    event_dict: MutableMapping[str, Any],
-) -> MutableMapping[str, Any]:
+    event_dict: ProcessorEventDict,
+) -> ProcessorEventDict:
     if event_dict.get("trace_id") not in {None, ""} and event_dict.get("span_id") not in {None, ""}:
         return event_dict
 
@@ -152,10 +156,10 @@ def _attach_trace_context(
 
 
 def _normalize_event_contract(
-    _logger: Any,
+    _logger: object,
     _method_name: str,
-    event_dict: MutableMapping[str, Any],
-) -> MutableMapping[str, Any]:
+    event_dict: ProcessorEventDict,
+) -> ProcessorEventDict:
     record = event_dict.get("_record")
     logger_name = event_dict.get("logger")
 
@@ -192,9 +196,9 @@ def _normalize_event_contract(
 
 
 def _render_json(
-    _logger: Any,
+    _logger: object,
     _method_name: str,
-    event_dict: MutableMapping[str, Any],
+    event_dict: ProcessorEventDict,
 ) -> str:
     payload = {
         key: value
@@ -207,7 +211,7 @@ def _render_json(
     return rendered
 
 
-def _build_shared_processors() -> list[Any]:
+def _build_shared_processors() -> list[Processor]:
     return [
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,

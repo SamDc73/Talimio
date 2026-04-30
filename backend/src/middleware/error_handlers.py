@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from typing import Any
+from collections.abc import Mapping
 
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -12,7 +12,7 @@ from psycopg.errors import (
     NotNullViolation as NotNullViolationError,
     UniqueViolation as UniqueViolationError,
 )
-from pydantic import ValidationError as PydanticValidationError
+from pydantic import JsonValue, ValidationError as PydanticValidationError
 from sqlalchemy.exc import OperationalError
 
 from src.auth.request_state import get_user_id_from_state
@@ -48,7 +48,7 @@ def format_error_response(
     detail: str,
     status_code: int,
     suggestions: list[str] | None = None,
-    metadata: dict[str, Any] | None = None,
+    metadata: Mapping[str, object] | None = None,
 ) -> JSONResponse:
     """Format a consistent error response."""
     payload = ApiErrorEnvelope(
@@ -176,10 +176,15 @@ def handle_database_errors(request: Request, exc: Exception) -> JSONResponse:
         "status_code": status_code,
     }
     log_level = logging.WARNING if severity == "warning" else logging.ERROR
-    log_kwargs: dict[str, Any] = {"extra": log_extra}
     if log_level == logging.ERROR:
-        log_kwargs["exc_info"] = (type(exc), exc, exc.__traceback__)
-    logger.log(log_level, "error.database.handled", **log_kwargs)
+        logger.log(
+            log_level,
+            "error.database.handled",
+            extra=log_extra,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
+    else:
+        logger.log(log_level, "error.database.handled", extra=log_extra)
 
     return format_error_response(
         category=str(ErrorCategory.DATABASE),
@@ -259,7 +264,7 @@ def log_error_context(request: Request, exc: Exception, error_id: uuid.UUID | No
     logger.error("error.unexpected.request_failed", extra=context, exc_info=(type(exc), exc, exc.__traceback__))
 
 
-def _normalize_http_exception_detail(detail: Any) -> tuple[str, dict[str, Any] | None]:
+def _normalize_http_exception_detail(detail: object) -> tuple[str, dict[str, JsonValue] | None]:
     """Normalize HTTPException detail payloads to the canonical envelope."""
     if isinstance(detail, str):
         return detail, None
@@ -267,7 +272,18 @@ def _normalize_http_exception_detail(detail: Any) -> tuple[str, dict[str, Any] |
     if detail is None:
         return "Request failed", None
 
-    return "Request failed", {"detail": detail}
+    return "Request failed", {"detail": _json_safe_detail(detail)}
+
+
+def _json_safe_detail(detail: object) -> JsonValue:
+    """Keep HTTPException detail payloads within the JSON error contract."""
+    if detail is None or isinstance(detail, (str, int, float, bool)):
+        return detail
+    if isinstance(detail, list):
+        return [_json_safe_detail(item) for item in detail]
+    if isinstance(detail, dict):
+        return {str(key): _json_safe_detail(value) for key, value in detail.items()}
+    return str(detail)
 
 
 def _resolve_http_exception_contract(status_code: int) -> tuple[ErrorCategory, ErrorCode]:

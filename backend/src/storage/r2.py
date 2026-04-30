@@ -1,6 +1,7 @@
 """Cloudflare R2 storage implementation using aioboto3."""
 
-from typing import Any
+from contextlib import AbstractAsyncContextManager
+from typing import Protocol, cast
 
 import aioboto3
 from botocore.client import Config
@@ -13,6 +14,22 @@ from .exceptions import (
     FileDownloadError,
     FileUploadError,
 )
+
+
+class _StorageBody(Protocol):
+    async def read(self) -> bytes: ...
+
+
+class _S3Client(Protocol):
+    async def put_object(self, **kwargs: object) -> object: ...
+
+    async def generate_presigned_url(self, **kwargs: object) -> str: ...
+
+    async def delete_object(self, **kwargs: object) -> object: ...
+
+    async def get_object(self, **kwargs: object) -> dict[str, _StorageBody]: ...
+
+    async def put_bucket_cors(self, **kwargs: object) -> object: ...
 
 
 class R2Storage(AbstractStorage):
@@ -42,15 +59,18 @@ class R2Storage(AbstractStorage):
         self.region = region
         self._session = aioboto3.Session()
 
-    async def _get_client(self) -> Any:
+    async def _get_client(self) -> AbstractAsyncContextManager[_S3Client]:
         """Get an S3 client instance."""
-        return self._session.client(
+        return cast(
+            "AbstractAsyncContextManager[_S3Client]",
+            self._session.client(
             "s3",
             endpoint_url=self.endpoint_url,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.secret_access_key,
             region_name=self.region,
             config=Config(signature_version="s3v4"),
+            ),
         )
 
     async def upload(self, file_content: bytes, key: str) -> None:
