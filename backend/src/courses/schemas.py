@@ -2,10 +2,11 @@
 """Pydantic schemas for the unified courses API."""
 
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from src.config.schema_casing import to_camel
 
@@ -556,7 +557,7 @@ class GradeResponse(BaseModel):
         None,
         description="Optional LaTeX fragment to highlight for targeted feedback",
     )
-    feedback_metadata: dict[str, Any] | None = Field(
+    feedback_metadata: dict[str, JsonValue] | None = Field(
         None,
         description="Optional structured metadata with verifier deltas (for example deltaX, deltaY, off-by info)",
     )
@@ -778,6 +779,6 @@ class RuntimeListRequest(BaseModel):
 class RuntimeToolResponse(BaseModel):
     """Generic runtime tool response payload."""
 
-    data: dict[str, Any]
+    data: Mapping[str, object]
 
     model_config = ConfigDict(**_CAMEL_CONFIG)

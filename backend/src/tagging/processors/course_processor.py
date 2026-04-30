@@ -3,7 +3,7 @@
 import json
 import logging
 import uuid
-from typing import Any
+from typing import TypedDict
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,6 +13,23 @@ from src.courses.models import Course, Lesson
 
 
 logger = logging.getLogger(__name__)
+
+
+class ModuleGroup(TypedDict):
+    """Lessons grouped under one course module."""
+
+    name: str
+    order: int | None
+    lessons: list[Lesson]
+    first_index: int
+
+
+class WorkingModuleGroup(TypedDict):
+    """Mutable module grouping state before the module name is added."""
+
+    order: int | None
+    lessons: list[Lesson]
+    first_index: int
 
 
 class CourseProcessor:
@@ -84,9 +101,9 @@ class CourseProcessor:
         preview = "\n\n".join(parts)
         return self._truncate_preview(preview, max_length)
 
-    def _group_lessons_by_module(self, lessons: list[Lesson]) -> list[dict[str, Any]]:
+    def _group_lessons_by_module(self, lessons: list[Lesson]) -> list[ModuleGroup]:
         """Group lessons by module name while preserving ordering."""
-        groups: dict[str, dict[str, Any]] = {}
+        groups: dict[str, WorkingModuleGroup] = {}
         for index, lesson in enumerate(lessons):
             module_name = lesson.module_name or "Lessons"
             entry = groups.setdefault(
@@ -106,22 +123,23 @@ class CourseProcessor:
             entry["lessons"].append(lesson)
             entry["first_index"] = min(entry["first_index"], index)
 
-        return sorted(
-            (
-                {
-                    "name": name,
-                    "order": data.get("order"),
-                    "lessons": data["lessons"],
-                    "first_index": data["first_index"],
-                }
-                for name, data in groups.items()
-            ),
-            key=lambda item: (
-                item["order"] is None,
-                item["order"] if item["order"] is not None else item["first_index"],
-                item["first_index"],
-            ),
-        )
+        module_groups: list[ModuleGroup] = [
+            {
+                "name": name,
+                "order": data["order"],
+                "lessons": data["lessons"],
+                "first_index": data["first_index"],
+            }
+            for name, data in groups.items()
+        ]
+        return sorted(module_groups, key=self._module_sort_key)
+
+    @staticmethod
+    def _module_sort_key(module: ModuleGroup) -> tuple[bool, int, int]:
+        """Sort modules by explicit order, then by first lesson position."""
+        order = module["order"]
+        first_index = module["first_index"]
+        return (order is None, order if order is not None else first_index, first_index)
 
     def _add_course_metadata(self, course: Course, parts: list[str]) -> None:
         """Add course metadata to preview parts."""
@@ -140,7 +158,7 @@ class CourseProcessor:
             except (TypeError, ValueError) as e:
                 logger.debug("Failed to parse existing tags: %s", e)
 
-    def _add_module_outline(self, modules: list[dict[str, Any]], parts: list[str]) -> None:
+    def _add_module_outline(self, modules: list[ModuleGroup], parts: list[str]) -> None:
         """Add module outline to preview parts."""
         if not modules:
             return
@@ -155,7 +173,7 @@ class CourseProcessor:
         if outline_entries:
             parts.append("\n".join(outline_entries))
 
-    def _add_module_content_preview(self, modules: list[dict[str, Any]], parts: list[str]) -> None:
+    def _add_module_content_preview(self, modules: list[ModuleGroup], parts: list[str]) -> None:
         """Add detailed module content preview."""
         if not modules:
             return

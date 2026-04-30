@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 from src.config.schema_casing import build_camel_config
 
@@ -100,7 +100,7 @@ class BookContent(ContentItemBase):
     author: str  # Required for books
     page_count: int | None = None
     current_page: int = 0
-    toc_progress: dict[str, Any] | None = None  # Internal use
+    toc_progress: dict[str, JsonValue] | None = None  # Internal use
 
     model_config = build_camel_config()
 

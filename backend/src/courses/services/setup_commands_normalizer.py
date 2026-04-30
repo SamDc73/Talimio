@@ -2,7 +2,6 @@
 
 import json
 import shlex
-from typing import Any
 
 
 _GLOBAL_INSTALL_FLAGS = {"-g", "--global"}
@@ -20,7 +19,7 @@ _RUSTUP_SCRIPT_MARKER = "sh.rustup.rs"
 _RUSTUP_APT_COMMAND = "apt-get update && apt-get install -y --no-install-recommends rustc cargo"
 
 
-def normalize_setup_commands_payload(value: Any) -> list[str]:
+def normalize_setup_commands_payload(value: object) -> list[str]:
     """Normalize setup_commands payloads from list/scalar/json-string sources."""
     return normalize_setup_commands(_coerce_setup_commands(value))
 
@@ -38,7 +37,7 @@ def normalize_setup_commands(commands: list[str]) -> list[str]:
     return normalized
 
 
-def _coerce_setup_commands(value: Any) -> list[str]:
+def _coerce_setup_commands(value: object) -> list[str]:
     if value is None:
         return []
 

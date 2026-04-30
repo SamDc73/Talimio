@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.models import PlanAction
+from src.ai.models import ExecutionPlan, PlanAction
 
 
 """AI-powered code execution service using E2B Code Interpreter sandboxes.
@@ -26,7 +26,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypedDict
 
 from fastapi import status
 from sqlalchemy import update
@@ -117,6 +117,78 @@ class WorkspaceFile:
     content: str
 
 
+class _WorkspaceContext(TypedDict):
+    entry_file: str
+    workspace_dir: str
+    manifest: list[str]
+    identifier: str
+
+
+class _RuntimeStartResponse(TypedDict):
+    process_id: int
+    running: bool
+    cwd: str | None
+    user: str
+
+
+class _RuntimeOutputResponse(TypedDict):
+    process_id: int
+    running: bool
+    exit_code: object
+    stdout: str
+    stderr: str
+    stdout_complete: str
+    stderr_complete: str
+
+
+class _RuntimeInputResponse(TypedDict):
+    process_id: int
+    accepted: bool
+    bytes_sent: int
+
+
+class _RuntimeStopResponse(TypedDict):
+    process_id: int
+    stopped: bool
+    killed: bool
+
+
+class _RuntimeEntry(TypedDict):
+    type: str
+    size: int
+    path: str
+
+
+class _RuntimeEntriesResponse(TypedDict):
+    path: str
+    depth: int
+    entries: list[_RuntimeEntry]
+
+
+class _SandboxState(TypedDict):
+    apt_updated: bool
+
+
+class _SandboxCommandResult(TypedDict):
+    exit_code: object
+    stdout: str
+    stderr: str
+
+
+class _SandboxWriteResult(TypedDict):
+    written: bool
+
+
+class _SandboxDirEntry(TypedDict):
+    path: str
+    type: str
+
+
+class _SandboxResetResult(TypedDict):
+    status: str
+    scope_key: str
+
+
 def _execution_error_category(status_code: int) -> ErrorCategory:
     if status_code == status.HTTP_404_NOT_FOUND:
         return ErrorCategory.RESOURCE_NOT_FOUND
@@ -179,7 +251,7 @@ class CodeExecutionService:
     # In-memory session cache: key -> (created_time, sandbox)
     _sessions: ClassVar[dict[str, tuple[float, Any]]] = {}
     # In-memory plan cache: cache_key -> ExecutionPlan (simple dict, no Redis)
-    _plan_cache: ClassVar[dict[str, Any]] = {}
+    _plan_cache: ClassVar[dict[str, ExecutionPlan]] = {}
     # Course setup tracking: sandbox_key -> bool
     _setup_done_by_key: ClassVar[dict[str, bool]] = {}
     # Runtime process handles keyed by sandbox scope then pid.
@@ -303,7 +375,7 @@ class CodeExecutionService:
                 setup_commands=normalized_setup_commands,
             )
 
-        workspace_context: dict[str, Any] | None = None
+        workspace_context: _WorkspaceContext | None = None
         if files:
             workspace_context = await self._prepare_workspace(
                 sbx=sbx,
@@ -359,7 +431,7 @@ class CodeExecutionService:
 
         # Try cached plan
         cache_key: str | None = None
-        cached_plan: Any | None = None
+        cached_plan: ExecutionPlan | None = None
         if not is_workspace_mode:
             cache_key = self._plan_cache_key(course_id, language, source_code)
             cached_plan = self._plan_cache.get(cache_key)
@@ -418,7 +490,7 @@ class CodeExecutionService:
         cwd: str | None,
         env: dict[str, str] | None,
         user: str | None,
-    ) -> dict[str, Any]:
+    ) -> _RuntimeStartResponse:
         """Start a long-lived command process in the scoped sandbox."""
         key = self._session_key(user_id, course_id)
         sbx = await self._get_sandbox(key)
@@ -511,7 +583,7 @@ class CodeExecutionService:
         user_id: str | None,
         course_id: str | None,
         workspace_id: str | None,
-    ) -> dict[str, Any]:
+    ) -> _RuntimeOutputResponse:
         """Read incremental and full output buffers for a runtime process."""
         key = self._session_key(user_id, course_id)
         sbx = self._get_existing_sandbox_or_raise(key)
@@ -561,7 +633,7 @@ class CodeExecutionService:
         user_id: str | None,
         course_id: str | None,
         workspace_id: str | None,
-    ) -> dict[str, Any]:
+    ) -> _RuntimeInputResponse:
         """Send stdin text to a running runtime process."""
         key = self._session_key(user_id, course_id)
         sbx = self._get_existing_sandbox_or_raise(key)
@@ -609,7 +681,7 @@ class CodeExecutionService:
         course_id: str | None,
         workspace_id: str | None,
         wait_timeout_seconds: float | None,
-    ) -> dict[str, Any]:
+    ) -> _RuntimeStopResponse:
         """Stop a runtime process and clean up local tracking state."""
         key = self._session_key(user_id, course_id)
         sbx = self._get_existing_sandbox_or_raise(key)
@@ -662,7 +734,7 @@ class CodeExecutionService:
         user_id: str | None,
         course_id: str | None,
         workspace_id: str | None,
-    ) -> dict[str, Any]:
+    ) -> _RuntimeEntriesResponse:
         """List files and directories inside the runtime scope."""
         key = self._session_key(user_id, course_id)
         sbx = await self._get_sandbox(key)
@@ -698,7 +770,7 @@ class CodeExecutionService:
                 msg, status_code=status.HTTP_502_BAD_GATEWAY, error_code="runtime_list_failed"
             ) from exc
 
-        entries: list[dict[str, Any]] = []
+        entries: list[_RuntimeEntry] = []
         stdout = str(getattr(result, "stdout", "") or "")
         for raw_line in stdout.splitlines():
             if "\t" not in raw_line:
@@ -1030,8 +1102,8 @@ class CodeExecutionService:
             workspace_root=workspace_root,
         )
 
-    async def _gather_sandbox_state(self, sbx: Any) -> dict[str, Any]:
-        state: dict[str, Any] = {}
+    async def _gather_sandbox_state(self, sbx: Any) -> _SandboxState:
+        state: _SandboxState = {"apt_updated": False}
         try:
             await sbx.files.read(self._apt_sentinel)
             state["apt_updated"] = True
@@ -1045,7 +1117,7 @@ class CodeExecutionService:
             cwd: str | None,
             user: str | None,
             timeout_seconds: int | None,
-        ) -> dict[str, Any]:
+        ) -> _SandboxCommandResult:
             timeout = timeout_seconds or 120
             request_timeout = max(timeout + 30, 60)
             run_user = user or "user"
@@ -1074,17 +1146,17 @@ class CodeExecutionService:
             content = await sbx.files.read(path)
             return str(content)
 
-        async def write_file(path: str, content: str) -> dict[str, Any]:
+        async def write_file(path: str, content: str) -> _SandboxWriteResult:
             await sbx.files.write(path=path, data=content)
             return {"written": True}
 
-        async def list_dir(path: str, depth: int) -> list[dict[str, Any]]:
+        async def list_dir(path: str, depth: int) -> list[_SandboxDirEntry]:
             normalized_path = path.strip() or "."
             quoted_path = shlex.quote(normalized_path)
             command = f"find {quoted_path} -maxdepth {depth} -mindepth 1 -printf '%y\\t%p\\n' | head -n 200"
             run_result = await run_command(command, None, "user", 30)
             stdout = str(run_result.get("stdout", ""))
-            entries: list[dict[str, Any]] = []
+            entries: list[_SandboxDirEntry] = []
             for raw_line in stdout.splitlines():
                 if "\t" not in raw_line:
                     continue
@@ -1093,7 +1165,7 @@ class CodeExecutionService:
                 entries.append({"path": raw_path, "type": entry_type})
             return entries
 
-        async def reset() -> dict[str, Any]:
+        async def reset() -> _SandboxResetResult:
             await run_command(f"rm -rf {WORKSPACES_DIR}/*", None, "user", 30)
             return {"status": "reset", "scope_key": scope_key}
 
@@ -1110,7 +1182,7 @@ class CodeExecutionService:
         self,
         *,
         sbx: Any,
-        plan: Any,
+        plan: ExecutionPlan,
         source_code: str,
         language: str,
         lesson_id: str | None,
@@ -1153,7 +1225,7 @@ class CodeExecutionService:
             workspace_root=workspace_root,
         )
 
-    async def _materialize_plan_files(self, sbx: Any, plan: Any) -> None:
+    async def _materialize_plan_files(self, sbx: Any, plan: ExecutionPlan) -> None:
         if not getattr(plan, "files", None):
             return
 
@@ -1168,7 +1240,7 @@ class CodeExecutionService:
         self,
         *,
         sbx: Any,
-        plan: Any,
+        plan: ExecutionPlan,
         envs: dict[str, str],
         stdout_chunks: list[str],
         stderr_chunks: list[str],
@@ -1606,7 +1678,7 @@ class CodeExecutionService:
         course_id: str | None,
         lesson_id: str | None,
         entry_file: str | None,
-    ) -> dict[str, Any]:
+    ) -> _WorkspaceContext:
         file_list = list(files)
         if not file_list:
             msg = "Workspace execution requires at least one file"

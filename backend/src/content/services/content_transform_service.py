@@ -3,8 +3,12 @@
 import json
 import logging
 import re
-from typing import Any
+import uuid
+from datetime import datetime
+from typing import Protocol
 from urllib.parse import parse_qs, urlparse
+
+from pydantic import JsonValue
 
 from src.content.schemas import (
     BookContent,
@@ -17,6 +21,25 @@ from src.content.schemas import (
 
 logger = logging.getLogger(__name__)
 _YOUTUBE_VIDEO_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+class ContentProjectionRow(Protocol):
+    """Projected content row returned by the unified content list query."""
+
+    id: uuid.UUID
+    type: str
+    title: str
+    description: str
+    extra1: str | None
+    extra2: str | None
+    count1: int | None
+    count2: int | None
+    progress: float | None
+    created_at: datetime
+    last_accessed: datetime | None
+    tags: str | None
+    archived: bool
+    toc_progress: str | None
 
 
 def _is_valid_youtube_video_id(candidate: str) -> bool:
@@ -64,9 +87,23 @@ def _safe_parse_tags(tags_json: str | None) -> list[str]:
     if not tags_json:
         return []
     try:
-        return json.loads(tags_json)
+        parsed = json.loads(tags_json)
     except (json.JSONDecodeError, TypeError):
         return []
+    if not isinstance(parsed, list):
+        return []
+    return [tag for tag in parsed if isinstance(tag, str)]
+
+
+def _safe_parse_json_object(raw_json: str) -> dict[str, JsonValue]:
+    """Parse a JSON object, dropping malformed or non-object payloads."""
+    try:
+        parsed = json.loads(raw_json)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {key: value for key, value in parsed.items() if isinstance(key, str)}
 
 
 def _create_progress_data(percentage: float = 0, completed_items: int = 0, total_items: int = 0) -> ProgressData:
@@ -78,9 +115,9 @@ class ContentTransformService:
     """Service for transforming content data."""
 
     @staticmethod
-    def transform_rows_to_items(rows: list[Any]) -> list[Any]:
+    def transform_rows_to_items(rows: list[ContentProjectionRow]) -> list[VideoContent | BookContent | CourseContent]:
         """Transform database rows to content items."""
-        items: list[Any] = []
+        items: list[VideoContent | BookContent | CourseContent] = []
         for row in rows:
             if row.type == "video":
                 items.append(ContentTransformService._create_video_content(row))
@@ -91,7 +128,7 @@ class ContentTransformService:
         return items
 
     @staticmethod
-    def _create_video_content(row: Any) -> VideoContent:
+    def _create_video_content(row: ContentProjectionRow) -> VideoContent:
         """Create VideoContent from row data."""
         video_id = _extract_youtube_video_id(row.extra2)
 
@@ -101,7 +138,7 @@ class ContentTransformService:
         progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=0)
 
         return VideoContent(
-            id=row.id,
+            id=str(row.id),
             title=row.title,
             description=row.description,
             channel=row.extra1 or "",
@@ -116,15 +153,10 @@ class ContentTransformService:
         )
 
     @staticmethod
-    def _create_book_content(row: Any) -> BookContent:
+    def _create_book_content(row: ContentProjectionRow) -> BookContent:
         """Create BookContent from row data."""
         # Parse toc_progress from JSON string
-        toc_progress = None
-        if hasattr(row, "toc_progress") and row.toc_progress:
-            try:
-                toc_progress = json.loads(row.toc_progress)
-            except (json.JSONDecodeError, TypeError):
-                toc_progress = {}
+        toc_progress = _safe_parse_json_object(row.toc_progress) if row.toc_progress else None
 
         metadata = ContentMetadata(
             pages=row.count1,
@@ -135,7 +167,7 @@ class ContentTransformService:
         progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=0)
 
         return BookContent(
-            id=row.id,
+            id=str(row.id),
             title=row.title,
             description=row.description,
             author=row.extra1 or "",
@@ -151,7 +183,7 @@ class ContentTransformService:
         )
 
     @staticmethod
-    def _create_course_content(row: Any) -> CourseContent:
+    def _create_course_content(row: ContentProjectionRow) -> CourseContent:
         """Create CourseContent from row data."""
         metadata = ContentMetadata(
             ai_generated=True,
@@ -164,7 +196,7 @@ class ContentTransformService:
         )
 
         return CourseContent(
-            id=row.id,
+            id=str(row.id),
             title=row.title,
             description=row.description,
             lesson_count=row.count1 or 0,

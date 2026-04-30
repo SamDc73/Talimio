@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -163,7 +163,7 @@ class BookProgressResponse(BookProgressBase):
 
     @field_validator("bookmarks", mode="before")
     @classmethod
-    def validate_bookmarks(cls, v: str | list[int] | list[Any] | None) -> list[int]:
+    def validate_bookmarks(cls, v: str | list[int] | list[object] | None) -> list[int]:
         """Normalize bookmarks to a list of integers.
 
         Accepts:
@@ -188,7 +188,8 @@ class BookProgressResponse(BookProgressBase):
             for item in v:
                 try:
                     # Allow numeric strings to be coerced
-                    result.append(int(item))
+                    if isinstance(item, str | int | float):
+                        result.append(int(item))
                 except (TypeError, ValueError):
                     # Skip non-coercible entries to maintain type safety
                     continue

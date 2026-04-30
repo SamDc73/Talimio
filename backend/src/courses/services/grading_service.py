@@ -2,10 +2,11 @@
 
 import logging
 import uuid
+from collections.abc import Mapping
 from dataclasses import asdict
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.client import LLMClient
@@ -267,11 +268,11 @@ class GradingService:
                 merged.append(normalized)
         return merged
 
-    def _build_graph_feedback(self, metadata: dict[str, object], is_correct: bool) -> str:
+    def _build_graph_feedback(self, metadata: Mapping[str, object], is_correct: bool) -> str:
         checks_data = metadata.get("checks")
-        checks: list[dict[str, Any]] = []
+        checks: list[dict[str, JsonValue]] = []
         if isinstance(checks_data, list):
-            checks.extend(cast("dict[str, Any]", check) for check in checks_data if isinstance(check, dict))
+            checks.extend(cast("dict[str, JsonValue]", check) for check in checks_data if isinstance(check, dict))
 
         failed = [check for check in checks if not bool(check.get("isCorrect", False))]
         near_boundary = [check for check in checks if bool(check.get("isNearBoundary", False))]

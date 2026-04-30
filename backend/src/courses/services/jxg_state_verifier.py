@@ -2,7 +2,8 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any
+
+from pydantic import JsonValue
 
 from src.courses.schemas import GradeStatus, JXGBoardState
 
@@ -20,7 +21,7 @@ class JXGStateVerificationResult:
     method: str | None
     notes: str | None
     tags: list[str]
-    feedback_metadata: dict[str, Any]
+    feedback_metadata: dict[str, JsonValue]
 
 
 class JXGStateVerifier:
@@ -37,7 +38,7 @@ class JXGStateVerifier:
         global_tolerance = tolerance if tolerance is not None else _DEFAULT_TOLERANCE
         tolerance_overrides = per_check_tolerance or {}
 
-        checks: list[dict[str, Any]] = []
+        checks: list[dict[str, JsonValue]] = []
         checks.extend(self._check_points(expected_state, answer_state, global_tolerance, tolerance_overrides))
         checks.extend(self._check_sliders(expected_state, answer_state, global_tolerance, tolerance_overrides))
         checks.extend(self._check_curves(expected_state, answer_state, global_tolerance, tolerance_overrides))
@@ -62,7 +63,7 @@ class JXGStateVerifier:
         if not is_correct:
             notes = "One or more graph checks are outside tolerance."
 
-        metadata = {
+        metadata: dict[str, JsonValue] = {
             "summary": {
                 "totalChecks": len(checks),
                 "failedChecks": len(failed_checks),
@@ -87,8 +88,8 @@ class JXGStateVerifier:
         answer_state: JXGBoardState,
         global_tolerance: float,
         tolerance_overrides: dict[str, float],
-    ) -> list[dict[str, Any]]:
-        checks: list[dict[str, Any]] = []
+    ) -> list[dict[str, JsonValue]]:
+        checks: list[dict[str, JsonValue]] = []
         for point_id, expected_value in expected_state.points.items():
             check_id = f"point:{point_id}"
             tolerance = self._resolve_tolerance(check_id, global_tolerance, tolerance_overrides)
@@ -143,8 +144,8 @@ class JXGStateVerifier:
         answer_state: JXGBoardState,
         global_tolerance: float,
         tolerance_overrides: dict[str, float],
-    ) -> list[dict[str, Any]]:
-        checks: list[dict[str, Any]] = []
+    ) -> list[dict[str, JsonValue]]:
+        checks: list[dict[str, JsonValue]] = []
         for slider_id, expected_value in expected_state.sliders.items():
             check_id = f"slider:{slider_id}"
             tolerance = self._resolve_tolerance(check_id, global_tolerance, tolerance_overrides)
@@ -193,8 +194,8 @@ class JXGStateVerifier:
         answer_state: JXGBoardState,
         global_tolerance: float,
         tolerance_overrides: dict[str, float],
-    ) -> list[dict[str, Any]]:
-        checks: list[dict[str, Any]] = []
+    ) -> list[dict[str, JsonValue]]:
+        checks: list[dict[str, JsonValue]] = []
         for curve_id, expected_samples in expected_state.curves.items():
             check_id = f"curve:{curve_id}"
             tolerance = self._resolve_tolerance(check_id, global_tolerance, tolerance_overrides)

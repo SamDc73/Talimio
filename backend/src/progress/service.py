@@ -8,8 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import json
 import logging
-from typing import Any
+from collections.abc import Mapping, Sequence
+from datetime import datetime
+from typing import Protocol, TypedDict
 
+from pydantic import JsonValue
 from sqlalchemy import text
 
 from src.exceptions import NotFoundError
@@ -26,6 +29,70 @@ from .queries import (
 logger = logging.getLogger(__name__)
 
 
+class StoredProgress(TypedDict):
+    """Progress payload read from user_progress rows."""
+
+    progress_percentage: float
+    metadata: dict[str, JsonValue]
+
+
+class ProgressRow(Protocol):
+    """Database row fields needed to build progress responses."""
+
+    id: uuid.UUID
+    content_id: uuid.UUID
+    content_type: ContentType
+    progress_percentage: float
+    metadata: object
+    created_at: datetime
+    updated_at: datetime
+
+
+def _json_value_from_unknown(value: object) -> tuple[bool, JsonValue]:
+    """Return JSON-compatible values while dropping arbitrary Python objects."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True, value
+    if isinstance(value, Mapping):
+        normalized: dict[str, JsonValue] = {}
+        for key, item in value.items():
+            valid, json_value = _json_value_from_unknown(item)
+            if isinstance(key, str) and valid:
+                normalized[key] = json_value
+        return True, normalized
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        normalized: list[JsonValue] = []
+        for item in value:
+            valid, json_value = _json_value_from_unknown(item)
+            if valid:
+                normalized.append(json_value)
+        return True, normalized
+    return False, None
+
+
+def _json_object_from_unknown(value: object) -> dict[str, JsonValue]:
+    """Normalize raw JSON metadata into a JSON object."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+    if not isinstance(value, Mapping):
+        return {}
+    normalized: dict[str, JsonValue] = {}
+    for key, item in value.items():
+        valid, json_value = _json_value_from_unknown(item)
+        if isinstance(key, str) and valid:
+            normalized[key] = json_value
+    return normalized
+
+
+def _progress_percentage_from_unknown(value: object) -> float:
+    """Normalize dynamic course progress percentages."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    return 0.0
+
+
 class ProgressService:
     """Service for managing progress across all content types."""
 
@@ -33,7 +100,7 @@ class ProgressService:
         """Initialize progress service."""
         self.session = session
 
-    async def get_batch_progress(self, user_id: uuid.UUID, content_ids: list[uuid.UUID]) -> dict[str, dict[str, Any]]:
+    async def get_batch_progress(self, user_id: uuid.UUID, content_ids: list[uuid.UUID]) -> dict[str, StoredProgress]:
         """Get progress for multiple content items."""
         if not content_ids:
             return {}
@@ -42,18 +109,12 @@ class ProgressService:
             text(GET_BATCH_PROGRESS_QUERY), {"user_id": str(user_id), "content_ids": [str(cid) for cid in content_ids]}
         )
 
-        progress_map = {}
+        progress_map: dict[str, StoredProgress] = {}
         for row in result:
             # Parse metadata if it's a string (JSON)
-            metadata = row.metadata
-            if isinstance(metadata, str):
-                try:
-                    metadata = json.loads(metadata)
-                except json.JSONDecodeError:
-                    logger.warning("Failed to parse metadata for content %s: %s", row.content_id, metadata)
-                    metadata = {}
-            elif metadata is None:
-                metadata = {}
+            metadata = _json_object_from_unknown(row.metadata)
+            if isinstance(row.metadata, str) and not metadata:
+                logger.warning("Failed to parse metadata for content %s: %s", row.content_id, row.metadata)
 
             progress_map[str(row.content_id)] = {"progress_percentage": row.progress_percentage, "metadata": metadata}
 
@@ -80,9 +141,9 @@ class ProgressService:
                 continue
 
             computed = await course_progress_service.get_progress(content_id, user_id)
-            metadata = {key: value for key, value in computed.items() if key != "completion_percentage"}
+            metadata = _json_object_from_unknown({key: value for key, value in computed.items() if key != "completion_percentage"})
             progress_map[str(content_id)] = ProgressData(
-                progress_percentage=computed.get("completion_percentage", 0.0),
+                progress_percentage=_progress_percentage_from_unknown(computed.get("completion_percentage", 0.0)),
                 metadata=metadata,
             )
 
@@ -109,12 +170,12 @@ class ProgressService:
         if content_type == "course":
             row = await self.get_single_progress(user_id, content_id)
             computed = await CourseProgressService(self.session).get_progress(content_id, user_id)
-            metadata = {key: value for key, value in computed.items() if key != "completion_percentage"}
+            metadata = _json_object_from_unknown({key: value for key, value in computed.items() if key != "completion_percentage"})
             return ProgressResponse(
                 id=row.id if row else None,
                 content_id=content_id,
                 content_type="course",
-                progress_percentage=computed.get("completion_percentage", 0.0),
+                progress_percentage=_progress_percentage_from_unknown(computed.get("completion_percentage", 0.0)),
                 metadata=metadata,
                 created_at=row.created_at if row else None,
                 updated_at=row.updated_at if row else None,
@@ -183,28 +244,17 @@ class ProgressService:
             raise NotFoundError(message=f"Progress for content {content_id} not found", feature_area="progress")
 
     @staticmethod
-    def _row_to_progress_response(row: Any) -> ProgressResponse:
+    def _row_to_progress_response(row: ProgressRow) -> ProgressResponse:
         """Convert a database row into a ProgressResponse."""
-        metadata = row.metadata
-        if isinstance(metadata, str):
-            try:
-                metadata = json.loads(metadata)
-            except json.JSONDecodeError:
-                metadata = {}
-        elif metadata is None:
-            metadata = {}
-
-        payload = {
-            "id": row.id,
-            "content_id": row.content_id,
-            "content_type": row.content_type,
-            "progress_percentage": row.progress_percentage,
-            "metadata": metadata,
-            "created_at": row.created_at,
-            "updated_at": row.updated_at,
-        }
-
-        return ProgressResponse.model_validate(payload)
+        return ProgressResponse(
+            id=row.id,
+            content_id=row.content_id,
+            content_type=row.content_type,
+            progress_percentage=row.progress_percentage,
+            metadata=_json_object_from_unknown(row.metadata),
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
 
     async def get_content_type(self, content_id: uuid.UUID, user_id: uuid.UUID) -> ContentType | None:
         """Determine content type by checking which table contains the content AND user owns it."""

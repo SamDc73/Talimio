@@ -9,7 +9,9 @@ from src.books.models import Book
 
 import json
 import logging
-from typing import Any
+from typing import cast
+
+from pydantic import JsonValue
 
 from src.books.schemas import (
     BookProgressResponse,
@@ -46,7 +48,7 @@ class BookResponseBuilder:
             except (json.JSONDecodeError, TypeError):
                 toc_list = None
 
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "id": book.id,
             "title": book.title,
             "subtitle": book.subtitle,
@@ -82,7 +84,7 @@ class BookResponseBuilder:
         return BookWithProgress.model_validate(payload)
 
     @staticmethod
-    def build_progress_response(progress: Mapping[str, Any], book_id: uuid.UUID) -> BookProgressResponse:
+    def build_progress_response(progress: Mapping[str, object], book_id: uuid.UUID) -> BookProgressResponse:
         """Convert a progress dictionary into a BookProgressResponse."""
         current_page = progress.get("page", progress.get("current_page", 1)) or 1
         if isinstance(current_page, (int, float)) and current_page < 1:
@@ -96,7 +98,7 @@ class BookResponseBuilder:
         if isinstance(progress_percentage, (int, float)):
             progress_percentage = max(0, min(100, progress_percentage))
 
-        payload: dict[str, Any] = {
+        payload: dict[str, object] = {
             "id": progress.get("id"),
             "book_id": book_id,
             "current_page": current_page,
@@ -120,15 +122,18 @@ class BookResponseBuilder:
         return [BookResponseBuilder.build_book_response(book) for book in books]
 
     @staticmethod
-    def _convert_toc_to_schema(toc_data: list[dict]) -> list[TableOfContentsItem]:
+    def _convert_toc_to_schema(toc_data: list[dict[str, JsonValue]]) -> list[TableOfContentsItem]:
         """Convert table of contents data to schema objects."""
         result = []
         for item in toc_data:
             children = []
-            if item.get("children"):
-                children = BookResponseBuilder._convert_toc_to_schema(item["children"])
+            item_children = item.get("children")
+            if isinstance(item_children, list):
+                children = BookResponseBuilder._convert_toc_to_schema(
+                    cast("list[dict[str, JsonValue]]", [child for child in item_children if isinstance(child, Mapping)])
+                )
 
-            toc_payload: dict[str, Any] = {
+            toc_payload: dict[str, object] = {
                 "id": item.get("id", ""),
                 "title": item.get("title", ""),
                 "page": item.get("page"),

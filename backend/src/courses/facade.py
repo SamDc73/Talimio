@@ -11,10 +11,12 @@ Coordinates internal course services and provides stable API for other modules.
 """
 
 import logging
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import TypedDict, cast
 
-from fastapi import BackgroundTasks, status
+from fastapi import BackgroundTasks, UploadFile, status
+from pydantic import JsonValue
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -41,9 +43,12 @@ from .schemas import (
     GradeExpectedPayload,
     GradeRequest,
     GradeResponse,
+    JXGBoardState,
     LessonDetailResponse,
     LessonVersionHistoryResponse,
     NextReviewResponse,
+    PracticeAnswerKind,
+    PracticeContext,
     QuestionSetItem,
     QuestionSetRequest,
     QuestionSetResponse,
@@ -69,6 +74,40 @@ logger = logging.getLogger(__name__)
 
 
 FEATURE_AREA = "courses"
+
+
+class _CourseProgressEnvelope(TypedDict):
+    progress: dict[str, object]
+
+
+class _CourseWithProgressPayload(TypedDict):
+    course: dict[str, JsonValue]
+    progress: dict[str, object]
+    completion_percentage: object
+    current_lesson: object
+    total_lessons: object
+    completed_lessons: object
+
+
+class _ReviewSnapshot(TypedDict):
+    concept_id: str
+    rating: int
+    duration_ms: int
+    next_review_at: str | None
+    mastery: float
+    exposures: int
+    reviewed_at: str
+
+
+class _ReviewConceptStats(TypedDict):
+    ratingCounts: dict[str, int]
+    totalDurationMs: int
+    lastRating: int
+    lastDurationMs: int
+    lastReviewedAt: str
+    lastNextReviewAt: str | None
+    mastery: float
+    exposures: int
 
 
 class CoursesFacadeNotFoundError(NotFoundError):
@@ -97,6 +136,45 @@ class CoursesFacadeConflictError(ConflictError):
 
     def __init__(self, detail: str) -> None:
         super().__init__(detail, feature_area=FEATURE_AREA)
+
+
+def _json_text(value: JsonValue | None) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _json_float(value: JsonValue | None) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
+
+
+def _json_float_map(value: JsonValue | None) -> dict[str, float] | None:
+    if not isinstance(value, dict):
+        return None
+    result: dict[str, float] = {}
+    for key, item in value.items():
+        if isinstance(item, bool) or not isinstance(item, int | float):
+            continue
+        result[str(key)] = float(item)
+    return result or None
+
+
+def _json_jxg_state(value: JsonValue | None) -> JXGBoardState | None:
+    if not isinstance(value, dict):
+        return None
+    return JXGBoardState.model_validate(value)
+
+
+def _practice_answer_kind(value: str | None) -> PracticeAnswerKind | None:
+    if value in {"latex", "text", "choice"}:
+        return cast("PracticeAnswerKind", value)
+    return None
+
+
+def _practice_context(value: str | None) -> PracticeContext:
+    if value in {"inline", "quick_check", "scheduled_review", "drill", "review", "chat"}:
+        return cast("PracticeContext", value)
+    return "inline"
 
 
 class CoursesFacadeUpstreamError(UpstreamUnavailableError):
@@ -130,12 +208,12 @@ class CoursesFacade:  # noqa: PLR0904
         self._content_service = CourseContentService(session)
         self._progress_service = CourseProgressService(session)
 
-    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> _CourseWithProgressPayload:
         """Get course content with progress for cross-module progress contracts."""
         course_response = await self.get_course(content_id, user_id)
         progress = await self._progress_service.get_progress(content_id, user_id)
         return {
-            "course": course_response.model_dump(),
+            "course": cast("dict[str, JsonValue]", course_response.model_dump(mode="json")),
             "progress": progress,
             "completion_percentage": progress.get("completion_percentage", 0),
             "current_lesson": progress.get("current_lesson", ""),
@@ -161,10 +239,10 @@ class CoursesFacade:  # noqa: PLR0904
 
     async def create_course(
         self,
-        course_data: dict[str, Any],
+        course_data: Mapping[str, object],
         user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
-        attachments: list[Any] | None = None,
+        attachments: list[UploadFile] | None = None,
     ) -> CourseResponse:
         """Create a new course entry and return its canonical response model."""
         try:
@@ -189,12 +267,12 @@ class CoursesFacade:  # noqa: PLR0904
     async def generate_ai_course(
         self,
         topic: str,
-        preferences: dict[str, Any],
+        preferences: dict[str, JsonValue],
         user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
     ) -> CourseResponse:
         """Generate an AI-powered course and return the created course response."""
-        data: dict[str, Any] = {**(preferences or {})}
+        data: dict[str, JsonValue] = {**(preferences or {})}
         data["prompt"] = topic
         try:
             course = await self._content_service.create_course(
@@ -212,8 +290,8 @@ class CoursesFacade:  # noqa: PLR0904
             raise CoursesFacadeUpstreamError(message) from error
 
     async def update_progress(
-        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: Mapping[str, object]
+    ) -> _CourseProgressEnvelope:
         """
         Update course progress.
 
@@ -222,8 +300,8 @@ class CoursesFacade:  # noqa: PLR0904
         return await self.update_course_progress(content_id, user_id, progress_data)
 
     async def update_course_progress(
-        self, course_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, course_id: uuid.UUID, user_id: uuid.UUID, progress_data: Mapping[str, object]
+    ) -> _CourseProgressEnvelope:
         """Update course progress and return the updated progress payload."""
         try:
             updated_progress = await self._progress_service.update_progress(course_id, user_id, progress_data)
@@ -235,7 +313,7 @@ class CoursesFacade:  # noqa: PLR0904
         return {"progress": updated_progress}
 
     async def update_course(
-        self, course_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]
+        self, course_id: uuid.UUID, user_id: uuid.UUID, update_data: Mapping[str, object]
     ) -> CourseResponse:
         """Update course metadata and return the updated course response."""
         try:
@@ -271,20 +349,21 @@ class CoursesFacade:  # noqa: PLR0904
             raise CoursesFacadeUpstreamError(message) from error
 
     async def search_courses(
-        self, query: str, user_id: uuid.UUID, filters: dict[str, Any] | None = None
+        self, query: str, user_id: uuid.UUID, filters: dict[str, JsonValue] | None = None
     ) -> list[CourseResponse]:
         """Search user courses and return the matching course responses."""
         query_service = CourseQueryService(self._session)
         limit = (filters or {}).get("limit", 20)
         try:
-            results, _total = await query_service.list_courses(per_page=limit, search=query, user_id=user_id)
+            per_page = limit if isinstance(limit, int) and not isinstance(limit, bool) else 20
+            results, _total = await query_service.list_courses(per_page=per_page, search=query, user_id=user_id)
             return results
         except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
             logger.exception("Error searching courses for user %s", user_id)
             message = "Search failed"
             raise CoursesFacadeUpstreamError(message) from error
 
-    async def get_user_courses(self, user_id: uuid.UUID, include_progress: bool = True) -> list[dict[str, Any]]:
+    async def get_user_courses(self, user_id: uuid.UUID, include_progress: bool = True) -> list[dict[str, object]]:
         """Get all courses for user, optionally including progress information."""
         query_service = CourseQueryService(self._session)
         per_page = 20
@@ -297,9 +376,9 @@ class CoursesFacade:  # noqa: PLR0904
             message = "Failed to get courses"
             raise CoursesFacadeUpstreamError(message) from error
 
-        course_dicts: list[dict[str, Any]] = []
+        course_dicts: list[dict[str, object]] = []
         for course_response in course_responses:
-            course_dict = course_response.model_dump()
+            course_dict = cast("dict[str, object]", course_response.model_dump(mode="json"))
             if include_progress:
                 try:
                     progress = await self._progress_service.get_progress(course_response.id, user_id)
@@ -311,7 +390,7 @@ class CoursesFacade:  # noqa: PLR0904
 
         return course_dicts
 
-    async def get_course_lessons(self, course_id: uuid.UUID, user_id: uuid.UUID) -> list[dict[str, Any]]:
+    async def get_course_lessons(self, course_id: uuid.UUID, user_id: uuid.UUID) -> list[dict[str, object]]:
         """Get course lessons grouped by modules."""
         query_service = CourseQueryService(self._session)
         try:
@@ -325,13 +404,14 @@ class CoursesFacade:  # noqa: PLR0904
             raise CoursesFacadeUpstreamError(message) from error
 
         completed_lessons = progress.get("completed_lessons", {}) if isinstance(progress, dict) else {}
-        lessons_payload: list[dict[str, Any]] = []
+        completed_lesson_map = cast("dict[str, object]", completed_lessons) if isinstance(completed_lessons, dict) else {}
+        lessons_payload: list[dict[str, object]] = []
         for module in course_response.modules:
             for lesson in module.lessons:
-                lesson_dict = lesson.model_dump()
+                lesson_dict = cast("dict[str, object]", lesson.model_dump(mode="json"))
                 lesson_dict["moduleTitle"] = module.title
                 lesson_dict["moduleId"] = str(module.id)
-                lesson_dict["completed"] = completed_lessons.get(str(lesson.id), False)
+                lesson_dict["completed"] = completed_lesson_map.get(str(lesson.id), False)
                 lessons_payload.append(lesson_dict)
 
         return lessons_payload
@@ -548,7 +628,7 @@ class CoursesFacade:  # noqa: PLR0904
                     concept_id=stored.concept_id,
                     lesson_id=stored.lesson_id,
                     question=stored.question,
-                    answer_kind=cast("Any", stored.answer_kind),
+                    answer_kind=_practice_answer_kind(stored.answer_kind) or "text",
                     answer_field=answer_field,
                     probe_family=drill.probe_family,
                     renderer_kind=drill.renderer_kind,
@@ -658,7 +738,7 @@ class CoursesFacade:  # noqa: PLR0904
         learner_answer = self._stringify_attempt_answer(payload)
         if payload.answer.kind == "skip":
             is_correct = False
-            attempt_status = "unsupported"
+            attempt_status: str = "unsupported"
             feedback = "Skipped for now. This is recorded so the next review can focus on this concept."
         else:
             grade = await self._grade_attempt_answer(
@@ -725,7 +805,7 @@ class CoursesFacade:  # noqa: PLR0904
         response = AttemptResponse(
             attempt_id=payload.attempt_id,
             is_correct=is_correct,
-            status=cast("Any", attempt_status),
+            status=attempt_status,
             feedback_markdown=feedback,
             mastery=updated_state.s_mastery,
             exposures=updated_state.exposures,
@@ -751,8 +831,8 @@ class CoursesFacade:  # noqa: PLR0904
         self._session.add(attempt)
         await self._session.flush()
 
-        concept_stats: dict[str, dict[str, Any]] = {}
-        snapshot = {
+        concept_stats: dict[str, _ReviewConceptStats] = {}
+        snapshot: _ReviewSnapshot = {
             "concept_id": str(question.concept_id),
             "rating": rating,
             "duration_ms": payload.duration_ms,
@@ -841,7 +921,7 @@ class CoursesFacade:  # noqa: PLR0904
             course_id=course_id,
             lesson_id=lesson_id,
             concept_id=question.concept_id,
-            practice_context=cast("Any", question.practice_context),
+            practice_context=_practice_context(question.practice_context),
             hints_used=payload.hints_used,
         )
         grade_kind = question.grade_kind or "practice_answer"
@@ -853,9 +933,11 @@ class CoursesFacade:  # noqa: PLR0904
                 kind="latex_expression",
                 question=question.question,
                 expected=GradeExpectedPayload(
-                    expected_latex=question.expected_payload.get("expectedLatex")
-                    or question.expected_payload.get("expected_latex"),
-                    criteria=question.expected_payload.get("criteria"),
+                    expected_latex=_json_text(
+                        question.expected_payload.get("expectedLatex")
+                        or question.expected_payload.get("expected_latex")
+                    ),
+                    criteria=_json_text(question.expected_payload.get("criteria")),
                 ),
                 answer=GradeAnswerPayload(answer_text=payload.answer.answer_latex),
                 context=context,
@@ -868,19 +950,23 @@ class CoursesFacade:  # noqa: PLR0904
                 kind="jxg_state",
                 question=question.question,
                 expected=GradeExpectedPayload(
-                    expected_state=question.expected_payload.get("expectedState")
-                    or question.expected_payload.get("expected_state"),
-                    tolerance=question.expected_payload.get("tolerance"),
-                    per_check_tolerance=question.expected_payload.get("perCheckTolerance")
-                    or question.expected_payload.get("per_check_tolerance"),
-                    criteria=question.expected_payload.get("criteria"),
+                    expected_state=_json_jxg_state(
+                        question.expected_payload.get("expectedState")
+                        or question.expected_payload.get("expected_state")
+                    ),
+                    tolerance=_json_float(question.expected_payload.get("tolerance")),
+                    per_check_tolerance=_json_float_map(
+                        question.expected_payload.get("perCheckTolerance")
+                        or question.expected_payload.get("per_check_tolerance")
+                    ),
+                    criteria=_json_text(question.expected_payload.get("criteria")),
                 ),
                 answer=GradeAnswerPayload(answer_state=payload.answer.answer_state),
                 context=context,
             )
 
         expected_answer = question.expected_answer
-        answer_kind = question.answer_kind
+        answer_kind = _practice_answer_kind(question.answer_kind)
         if not expected_answer or not answer_kind:
             detail = "Question is missing expected answer metadata"
             raise CoursesFacadeValidationError(detail)
@@ -890,16 +976,20 @@ class CoursesFacade:  # noqa: PLR0904
 
         if answer_kind == "choice":
             choices = question.question_payload.get("choices", [])
-            if not isinstance(choices, list) or expected_answer not in choices:
+            if not isinstance(choices, list) or not all(isinstance(choice, str) for choice in choices):
                 detail = "Choice question is missing correct choice metadata"
                 raise CoursesFacadeValidationError(detail)
-            correct_index = choices.index(expected_answer)
+            choice_values = cast("list[str]", choices)
+            if expected_answer not in choice_values:
+                detail = "Choice question is missing correct choice metadata"
+                raise CoursesFacadeValidationError(detail)
+            correct_index = choice_values.index(expected_answer)
             return GradeRequest(
                 kind="practice_answer",
                 question=question.question,
                 expected=GradeExpectedPayload(
                     expected_answer=expected_answer,
-                    answer_kind=cast("Any", answer_kind),
+                    answer_kind=answer_kind,
                     correct_choice_index=correct_index,
                 ),
                 answer=GradeAnswerPayload(choice_index=payload.answer.choice_index),
@@ -909,7 +999,7 @@ class CoursesFacade:  # noqa: PLR0904
         return GradeRequest(
             kind="practice_answer",
             question=question.question,
-            expected=GradeExpectedPayload(expected_answer=expected_answer, answer_kind=cast("Any", answer_kind)),
+            expected=GradeExpectedPayload(expected_answer=expected_answer, answer_kind=answer_kind),
             answer=GradeAnswerPayload(answer_text=learner_answer),
             context=context,
         )
@@ -934,8 +1024,8 @@ class CoursesFacade:  # noqa: PLR0904
         scheduler_service = LectorSchedulerService(self._session)
 
         outcomes: list[ReviewOutcome] = []
-        concept_stats: dict[str, dict[str, Any]] = {}
-        last_review_snapshot: dict[str, Any] | None = None
+        concept_stats: dict[str, _ReviewConceptStats] = {}
+        last_review_snapshot: _ReviewSnapshot | None = None
 
         for review in payload.reviews:
             review_outcome, review_snapshot = await self._process_adaptive_review(
@@ -1008,7 +1098,7 @@ class CoursesFacade:  # noqa: PLR0904
             user_id=user_id,
         )
 
-    async def _assert_course_contains_review_concepts(self, *, course_id: uuid.UUID, reviews: list[Any]) -> None:
+    async def _assert_course_contains_review_concepts(self, *, course_id: uuid.UUID, reviews: list[ReviewRequest]) -> None:
         concept_ids = {review.concept_id for review in reviews}
         existing = await self._session.execute(
             select(CourseConcept.concept_id).where(
@@ -1021,8 +1111,8 @@ class CoursesFacade:  # noqa: PLR0904
             detail = "One or more concepts are not assigned to this course"
             raise CoursesFacadeNotFoundError(detail)
 
-    def _build_review_extra(self, *, review: Any) -> dict[str, Any]:
-        review_extra: dict[str, Any] = {"rating": review.rating}
+    def _build_review_extra(self, *, review: ReviewRequest) -> dict[str, JsonValue]:
+        review_extra: dict[str, JsonValue] = {"rating": review.rating}
         if review.question:
             review_extra["question"] = review.question
         if review.structure_signature:
@@ -1045,10 +1135,10 @@ class CoursesFacade:  # noqa: PLR0904
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
         user_id: uuid.UUID,
-        review: Any,
+        review: ReviewRequest,
         state_service: ConceptStateService,
         scheduler_service: LectorSchedulerService,
-    ) -> tuple[ReviewOutcome, dict[str, Any]]:
+    ) -> tuple[ReviewOutcome, _ReviewSnapshot]:
         correct = review.rating >= 3
         updated_state = await state_service.update_mastery(
             user_id=user_id,
@@ -1097,18 +1187,24 @@ class CoursesFacade:  # noqa: PLR0904
     def _update_review_stats(
         self,
         *,
-        concept_stats: dict[str, dict[str, Any]],
-        review_snapshot: dict[str, Any],
+        concept_stats: dict[str, _ReviewConceptStats],
+        review_snapshot: _ReviewSnapshot,
     ) -> None:
-        concept_key = cast("str", review_snapshot["concept_id"])
+        concept_key = review_snapshot["concept_id"]
         stats = concept_stats.setdefault(
             concept_key,
             {
                 "ratingCounts": {"1": 0, "2": 0, "3": 0, "4": 0},
                 "totalDurationMs": 0,
+                "lastRating": review_snapshot["rating"],
+                "lastDurationMs": review_snapshot["duration_ms"],
+                "lastReviewedAt": review_snapshot["reviewed_at"],
+                "lastNextReviewAt": review_snapshot["next_review_at"],
+                "mastery": review_snapshot["mastery"],
+                "exposures": review_snapshot["exposures"],
             },
         )
-        rating_counts = cast("dict[str, int]", stats["ratingCounts"])
+        rating_counts = stats["ratingCounts"]
         rating_key = str(review_snapshot["rating"])
         rating_counts[rating_key] = rating_counts.get(rating_key, 0) + 1
         stats["totalDurationMs"] = int(stats["totalDurationMs"]) + int(review_snapshot["duration_ms"])
@@ -1127,9 +1223,9 @@ class CoursesFacade:  # noqa: PLR0904
         self,
         *,
         lesson_id: uuid.UUID,
-        last_review_snapshot: dict[str, Any],
-        concept_stats: dict[str, dict[str, Any]],
-    ) -> dict[str, Any]:
+        last_review_snapshot: _ReviewSnapshot,
+        concept_stats: dict[str, _ReviewConceptStats],
+    ) -> dict[str, JsonValue]:
         return {
             "current_lesson_id": str(lesson_id),
             "last_reviewed_concept": last_review_snapshot["concept_id"],

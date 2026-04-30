@@ -1,7 +1,8 @@
 import uuid
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from pydantic import BaseModel
 
 from src.auth import CurrentAuth
 from src.videos.facade import VideosFacade
@@ -10,6 +11,7 @@ from src.videos.schemas import (
     VideoChapterResponse,
     VideoChapterStatusUpdate,
     VideoCreate,
+    VideoDetailsResponse,
     VideoListResponse,
     VideoResponse,
     VideoTranscriptResponse,
@@ -18,6 +20,13 @@ from src.videos.schemas import (
 
 
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
+
+
+class VideoChapterExtractionResponse(BaseModel):
+    """Created chapter count and chapter payloads."""
+
+    count: int
+    chapters: list[VideoChapterResponse]
 
 
 def get_videos_facade(auth: CurrentAuth) -> VideosFacade:
@@ -121,10 +130,10 @@ async def extract_video_chapters(
     video_id: uuid.UUID,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
-) -> dict[str, Any]:
+) -> VideoChapterExtractionResponse:
     """Extract chapters from YouTube video."""
     chapters = await facade.extract_and_create_video_chapters(video_id=video_id, user_id=auth.user_id)
-    return {"count": len(chapters), "chapters": chapters}
+    return VideoChapterExtractionResponse(count=len(chapters), chapters=chapters)
 
 
 @router.post("/{video_id}/sync-chapter-progress")
@@ -158,6 +167,7 @@ async def get_video_details(
     video_id: uuid.UUID,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
-) -> dict[str, Any]:
+) -> VideoDetailsResponse:
     """Get video with chapters and transcript info in a single optimized request."""
-    return await facade.get_video_details(video_id=video_id, user_id=auth.user_id)
+    payload = await facade.get_video_details(video_id=video_id, user_id=auth.user_id)
+    return VideoDetailsResponse.model_validate(payload)

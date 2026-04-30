@@ -8,8 +8,9 @@ import json
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TypedDict, cast
 
+from pydantic import JsonValue
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +22,13 @@ _SUPPORTED_COMPONENTS = {"LatexExpression", "FreeForm", "JXGBoard", "MultipleCho
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _WEB_DIR = _REPO_ROOT / "web"
 _MDX_MATERIALIZER_SCRIPT = _WEB_DIR / "scripts" / "materialize-inline-questions.mjs"
+
+
+class _MaterializedDocument(TypedDict):
+    key: str
+    scope: str
+    content: str
+    components: list[dict[str, JsonValue]]
 
 
 @dataclass(frozen=True)
@@ -35,7 +43,7 @@ class _ExtractedComponent:
     component: str
     index: int
     placeholder: str
-    attrs: dict[str, Any]
+    attrs: dict[str, JsonValue]
 
 
 @dataclass(frozen=True)
@@ -45,7 +53,7 @@ class _InlineQuestion:
     grade_kind: str
     expected_answer: str | None
     answer_kind: str | None
-    expected_payload: dict[str, Any]
+    expected_payload: dict[str, JsonValue]
     practice_context: str
 
 
@@ -163,7 +171,7 @@ class InlineQuestionMaterializer:
             existing.answer_kind = inline_question.answer_kind
             existing.grade_kind = inline_question.grade_kind
             existing.expected_payload = inline_question.expected_payload
-            existing.question_payload = question_payload
+            object.__setattr__(existing, "question_payload", question_payload)  # noqa: PLC2801
             existing.practice_context = inline_question.practice_context
             existing.source_component = source_component
             await self._session.flush()
@@ -197,7 +205,7 @@ class InlineQuestionMaterializer:
         return question.id
 
 
-async def _parse_mdx_documents(documents: list[_MdxDocument]) -> list[dict[str, Any]]:
+async def _parse_mdx_documents(documents: list[_MdxDocument]) -> list[_MaterializedDocument]:
     payload = {"documents": [{"key": document.key, "content": document.content} for document in documents]}
     process = await asyncio.create_subprocess_exec(
         "node",
@@ -217,18 +225,38 @@ async def _parse_mdx_documents(documents: list[_MdxDocument]) -> list[dict[str, 
         detail = f"invalid MDX materializer response: {error}"
         raise ValueError(detail) from error
 
+    if not isinstance(response, dict):
+        detail = "invalid MDX materializer response: expected object"
+        raise TypeError(detail)
     response_documents = response.get("documents")
     if not isinstance(response_documents, list):
         detail = "invalid MDX materializer response: missing documents"
         raise TypeError(detail)
     scope_by_key = {document.key: document.scope for document in documents}
+    parsed_documents: list[_MaterializedDocument] = []
     for response_document in response_documents:
-        key = str(response_document.get("key"))
-        response_document["scope"] = scope_by_key[key]
-    return response_documents
+        if not isinstance(response_document, dict):
+            continue
+        key = response_document.get("key")
+        if not isinstance(key, str) or key not in scope_by_key:
+            detail = "invalid MDX materializer response: unknown document key"
+            raise ValueError(detail)
+        parsed_documents.append(
+            {
+                "key": key,
+                "scope": scope_by_key[key],
+                "content": str(response_document.get("content") or ""),
+                "components": [
+                    cast("dict[str, JsonValue]", component)
+                    for component in response_document.get("components", [])
+                    if isinstance(component, dict)
+                ],
+            }
+        )
+    return parsed_documents
 
 
-def _extracted_components(document: dict[str, Any]) -> list[_ExtractedComponent]:
+def _extracted_components(document: _MaterializedDocument) -> list[_ExtractedComponent]:
     components = document.get("components")
     if not isinstance(components, list):
         return []
@@ -251,7 +279,7 @@ def _extracted_components(document: dict[str, Any]) -> list[_ExtractedComponent]
     return extracted_components
 
 
-def _build_inline_question(component: str, attrs: dict[str, Any]) -> _InlineQuestion | None:  # noqa: PLR0911
+def _build_inline_question(component: str, attrs: dict[str, JsonValue]) -> _InlineQuestion | None:  # noqa: PLR0911
     if component not in _SUPPORTED_COMPONENTS:
         return None
     question = _string_attr(attrs, "question") or _string_attr(attrs, "sentence") or "Practice question"
@@ -333,35 +361,35 @@ def _build_inline_question(component: str, attrs: dict[str, Any]) -> _InlineQues
     )
 
 
-def _string_attr(attrs: dict[str, Any], name: str) -> str | None:
+def _string_attr(attrs: dict[str, JsonValue], name: str) -> str | None:
     value = attrs.get(name)
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
 
 
-def _number_attr(attrs: dict[str, Any], name: str) -> float | None:
+def _number_attr(attrs: dict[str, JsonValue], name: str) -> float | None:
     value = attrs.get(name)
-    if isinstance(value, int | float):
+    if isinstance(value, int | float) and not isinstance(value, bool):
         return float(value)
     return None
 
 
-def _int_attr(attrs: dict[str, Any], name: str) -> int | None:
+def _int_attr(attrs: dict[str, JsonValue], name: str) -> int | None:
     value = attrs.get(name)
-    if isinstance(value, int):
+    if isinstance(value, int) and not isinstance(value, bool):
         return value
     return None
 
 
-def _dict_attr(attrs: dict[str, Any], name: str) -> dict[str, Any] | None:
+def _dict_attr(attrs: dict[str, JsonValue], name: str) -> dict[str, JsonValue] | None:
     value = attrs.get(name)
     if isinstance(value, dict):
         return value
     return None
 
 
-def _list_attr(attrs: dict[str, Any], name: str) -> list[str]:
+def _list_attr(attrs: dict[str, JsonValue], name: str) -> list[str]:
     value = attrs.get(name)
     if isinstance(value, list):
         return [str(item) for item in value if item]
@@ -370,7 +398,7 @@ def _list_attr(attrs: dict[str, Any], name: str) -> list[str]:
     return []
 
 
-def _source_key(*, scope: str, index: int, component: str, attrs: dict[str, Any]) -> str:
+def _source_key(*, scope: str, index: int, component: str, attrs: dict[str, JsonValue]) -> str:
     question = _string_attr(attrs, "question") or ""
     digest = hashlib.sha256(f"{scope}:{index}:{component}:{question}".encode()).hexdigest()
     return f"inline:{digest}"
@@ -380,5 +408,5 @@ def _remove_placeholder_question_id(content: str, placeholder: str) -> str:
     return content.replace(f' questionId="{placeholder}"', "")
 
 
-def _int_value(value: Any) -> int | None:
+def _int_value(value: object) -> int | None:
     return value if isinstance(value, int) else None

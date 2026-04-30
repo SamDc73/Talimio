@@ -7,7 +7,6 @@ must implement to ensure consistent behavior and UX across the application.
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any
 
 from .schemas import HighlightResponse
 
@@ -22,7 +21,7 @@ class HighlightInterface(ABC):
 
     @abstractmethod
     async def create_highlight(
-        self, content_id: uuid.UUID, user_id: uuid.UUID, highlight_data: dict[str, Any]
+        self, content_id: uuid.UUID, user_id: uuid.UUID, highlight_data: dict[str, object]
     ) -> HighlightResponse:
         """
         Create a new highlight for the specified content.
@@ -97,7 +96,7 @@ class HighlightInterface(ABC):
 
     @abstractmethod
     async def update_highlight(
-        self, highlight_id: uuid.UUID, user_id: uuid.UUID, highlight_data: dict[str, Any]
+        self, highlight_id: uuid.UUID, user_id: uuid.UUID, highlight_data: dict[str, object]
     ) -> HighlightResponse:
         """
         Update an existing highlight.

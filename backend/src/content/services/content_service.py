@@ -5,20 +5,29 @@ import logging
 # Progress calculation imports removed - progress now fetched separately
 # AuthContext removed - using uuid.UUID directly
 import uuid
-from typing import Any
+from typing import Protocol, cast
 
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.books.models import Book
 from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
-from src.content.services.content_transform_service import ContentTransformService
+from src.content.services.content_transform_service import ContentProjectionRow, ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
+from src.courses.models import Course
 from src.exceptions import NotFoundError
+from src.videos.models import Video
 
 
 logger = logging.getLogger(__name__)
+
+
+class StoredBookRow(Protocol):
+    """Book row fields needed for storage cleanup."""
+
+    file_path: str | None
 
 
 class ContentService:
@@ -81,7 +90,7 @@ class ContentService:
         page_size: int,
         offset: int,
         user_id: uuid.UUID | None = None,
-    ) -> list[Any]:
+    ) -> list[ContentProjectionRow]:
         """Get paginated results."""
         combined_subquery = QueryBuilderService.build_combined_subquery(combined_query)
         statement = (
@@ -90,7 +99,7 @@ class ContentService:
             .limit(page_size)
             .offset(offset)
         )
-        params: dict[str, Any] = {}
+        params: dict[str, str | uuid.UUID] = {}
         if search_term:
             params["search"] = search_term
         # Only include user_id if it's not None (since we build different queries based on user_id)
@@ -98,11 +107,11 @@ class ContentService:
             params["user_id"] = user_id
 
         result = await session.execute(statement, params)
-        return list(result.all())
+        return cast("list[ContentProjectionRow]", list(result.all()))
 
-    async def _delete_book_file(self, row: Any) -> None:
+    async def _delete_book_file(self, row: StoredBookRow) -> None:
         """Best-effort deletion of stored file for books."""
-        if getattr(row, "file_path", None):
+        if row.file_path:
             try:
                 from src.storage.factory import get_storage_provider
 
@@ -159,13 +168,9 @@ class ContentService:
         except SQLAlchemyError:
             logger.debug("Non-fatal: failed to prune orphan tags", exc_info=True)
 
-    def _get_model(self, content_type: ContentType) -> Any:
+    def _get_model(self, content_type: ContentType) -> type[Book | Video | Course]:
         """Map content type to ORM model."""
-        from src.books.models import Book
-        from src.courses.models import Course
-        from src.videos.models import Video
-
-        mapping: dict[ContentType, Any] = {
+        mapping: dict[ContentType, type[Book | Video | Course]] = {
             ContentType.BOOK: Book,
             ContentType.VIDEO: Video,
             ContentType.COURSE: Course,
@@ -244,7 +249,7 @@ class ContentService:
 
         # Remove any stored files that rely on row attributes before deleting the row.
         if content_type == ContentType.BOOK:
-            await self._delete_book_file(row)
+            await self._delete_book_file(cast("StoredBookRow", row))
         elif content_type == ContentType.COURSE:
             # Also remove any lingering uploaded course document source files
             await self._delete_course_document_files(session, content_id)

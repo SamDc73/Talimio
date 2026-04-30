@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import parse_qs, urlparse
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, JsonValue, field_validator
 
 from src.config.schema_casing import build_camel_config
 
@@ -179,6 +179,16 @@ class VideoTranscriptResponse(BaseModel):
     video_id: uuid.UUID = Field(alias="videoId")
     segments: list[TranscriptSegment] = Field(description="List of transcript segments")
     total_segments: int = Field(alias="totalSegments")
+
+
+class VideoDetailsResponse(VideoResponse):
+    """Video details response with chapters, transcript status, and progress."""
+
+    model_config = build_camel_config()
+
+    chapters: list[VideoChapterResponse]
+    transcript_info: dict[str, JsonValue] | None = Field(None, alias="transcriptInfo")
+    progress: dict[str, JsonValue]
 
 
 class RAGStatusResponse(BaseModel):

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypedDict
 
 from sqlalchemy import and_, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -25,6 +25,7 @@ from src.courses.models import (
     Lesson,
     LessonFeedbackEvent,
     LessonVersion,
+    LessonVersionWindow,
     ProbeEvent,
     UserConceptState,
 )
@@ -42,6 +43,19 @@ from src.exceptions import ConflictError, NotFoundError, UpstreamUnavailableErro
 
 
 logger = logging.getLogger(__name__)
+
+
+class _OutlineLesson(TypedDict):
+    id: uuid.UUID
+    title: str | None
+    description: str | None
+
+
+class _OutlineWindowItem(TypedDict):
+    index: int
+    title: str
+    description: str
+
 
 _LESSON_RAG_CONTEXT_FALLBACK_ERROR_TYPES = (
     ImportError,
@@ -113,7 +127,7 @@ class LessonService:
         *,
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
-    ) -> tuple[list[dict[str, Any]], int | None, int | None, str | None]:
+    ) -> tuple[list[_OutlineWindowItem], int | None, int | None, str | None]:
         rows = (
             await self.session.execute(
                 select(
@@ -126,7 +140,7 @@ class LessonService:
             )
         ).all()
 
-        ordered_lessons: list[dict[str, Any]] = []
+        ordered_lessons: list[_OutlineLesson] = []
         for row in rows:
             row_lesson_id, title, description = row
             ordered_lessons.append(
@@ -147,7 +161,7 @@ class LessonService:
 
         window_start = max(0, current_index - 2)
         window_end = min(lesson_total, current_index + 5)
-        outline_window: list[dict[str, Any]] = []
+        outline_window: list[_OutlineWindowItem] = []
         for idx in range(window_start, window_end):
             item = ordered_lessons[idx]
             title_value = item.get("title") or ""
@@ -163,7 +177,7 @@ class LessonService:
 
         return outline_window, lesson_position, lesson_total, next_lesson_title
 
-    def _resolve_next_lesson_title(self, ordered_lessons: list[dict[str, Any]], current_index: int) -> str | None:
+    def _resolve_next_lesson_title(self, ordered_lessons: list[_OutlineLesson], current_index: int) -> str | None:
         next_index = current_index + 1
         if next_index >= len(ordered_lessons):
             return None
@@ -296,7 +310,7 @@ class LessonService:
             )
             return ""
 
-    def _build_outline_window_text(self, outline_window: list[dict[str, Any]]) -> str:
+    def _build_outline_window_text(self, outline_window: list[_OutlineWindowItem]) -> str:
         if not outline_window:
             return ""
 
@@ -610,7 +624,7 @@ class LessonService:
         force: bool,
         lesson_version_service: LessonVersionService,
         lesson_window_service: LessonWindowService,
-    ) -> tuple[LessonVersion, list[Any]]:
+    ) -> tuple[LessonVersion, list[LessonVersionWindow]]:
         next_major_version = current_version.major_version + 1
         existing_next_pass = next(
             (version for version in available_versions if version.major_version == next_major_version),
@@ -656,7 +670,7 @@ class LessonService:
         lesson: Lesson,
         course: Course,
         generation_mode: str,
-        outline_window: list[dict[str, Any]],
+        outline_window: list[_OutlineWindowItem],
         lesson_position: int | None,
         lesson_total: int | None,
         next_lesson_title: str | None,
@@ -748,7 +762,7 @@ class LessonService:
         immediate_regenerate_request: str | None = None,
         adaptive_recommendation: AdaptivePassRecommendation | None = None,
     ) -> str:
-        outline_window: list[dict[str, Any]] = []
+        outline_window: list[_OutlineWindowItem] = []
         lesson_position: int | None = None
         lesson_total: int | None = None
         next_lesson_title: str | None = None
@@ -846,7 +860,7 @@ class LessonService:
             for version in versions
         ]
 
-    def _build_window_payload(self, windows: Sequence[Any]) -> list[LessonWindowResponse]:
+    def _build_window_payload(self, windows: Sequence[LessonVersionWindow]) -> list[LessonWindowResponse]:
         return [
             LessonWindowResponse(
                 id=window.id,
@@ -917,7 +931,7 @@ class LessonService:
         selected_version: LessonVersion,
         available_versions: Sequence[LessonVersion],
         next_pass: LessonNextPassResponse | None,
-        windows: Sequence[Any],
+        windows: Sequence[LessonVersionWindow],
     ) -> LessonDetailResponse:
         return LessonDetailResponse(
             id=lesson.id,

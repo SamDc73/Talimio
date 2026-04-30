@@ -5,10 +5,11 @@ import base64
 import json
 import logging
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from fastapi import BackgroundTasks, UploadFile
 from opentelemetry import trace
@@ -17,7 +18,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.models import AdaptiveCourseStructure
+from src.ai.models import AdaptiveConceptGraph, AdaptiveCourseStructure
 from src.ai.rag.service import RAGService
 from src.ai.service import AIService
 from src.courses.models import (
@@ -56,6 +57,11 @@ class CourseAttachmentIngestionResult:
     has_searchable_documents: bool
 
 
+type PromptPayload = str | list[Mapping[str, object]]
+type MutableCoursePayload = dict[str, object]
+type RowPayload = dict[str, object]
+
+
 class CourseContentService:
     """Course service handling course-specific content operations."""
 
@@ -65,7 +71,7 @@ class CourseContentService:
 
     async def create_course(
         self,
-        data: dict[str, Any],
+        data: Mapping[str, object],
         user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
         attachments: list[UploadFile] | None = None,
@@ -82,7 +88,7 @@ class CourseContentService:
     async def _create_course_with_session(
         self,
         session: AsyncSession,
-        data: dict[str, Any],
+        data: Mapping[str, object],
         user_id: uuid.UUID,
         *,
         background_tasks: BackgroundTasks | None = None,
@@ -121,7 +127,7 @@ class CourseContentService:
     async def _generate_course_background(
         self,
         course_id: uuid.UUID,
-        data: dict[str, Any],
+        data: Mapping[str, object],
         user_id: uuid.UUID,
         attachments: list[UploadFile] | None = None,
         *,
@@ -149,8 +155,10 @@ class CourseContentService:
                         user_id=user_id,
                     )
 
-                    modules_payload = session_data.pop("modules", [])
-                    lessons_payload = session_data.pop("lessons", [])
+                    raw_modules_payload = session_data.pop("modules", [])
+                    raw_lessons_payload = session_data.pop("lessons", [])
+                    modules_payload = self._sequence_payload(raw_modules_payload)
+                    lessons_payload = self._sequence_payload(raw_lessons_payload)
 
                     _, _ = await self._persist_course_structure(
                         session=session,
@@ -188,8 +196,10 @@ class CourseContentService:
                         user_id=user_id,
                     )
 
-                    modules_payload = session_data.pop("modules", [])
-                    lessons_payload = session_data.pop("lessons", [])
+                    raw_modules_payload = session_data.pop("modules", [])
+                    raw_lessons_payload = session_data.pop("lessons", [])
+                    modules_payload = self._sequence_payload(raw_modules_payload)
+                    lessons_payload = self._sequence_payload(raw_lessons_payload)
 
                     _, _ = await self._persist_course_structure(
                         session=session,
@@ -217,7 +227,7 @@ class CourseContentService:
     def _build_draft_course(
         self,
         *,
-        session_data: dict[str, Any],
+        session_data: MutableCoursePayload,
         user_id: uuid.UUID,
         is_adaptive: bool,
     ) -> Course:
@@ -237,11 +247,11 @@ class CourseContentService:
         *,
         session: AsyncSession,
         course: Course,
-        session_data: dict[str, Any],
+        session_data: MutableCoursePayload,
         adaptive_structure: AdaptiveCourseStructure | None,
-        modules_payload: list[Any],
-        lessons_payload: list[Any],
-    ) -> tuple[list[dict[str, Any]], int]:
+        modules_payload: Sequence[object],
+        lessons_payload: Sequence[object],
+    ) -> tuple[list[RowPayload], int]:
         """Persist generated course fields, module structure, and lesson rows."""
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span("llm.persistence.finalize_course") as span:
@@ -266,9 +276,9 @@ class CourseContentService:
         self,
         *,
         is_adaptive: bool,
-        prompt: str | list[dict[str, Any]] | None,
+        prompt: PromptPayload | None,
         prompt_text: str,
-        session_data: dict[str, Any],
+        session_data: MutableCoursePayload,
         user_id: uuid.UUID,
     ) -> AdaptiveCourseStructure | None:
         """Populate session data via adaptive or prompt-based generation."""
@@ -292,7 +302,7 @@ class CourseContentService:
         session_data["setup_commands"] = adaptive_structure.course.setup_commands
         return adaptive_structure
 
-    def _serialize_payload_fields(self, session_data: dict[str, Any]) -> None:
+    def _serialize_payload_fields(self, session_data: MutableCoursePayload) -> None:
         """Ensure optional payload collections are stored as JSON strings."""
         for key in ("tags", "setup_commands"):
             value = session_data.get(key)
@@ -304,11 +314,14 @@ class CourseContentService:
                 continue
             session_data[key] = self._ensure_json_string(value)
 
-    def _normalize_prompt_text(self, prompt: Any) -> str:
+    def _normalize_prompt_text(self, prompt: object) -> str:
         """Normalize prompt input into a trimmed string."""
         if prompt is None:
             return ""
         return str(prompt).strip()
+
+    def _sequence_payload(self, value: object) -> Sequence[object]:
+        return value if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray) else []
 
     async def _ingest_course_attachments(
         self,
@@ -399,7 +412,7 @@ class CourseContentService:
         context_block = "\n\nReference Context:\n" + "\n\n".join(chunks)
         return f"{prompt_text}{context_block}"
 
-    def _build_prompt_payload(self, prompt_text: str, image_data_urls: list[str]) -> str | list[dict[str, Any]]:
+    def _build_prompt_payload(self, prompt_text: str, image_data_urls: list[str]) -> PromptPayload:
         """Return text-only or multimodal prompt payload for course generation."""
         if not image_data_urls:
             return prompt_text
@@ -415,7 +428,7 @@ class CourseContentService:
         encoded = base64.b64encode(file_content).decode("utf-8")
         return f"data:{mime_type};base64,{encoded}"
 
-    def _apply_course_updates(self, course: Course, session_data: dict[str, Any]) -> None:
+    def _apply_course_updates(self, course: Course, session_data: MutableCoursePayload) -> None:
         """Apply generated payload fields to the draft course."""
         for key in ("title", "description", "tags", "setup_commands", "adaptive_enabled", "archived"):
             if key in session_data and session_data[key] is not None:
@@ -427,9 +440,9 @@ class CourseContentService:
         session: AsyncSession,
         course: Course,
         adaptive_structure: AdaptiveCourseStructure | None,
-        modules_payload: list[Any],
-        lessons_payload: list[Any],
-    ) -> list[dict[str, Any]]:
+        modules_payload: Sequence[object],
+        lessons_payload: Sequence[object],
+    ) -> list[RowPayload]:
         """Return normalized modules."""
         if adaptive_structure is None:
             return self._normalize_modules_payload(modules_payload, lessons_payload)
@@ -529,7 +542,7 @@ class CourseContentService:
     async def update_course(
         self,
         course_id: uuid.UUID,
-        data: dict[str, Any],
+        data: Mapping[str, object],
         user_id: uuid.UUID,
     ) -> Course:
         """Update an existing course."""
@@ -544,7 +557,7 @@ class CourseContentService:
         self,
         session: AsyncSession,
         course_id: uuid.UUID,
-        data: dict[str, Any],
+        data: Mapping[str, object],
         user_id: uuid.UUID,
     ) -> Course:
         query = select(Course).where(Course.id == course_id, Course.user_id == user_id)
@@ -651,10 +664,10 @@ class CourseContentService:
         self,
         session: AsyncSession,
         course_id: uuid.UUID,
-        modules: list[dict[str, Any]],
+        modules: Sequence[Mapping[str, object]],
     ) -> int:
         """Insert lessons for a course based on normalized module payload."""
-        lesson_rows: list[dict[str, Any]] = []
+        lesson_rows: list[RowPayload] = []
         timestamp = datetime.now(UTC)
 
         for module_index, module in enumerate(modules):
@@ -662,6 +675,8 @@ class CourseContentService:
             module_name = module_title.strip() if isinstance(module_title, str) and module_title.strip() else None
             module_order = module_index if module_name is not None else None
             raw_lessons = module.get("lessons", [])
+            if not isinstance(raw_lessons, Sequence) or isinstance(raw_lessons, str | bytes):
+                continue
 
             for lesson_index, payload in enumerate(raw_lessons):
                 lesson_row = self._build_lesson_row(
@@ -689,16 +704,17 @@ class CourseContentService:
         module_name: str | None,
         module_order: int | None,
         lesson_index: int,
-        payload: Any,
+        payload: object,
         timestamp: datetime,
-    ) -> dict[str, Any] | None:
-        if not isinstance(payload, dict):
+    ) -> RowPayload | None:
+        if not isinstance(payload, Mapping):
             return None
+        payload = cast("Mapping[str, object]", payload)
 
         lesson_id = self._resolve_lesson_id(payload=payload, course_id=course_id)
         order_value = payload.get("order")
 
-        lesson_row: dict[str, Any] = {
+        lesson_row: RowPayload = {
             "course_id": course_id,
             "title": payload.get("title") or f"Lesson {lesson_index + 1}",
             "description": payload.get("description") or "",
@@ -725,7 +741,7 @@ class CourseContentService:
             lesson_row["id"] = lesson_id
         return lesson_row
 
-    def _resolve_lesson_id(self, *, payload: dict[str, Any], course_id: uuid.UUID) -> uuid.UUID | None:
+    def _resolve_lesson_id(self, *, payload: Mapping[str, object], course_id: uuid.UUID) -> uuid.UUID | None:
         lesson_id_value = payload.get("id")
         if lesson_id_value is not None:
             try:
@@ -747,16 +763,17 @@ class CourseContentService:
 
     def _normalize_modules_payload(
         self,
-        modules: list[Any],
-        lessons: list[Any],
-    ) -> list[dict[str, Any]]:
+        modules: Sequence[object],
+        lessons: Sequence[object],
+    ) -> list[RowPayload]:
         """Normalize modules/lessons with the simplest acceptable shape."""
         # Prefer explicit modules with a proper lessons list
         if isinstance(modules, list) and modules:
-            normalized: list[dict[str, Any]] = []
+            normalized: list[RowPayload] = []
             for module in modules:
-                if not isinstance(module, dict):
+                if not isinstance(module, Mapping):
                     continue
+                module = cast("Mapping[str, object]", module)
                 ml = module.get("lessons")
                 if isinstance(ml, list) and ml:
                     normalized.append(
@@ -789,8 +806,8 @@ class CourseContentService:
 
         layer_lookup = plan.layer_index()
         concepts_by_index: list[Concept] = []
-        state_rows: list[dict[str, Any]] = []
-        course_concept_rows: list[dict[str, Any]] = []
+        state_rows: list[RowPayload] = []
+        course_concept_rows: list[RowPayload] = []
 
         for index, node in enumerate(concept_graph.nodes):
             layer_index = layer_lookup.get(index)
@@ -871,7 +888,7 @@ class CourseContentService:
         self,
         *,
         session: AsyncSession,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, object]],
     ) -> None:
         if not rows:
             return
@@ -885,19 +902,21 @@ class CourseContentService:
         self,
         *,
         session: AsyncSession,
-        state_rows: list[dict[str, Any]],
+        state_rows: Sequence[Mapping[str, object]],
     ) -> int:
         if not state_rows:
             return 0
 
-        insert_rows = [
-            {
-                "user_id": item["user_id"],
-                "concept_id": item["concept_id"],
-                "s_mastery": float(item["s_mastery"]),
-            }
-            for item in state_rows
-        ]
+        insert_rows = []
+        for item in state_rows:
+            mastery = item["s_mastery"]
+            insert_rows.append(
+                {
+                    "user_id": item["user_id"],
+                    "concept_id": item["concept_id"],
+                    "s_mastery": float(mastery) if isinstance(mastery, str | int | float) else 0.0,
+                }
+            )
         stmt = insert(UserConceptState).values(insert_rows).on_conflict_do_nothing(
             index_elements=[UserConceptState.user_id, UserConceptState.concept_id]
         )
@@ -908,7 +927,7 @@ class CourseContentService:
         self,
         *,
         session: AsyncSession,
-        concept_graph: Any,
+        concept_graph: AdaptiveConceptGraph,
         concepts_by_index: list[Concept],
         course_id: uuid.UUID,
     ) -> int:
@@ -968,7 +987,7 @@ class CourseContentService:
         course: Course,
         plan: AdaptiveCourseStructure,
         concepts_by_index: list[Concept],
-    ) -> list[dict[str, Any]]:
+    ) -> list[RowPayload]:
         """Return module payload (pre-normalization) derived from adaptive concepts."""
         lessons = self._build_adaptive_lessons_payload(
             course=course,
@@ -997,9 +1016,9 @@ class CourseContentService:
         course: Course,
         plan: AdaptiveCourseStructure,
         concepts_by_index: list[Concept],
-    ) -> list[dict[str, Any]]:
+    ) -> list[RowPayload]:
         """Build lesson payloads for adaptive concepts with explicit concept linkage."""
-        lessons: list[dict[str, Any]] = []
+        lessons: list[RowPayload] = []
         assigned: set[int] = set()
         node_count = len(concepts_by_index)
 
@@ -1050,44 +1069,48 @@ class CourseContentService:
         return " — ".join(parts) if parts else clean_title
 
     @staticmethod
-    def _normalize_module_name(raw_value: Any) -> str | None:
+    def _normalize_module_name(raw_value: object) -> str | None:
         if raw_value is None:
             return None
         text = str(raw_value).strip()
         return text or None
 
-    def _build_modules_from_outline(self, lessons: list[Any]) -> list[dict[str, Any]]:
+    def _build_modules_from_outline(self, lessons: Sequence[object]) -> list[RowPayload]:
         if not lessons:
             return []
-        module_map: dict[str, dict[str, Any]] = {}
+        module_map: dict[str, RowPayload] = {}
         for lesson in lessons:
             raw_title = getattr(lesson, "title", None)
-            if raw_title is None and isinstance(lesson, dict):
+            if raw_title is None and isinstance(lesson, Mapping):
+                lesson = cast("Mapping[str, object]", lesson)
                 raw_title = lesson.get("title")
             title = str(raw_title or "").strip()
             if not title:
                 continue
             raw_description = getattr(lesson, "description", None)
-            if raw_description is None and isinstance(lesson, dict):
+            if raw_description is None and isinstance(lesson, Mapping):
+                lesson = cast("Mapping[str, object]", lesson)
                 raw_description = lesson.get("description")
             description = str(raw_description or "").strip()
             module_value = getattr(lesson, "module", None)
-            if module_value is None and isinstance(lesson, dict):
+            if module_value is None and isinstance(lesson, Mapping):
+                lesson = cast("Mapping[str, object]", lesson)
                 module_value = lesson.get("module")
             module_name = self._normalize_module_name(module_value)
             module_key = module_name or "__default__"
             module_entry = module_map.get(module_key)
             if module_entry is None:
-                module_entry = {
+                module_entry: RowPayload = {
                     "title": module_name,
                     "description": None,
                     "lessons": [],
                 }
                 module_map[module_key] = module_entry
             lesson_slug = getattr(lesson, "slug", None)
-            if lesson_slug is None and isinstance(lesson, dict):
+            if lesson_slug is None and isinstance(lesson, Mapping):
+                lesson = cast("Mapping[str, object]", lesson)
                 lesson_slug = lesson.get("slug")
-            lessons_list = cast("list[dict[str, Any]]", module_entry.setdefault("lessons", []))
+            lessons_list = cast("list[RowPayload]", module_entry.setdefault("lessons", []))
             lessons_list.append(
                 {
                     "title": title,
@@ -1097,7 +1120,7 @@ class CourseContentService:
             )
         return list(module_map.values())
 
-    def _ensure_json_string(self, value: Any) -> str:
+    def _ensure_json_string(self, value: object) -> str:
         """Ensure value is serialized to a JSON string."""
         if isinstance(value, str):
             return value
@@ -1105,10 +1128,10 @@ class CourseContentService:
 
     async def _generate_course_from_prompt(
         self,
-        user_prompt: str | list[dict[str, Any]],
+        user_prompt: PromptPayload,
         prompt_text: str,
         user_id: uuid.UUID,
-    ) -> dict[str, Any]:
+    ) -> MutableCoursePayload:
         """Generate course data from AI prompt."""
         ai_result_or_error = (
             await asyncio.gather(
@@ -1156,7 +1179,7 @@ class CourseContentService:
         if not modules:
             logger.warning("AI generated no lessons for prompt '%s'", prompt_text)
 
-        result: dict[str, Any] = {
+        result: MutableCoursePayload = {
             "title": title,
             "description": description,
             "tags": [],

@@ -7,9 +7,8 @@ to ensure data integrity across different content types (PDF, video, EPUB).
 
 import json
 import logging
-from typing import Any, cast
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, ValidationInfo, field_validator
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,7 @@ class PDFHighlightData(BaseModel):
     page: int = Field(ge=1, description="Page number (1-based)")
 
     # Position data for PDF highlighting
-    position: dict[str, Any] = Field(description="Position data for PDF highlight")
+    position: dict[str, object] = Field(description="Position data for PDF highlight")
 
     # Optional fields
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Hex color code")
@@ -31,20 +30,21 @@ class PDFHighlightData(BaseModel):
 
     @field_validator("position")
     @classmethod
-    def validate_position(cls, v: dict[str, Any]) -> dict[str, Any]:
+    def validate_position(cls, v: object) -> dict[str, object]:
         """Validate PDF position data structure."""
         if not isinstance(v, dict):
             msg = "Position must be a dictionary"
             raise ValueError(msg)  # noqa: TRY004 - Pydantic validators should report schema errors as ValueError.
+        position = {key: value for key, value in v.items() if isinstance(key, str)}
 
         # Required position fields for PDF
         required_fields = {"rects", "pageNumber"}
-        if not all(field in v for field in required_fields):
+        if not all(field in position for field in required_fields):
             msg = f"Position must contain fields: {required_fields}"
             raise ValueError(msg)
 
         # Validate rects array
-        rects = v.get("rects", [])
+        rects = position.get("rects", [])
         if not isinstance(rects, list) or not rects:
             msg = "Position rects must be a non-empty array"
             raise ValueError(msg)
@@ -55,26 +55,26 @@ class PDFHighlightData(BaseModel):
                 msg = f"Rect {i} must be a dictionary"
                 raise ValueError(msg)  # noqa: TRY004 - Pydantic validators should report schema errors as ValueError.
 
-            rect_dict = cast("dict[str, Any]", rect)
+            rect_data = {key: value for key, value in rect.items() if isinstance(key, str)}
             rect_fields = {"x1", "y1", "x2", "y2", "width", "height"}
-            if not all(field in rect_dict for field in rect_fields):
+            if not all(field in rect_data for field in rect_fields):
                 msg = f"Rect {i} must contain fields: {rect_fields}"
                 raise ValueError(msg)
 
             # Validate numeric values
             for field in rect_fields:
-                rect_value = rect_dict.get(field)
+                rect_value = rect_data.get(field)
                 if not isinstance(rect_value, (int, float)) or rect_value < 0:
                     msg = f"Rect {i}.{field} must be a non-negative number"
                     raise ValueError(msg)
 
         # Validate page number consistency
-        page_num = v.get("pageNumber")
+        page_num = position.get("pageNumber")
         if not isinstance(page_num, int) or page_num < 1:
             msg = "Position pageNumber must be a positive integer"
             raise ValueError(msg)
 
-        return v
+        return position
 
 
 class VideoHighlightData(BaseModel):
@@ -95,10 +95,10 @@ class VideoHighlightData(BaseModel):
 
     @field_validator("end_time")
     @classmethod
-    def validate_time_range(cls, v: float, info: Any) -> float:
+    def validate_time_range(cls, v: float, info: ValidationInfo) -> float:
         """Ensure end_time is after start_time."""
-        start_time = getattr(info, "data", {}).get("start_time")
-        if start_time is not None and v <= start_time:
+        start_time = info.data.get("start_time")
+        if isinstance(start_time, (int, float)) and v <= start_time:
             msg = "end_time must be greater than start_time"
             raise ValueError(msg)
         return v
@@ -142,14 +142,10 @@ class GenericHighlightData(BaseModel):
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$", description="Hex color code")
     note: str | None = Field(None, max_length=5000, description="User note/comment")
 
-    # Allow any additional fields for extensibility
-    class Config:
-        """Permit arbitrary extra fields for flexibility."""
-
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
-def detect_highlight_type(data: dict[str, Any]) -> str:
+def detect_highlight_type(data: dict[str, JsonValue]) -> str:
     """
     Detect the type of highlight based on data structure.
 
@@ -182,7 +178,7 @@ def detect_highlight_type(data: dict[str, Any]) -> str:
     return "generic"
 
 
-def validate_highlight_data(data: dict[str, Any], _content_type: str | None = None) -> dict[str, Any]:
+def validate_highlight_data(data: dict[str, JsonValue], _content_type: str | None = None) -> dict[str, object]:
     """
     Validate highlight data against appropriate schema.
 
@@ -214,10 +210,10 @@ def validate_highlight_data(data: dict[str, Any], _content_type: str | None = No
 
     try:
         # Validate using the appropriate schema
-        validated_data = schema_class(**data)
+        validated_data = schema_class.model_validate(data)
 
         # Return as dictionary with type annotation
-        result = validated_data.model_dump()
+        result: dict[str, object] = validated_data.model_dump()
         result["_validation_type"] = detected_type
 
         logger.debug("Successfully validated %s highlight data", detected_type)
@@ -230,8 +226,8 @@ def validate_highlight_data(data: dict[str, Any], _content_type: str | None = No
         if detected_type != "generic":
             logger.info("Attempting fallback to generic validation")
             try:
-                validated_data = GenericHighlightData(**data)
-                result = validated_data.model_dump()
+                validated_data = GenericHighlightData.model_validate(data)
+                result: dict[str, object] = validated_data.model_dump()
                 result["_validation_type"] = "generic"
                 return result
             except ValidationError as fallback_error:
@@ -242,7 +238,7 @@ def validate_highlight_data(data: dict[str, Any], _content_type: str | None = No
         raise
 
 
-def validate_json_highlight_data(json_data: str | dict[str, Any], _content_type: str | None = None) -> dict[str, Any]:
+def validate_json_highlight_data(json_data: str | dict[str, JsonValue], _content_type: str | None = None) -> dict[str, object]:
     """
     Validate highlight data from JSON string or dictionary.
 
@@ -273,7 +269,7 @@ def validate_json_highlight_data(json_data: str | dict[str, Any], _content_type:
         msg = "Highlight data must be a JSON object"
         raise ValueError(msg)  # noqa: TRY004 - callers expect validation-shaped failures.
 
-    return validate_highlight_data(data, _content_type)
+    return validate_highlight_data({key: value for key, value in data.items() if isinstance(key, str)}, _content_type)
 
 
 def get_validation_schema_for_type(highlight_type: str) -> type[BaseModel]:
@@ -297,7 +293,7 @@ def get_validation_schema_for_type(highlight_type: str) -> type[BaseModel]:
     return schema_map.get(highlight_type, GenericHighlightData)
 
 
-def get_validation_examples() -> dict[str, dict[str, Any]]:
+def get_validation_examples() -> dict[str, dict[str, JsonValue]]:
     """
     Get example valid highlight data for each type.
 

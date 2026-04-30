@@ -1,8 +1,8 @@
 import logging
 import uuid
-from typing import Any
+from typing import cast
 
-from pydantic import ValidationError as PydanticValidationError
+from pydantic import JsonValue, ValidationError as PydanticValidationError
 from sqlalchemy import and_, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,13 +30,14 @@ class VideoHighlightService(HighlightInterface):
         self,
         content_id: uuid.UUID,
         user_id: uuid.UUID,
-        highlight_data: dict[str, Any],
+        highlight_data: dict[str, object],
     ) -> HighlightResponse:
         """Create a new highlight for a video."""
         await self._verify_video_ownership(content_id, user_id)
 
         try:
-            validated_data = validate_highlight_data(highlight_data, _content_type="video")
+            highlight_json = cast("dict[str, JsonValue]", highlight_data)
+            validated_data = validate_highlight_data(highlight_json, _content_type="video")
             logger.debug(
                 "Validated highlight data for video %s: type=%s",
                 content_id,
@@ -51,7 +52,7 @@ class VideoHighlightService(HighlightInterface):
             user_id=user_id,
             content_type="video",
             content_id=content_id,
-            highlight_data=validated_data,
+            highlight_data=dict(validated_data),
         )
 
         try:
@@ -110,7 +111,7 @@ class VideoHighlightService(HighlightInterface):
         self,
         highlight_id: uuid.UUID,
         user_id: uuid.UUID,
-        highlight_data: dict[str, Any],
+        highlight_data: dict[str, object],
     ) -> HighlightResponse:
         """Update a highlight with ownership validation."""
         query = select(Highlight).where(and_(Highlight.id == highlight_id, Highlight.user_id == user_id))
@@ -122,7 +123,8 @@ class VideoHighlightService(HighlightInterface):
             raise NotFoundError(message=f"Highlight {highlight_id} not found", feature_area="videos")
 
         try:
-            validated_data = validate_highlight_data(highlight_data, _content_type="video")
+            highlight_json = cast("dict[str, JsonValue]", highlight_data)
+            validated_data = validate_highlight_data(highlight_json, _content_type="video")
             logger.debug(
                 "Validated highlight data for update %s: type=%s",
                 highlight_id,
@@ -133,7 +135,7 @@ class VideoHighlightService(HighlightInterface):
             message = f"Invalid highlight data: {error!s}"
             raise ValidationError(message, feature_area="videos") from error
 
-        highlight.highlight_data = validated_data
+        highlight.highlight_data = dict(validated_data)
         await self.session.flush()
         await self.session.refresh(highlight)
 

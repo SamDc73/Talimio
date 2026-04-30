@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
 
+from pydantic import JsonValue
 from sqlalchemy import and_, select
 
 from src.config.settings import get_settings
@@ -87,7 +87,7 @@ class ConceptStateService:
         correct: bool,
         latency_ms: int | None = None,
         context_tag: str | None = None,
-        extra: dict[str, Any] | None = None,
+        extra: dict[str, JsonValue] | None = None,
     ) -> ProbeEvent:
         """Record a probe event for analytics and future scheduling."""
         event = ProbeEvent(

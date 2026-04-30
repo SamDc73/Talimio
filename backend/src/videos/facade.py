@@ -6,9 +6,10 @@ Coordinates internal video services and provides stable API for other modules.
 
 import logging
 import uuid
-from typing import Any
+from typing import cast
 
 from fastapi import BackgroundTasks
+from pydantic import JsonValue
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,7 +42,7 @@ class VideosFacade:
         self._video_service = VideoService()
         self._progress_service = VideoProgressService(session)
 
-    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, object]:
         """
         Get video with progress information.
 
@@ -143,11 +144,11 @@ class VideosFacade:
         """Get transcript segments for a video."""
         return await self._video_service.get_video_transcript_segments(self._session, video_id, user_id)
 
-    async def get_transcript_info(self, video_id: uuid.UUID) -> dict[str, Any] | None:
+    async def get_transcript_info(self, video_id: uuid.UUID) -> dict[str, JsonValue] | None:
         """Get transcript metadata without loading transcript segments."""
         return await self._video_service.get_transcript_info(self._session, video_id)
 
-    async def get_video_details(self, video_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+    async def get_video_details(self, video_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, object]:
         """Get video, chapters, transcript metadata, and progress in one payload."""
         video = await self.get_video(video_id=video_id, user_id=user_id)
         chapters = await self.get_video_chapters(video_id=video_id, user_id=user_id)
@@ -161,7 +162,7 @@ class VideosFacade:
             "progress": progress_payload["progress"],
         }
 
-    async def get_video_with_progress(self, video_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+    async def get_video_with_progress(self, video_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, object]:
         """
         Get complete video information with progress.
 
@@ -186,20 +187,24 @@ class VideosFacade:
             "playback_speed": progress.get("playback_speed", 1.0),
         }
 
-    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(
+        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, JsonValue]
+    ) -> dict[str, object]:
         """Update video watching progress via ContentFacade contract."""
         return await self.update_video_progress(content_id, user_id, progress_data)
 
     async def update_video_progress(
-        self, video_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, video_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, JsonValue]
+    ) -> dict[str, object]:
         """
         Update video watching progress.
 
         Handles progress updates, position tracking, and completion detection.
         """
         try:
-            updated_progress = await self._progress_service.update_progress(video_id, user_id, progress_data)
+            updated_progress = await self._progress_service.update_progress(
+                video_id, user_id, cast("dict[str, object]", dict(progress_data))
+            )
         except (ValueError, RuntimeError, SQLAlchemyError, TypeError):
             logger.exception("videos.progress.update_failed", extra={"video_id": str(video_id)})
             raise

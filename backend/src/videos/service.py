@@ -3,13 +3,15 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Literal, cast
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
 import yt_dlp
 from fastapi import BackgroundTasks
+from pydantic import JsonValue
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,20 +81,50 @@ class VideoChapterNotFoundError(NotFoundError):
         super().__init__("video_chapter", resource_id, metadata=metadata, feature_area="videos")
 
 
-def _create_downloader(options: dict[str, Any]) -> yt_dlp.YoutubeDL:
+def _create_downloader(options: Mapping[str, object]) -> yt_dlp.YoutubeDL:
     """Return a YoutubeDL instance without strict typing complaints."""
     return yt_dlp.YoutubeDL(options)
 
 
-def _extract_info_sync(url: str, options: dict[str, Any]) -> Any:
+def _extract_info_sync(url: str, options: Mapping[str, object]) -> dict[str, JsonValue]:
     """Run yt-dlp extraction synchronously (thread target)."""
     with _create_downloader(options) as ydl:
-        return ydl.extract_info(url, download=False, process=False)
+        info = ydl.extract_info(url, download=False, process=False)
+    if not isinstance(info, Mapping):
+        return {}
+    return cast("dict[str, JsonValue]", info)
 
 
-async def _extract_info_async(url: str, options: dict[str, Any]) -> Any:
+async def _extract_info_async(url: str, options: Mapping[str, object]) -> dict[str, JsonValue]:
     """Run yt-dlp extraction without blocking the asyncio event loop."""
     return await asyncio.to_thread(_extract_info_sync, url, options)
+
+
+def _json_text(value: JsonValue | None, default: str = "") -> str:
+    return value if isinstance(value, str) else default
+
+
+def _json_int(value: JsonValue | None, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return default
+    if isinstance(value, (int, float, str)):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _json_object(value: JsonValue | None) -> dict[str, JsonValue]:
+    return cast("dict[str, JsonValue]", value) if isinstance(value, Mapping) else {}
+
+
+def _json_array(value: JsonValue | None) -> list[JsonValue]:
+    return list(value) if isinstance(value, list) else []
+
+
+def _json_text_list(value: JsonValue | None) -> list[str]:
+    return [item for item in _json_array(value) if isinstance(item, str)]
 
 
 def _extract_video_id_from_url(url: str) -> str:
@@ -121,7 +153,7 @@ async def _embed_video_background(video_id: uuid.UUID) -> None:
         try:
             await RAGService().process_video(session, video_id)
             await session.commit()
-        except SQLAlchemyError, RuntimeError, ValueError, TypeError:
+        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
             try:
                 await session.commit()
             except SQLAlchemyError:
@@ -183,7 +215,7 @@ async def _auto_tag_video_background(video_id: uuid.UUID, user_id: uuid.UUID) ->
             )
             await db.commit()
             logger.info("Successfully tagged video %s with tags: %s", video_id, tags)
-    except SQLAlchemyError, RuntimeError, ValueError, TypeError, OSError:
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError, OSError):
         logger.exception("Failed to tag video %s", video_id)
 
 
@@ -389,7 +421,7 @@ class VideoService:
 
         return video
 
-    def _video_to_dict(self, video: Video) -> dict[str, Any]:
+    def _video_to_dict(self, video: Video) -> dict[str, object]:
         """Convert Video SQLAlchemy object to dict to avoid lazy loading issues."""
         return {
             "id": video.id,
@@ -586,7 +618,7 @@ class VideoService:
 
         return VideoResponse.model_validate(self._video_to_dict(video))
 
-    async def fetch_video_info(self, url: str) -> dict[str, Any]:
+    async def fetch_video_info(self, url: str) -> dict[str, object]:
         """Fetch video information using yt-dlp."""
         ydl_opts = {
             "quiet": True,
@@ -611,9 +643,9 @@ class VideoService:
 
             # Extract relevant fields
             # Parse upload_date from YYYYMMDD format to datetime
-            upload_date_str = info.get("upload_date")
+            upload_date_str = _json_text(info.get("upload_date"))
             published_at = None
-            if upload_date_str and len(upload_date_str) == 8:
+            if len(upload_date_str) == 8:
                 try:
                     published_at = datetime.strptime(upload_date_str, "%Y%m%d").replace(tzinfo=UTC)
                 except ValueError:
@@ -622,13 +654,13 @@ class VideoService:
             return {
                 "youtube_id": info.get("id", ""),
                 "url": url,
-                "title": info.get("title", "Unknown Title"),
-                "channel": info.get("uploader", "Unknown Channel"),
-                "channel_id": info.get("uploader_id", ""),
-                "duration": int(info.get("duration") or 0),
-                "thumbnail_url": info.get("thumbnail"),
-                "description": info.get("description"),
-                "tags": info.get("tags", []),
+                "title": _json_text(info.get("title"), "Unknown Title"),
+                "channel": _json_text(info.get("uploader"), "Unknown Channel"),
+                "channel_id": _json_text(info.get("uploader_id")),
+                "duration": _json_int(info.get("duration")),
+                "thumbnail_url": _json_text(info.get("thumbnail")) or None,
+                "description": _json_text(info.get("description")) or None,
+                "tags": _json_text_list(info.get("tags")),
                 "published_at": published_at,
             }
         except (
@@ -808,7 +840,7 @@ class VideoService:
 
         # Update progress if user_id is provided
         if user_id:
-            progress_data = {
+            progress_data: dict[str, object] = {
                 "completion_percentage": completion_percentage,
                 "completed_chapters": [str(chapter_id) for chapter_id in completed_chapter_ids],
             }
@@ -893,7 +925,7 @@ class VideoService:
 
         return [VideoChapterResponse.model_validate(chapter) for chapter in chapters]
 
-    async def get_transcript_info(self, db: AsyncSession, video_id: uuid.UUID) -> dict[str, Any] | None:
+    async def get_transcript_info(self, db: AsyncSession, video_id: uuid.UUID) -> dict[str, JsonValue] | None:
         """Get transcript metadata without loading full segments."""
         # Only fetch transcript_data field
         result = await db.execute(select(Video.transcript_data).where(Video.id == video_id))
@@ -910,7 +942,7 @@ class VideoService:
 
     async def search_video(
         self, db: AsyncSession, video_id: uuid.UUID, user_id: uuid.UUID, query: str, limit: int = VIDEO_RAG_SEARCH_LIMIT
-    ) -> list[dict]:
+    ) -> list[dict[str, object]]:
         """Search this video's transcript chunks using pgvector."""
         # Ownership validation
         video = await self._get_user_video(db, video_id, user_id)
@@ -1009,11 +1041,11 @@ class VideoService:
             info = await _extract_info_async(video_url, ydl_opts)
 
             # Try to get subtitles
-            subtitles = info.get("subtitles", {})
-            automatic_captions = info.get("automatic_captions", {})
+            subtitles = _json_object(info.get("subtitles"))
+            automatic_captions = _json_object(info.get("automatic_captions"))
 
             # Prefer manual subtitles over automatic ones
-            subs_to_use = subtitles.get("en") or automatic_captions.get("en")
+            subs_to_use = _json_array(subtitles.get("en") or automatic_captions.get("en"))
 
             if not subs_to_use:
                 return []
@@ -1021,13 +1053,14 @@ class VideoService:
             # Find the best subtitle format (prefer SRT to avoid VTT issues)
             subtitle_url = None
             for sub in subs_to_use:
-                if sub.get("ext") == "srt":
-                    subtitle_url = sub.get("url")
+                sub_data = _json_object(sub)
+                if sub_data.get("ext") == "srt":
+                    subtitle_url = _json_text(sub_data.get("url")) or None
                     break
 
             # Fallback to any available subtitle
             if not subtitle_url and subs_to_use:
-                subtitle_url = subs_to_use[0].get("url")
+                subtitle_url = _json_text(_json_object(subs_to_use[0]).get("url")) or None
 
             if not subtitle_url:
                 return []
@@ -1084,7 +1117,7 @@ class VideoService:
 
         return segments
 
-    async def _fetch_video_chapters(self, url: str) -> list[dict[str, Any]]:
+    async def _fetch_video_chapters(self, url: str) -> list[dict[str, JsonValue]]:
         """Fetch video chapter information using yt-dlp."""
         ydl_opts = {
             "quiet": True,
@@ -1102,18 +1135,21 @@ class VideoService:
                 return []
 
             # Extract chapters if available
-            chapters = info.get("chapters", [])
+            chapters = _json_array(info.get("chapters"))
             if not chapters:
                 return []
 
-            return [
-                {
-                    "title": chapter.get("title", "Unknown Chapter"),
-                    "start_time": int(chapter.get("start_time", 0)),
-                    "end_time": int(chapter.get("end_time", 0)),
-                }
-                for chapter in chapters
-            ]
+            extracted_chapters: list[dict[str, JsonValue]] = []
+            for chapter in chapters:
+                chapter_data = _json_object(chapter)
+                extracted_chapters.append(
+                    {
+                        "title": _json_text(chapter_data.get("title"), "Unknown Chapter"),
+                        "start_time": _json_int(chapter_data.get("start_time")),
+                        "end_time": _json_int(chapter_data.get("end_time")),
+                    }
+                )
+            return extracted_chapters
 
         except (
             RuntimeError,

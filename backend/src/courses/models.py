@@ -3,9 +3,10 @@
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Literal
 
 from pgvector.sqlalchemy import Vector
+from pydantic import JsonValue
 from sqlalchemy import (
     TIMESTAMP,
     Boolean,
@@ -25,6 +26,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql._typing import _ColumnExpressionOrStrLabelArgument
 
 from src.database.base import Base
 
@@ -138,7 +140,7 @@ class Lesson(Base):
     course: Mapped[Course] = relationship("Course", back_populates="lessons")
 
     @classmethod
-    def course_order_by(cls) -> tuple[Any, ...]:
+    def course_order_by(cls) -> tuple[_ColumnExpressionOrStrLabelArgument[object], ...]:
         """Return stable ordering for lessons within a course."""
         return (
             cls.module_order.is_(None),
@@ -167,7 +169,7 @@ class LessonVersion(Base):
     minor_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     version_kind: Mapped[str] = mapped_column(String(50), nullable=False, default="first_pass")
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    generation_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    generation_metadata: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -450,7 +452,7 @@ class ProbeEvent(Base):
     review_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     context_tag: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    extra: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    extra: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False, default=dict)
 
 
 class LearningQuestion(Base):
@@ -505,13 +507,13 @@ class LearningQuestion(Base):
         default="practice_answer",
         server_default="practice_answer",
     )
-    expected_payload: Mapped[dict[str, Any]] = mapped_column(
+    expected_payload: Mapped[dict[str, JsonValue]] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
         server_default=text("'{}'::jsonb"),
     )
-    question_payload: Mapped[dict[str, Any]] = mapped_column(
+    question_payload: Mapped[dict[str, JsonValue]] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
@@ -576,7 +578,7 @@ class LearningAttempt(Base):
         nullable=False,
     )
     learner_answer: Mapped[str] = mapped_column(Text, nullable=False)
-    answer_payload: Mapped[dict[str, Any]] = mapped_column(
+    answer_payload: Mapped[dict[str, JsonValue]] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,
@@ -590,7 +592,7 @@ class LearningAttempt(Base):
     mastery: Mapped[float] = mapped_column(Float, nullable=False)
     exposures: Mapped[int] = mapped_column(Integer, nullable=False)
     next_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    response_payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    response_payload: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

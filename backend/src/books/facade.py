@@ -4,9 +4,10 @@ import hashlib
 import json
 import logging
 import uuid
-from typing import Any
+from typing import cast
 
 from fastapi import BackgroundTasks, status
+from pydantic import JsonValue
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,7 +81,19 @@ def _merge_tags(existing_tags: list[str], generated_tags: list[str]) -> list[str
     return list(dict.fromkeys([*existing_tags, *generated_tags]))
 
 
-def _apply_completed_chapters(chapters: list[dict[str, Any]], completed_chapters: dict[str, bool]) -> None:
+def _string_field(payload: dict[str, object], key: str) -> str:
+    """Return a string field from a mixed response payload."""
+    value = payload.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def _string_list_field(payload: dict[str, object], key: str) -> list[str]:
+    """Return a string list field from a mixed response payload."""
+    value = payload.get(key)
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+
+def _apply_completed_chapters(chapters: list[dict[str, JsonValue]], completed_chapters: dict[str, bool]) -> None:
     """Annotate nested table-of-contents items with completion state."""
     for chapter in chapters:
         chapter_id = chapter.get("id")
@@ -123,7 +136,7 @@ class BooksFacade:
             raise NotFoundError(BOOK_RESOURCE_TYPE, str(book_id))
         return book
 
-    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, object]:
         """Get book content with progress for cross-module progress contracts."""
         book_with = await self.get_book(content_id, user_id)
 
@@ -171,13 +184,13 @@ class BooksFacade:
             books = [
                 book
                 for book in books
-                if search_lower in (book.get("title") or "").lower()
-                or search_lower in (book.get("author") or "").lower()
-                or search_lower in (book.get("description") or "").lower()
+                if search_lower in _string_field(book, "title").lower()
+                or search_lower in _string_field(book, "author").lower()
+                or search_lower in _string_field(book, "description").lower()
             ]
 
         if tags:
-            books = [book for book in books if any(tag in (book.get("tags") or []) for tag in tags)]
+            books = [book for book in books if any(tag in _string_list_field(book, "tags") for tag in tags)]
 
         total = len(books)
         start = (page - 1) * limit
@@ -245,7 +258,7 @@ class BooksFacade:
         if metadata.author and (not author or not author.strip()):
             final_author = metadata.author
 
-        book_metadata = {
+        book_metadata: dict[str, JsonValue] = {
             "title": final_title,
             "subtitle": subtitle or metadata.subtitle,
             "author": final_author,
@@ -348,11 +361,11 @@ class BooksFacade:
         user_id: uuid.UUID,
         file_path: str,
         title: str,
-        metadata: dict[str, Any] | None = None,
+        metadata: dict[str, JsonValue] | None = None,
     ) -> tuple[BookResponse, uuid.UUID]:
         """Upload a book file to the user's library and return the created response."""
         try:
-            data: dict[str, Any] = {**(metadata or {})}
+            data: dict[str, JsonValue] = {**(metadata or {})}
             data["title"] = title or data.get("title")
             data["file_path"] = file_path
             data.setdefault("rag_status", "pending")
@@ -397,11 +410,13 @@ class BooksFacade:
             logger.exception("books.upload.failed", extra={"user_id": str(user_id), "title": title})
             raise
 
-    async def update_progress(self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]) -> dict[str, Any]:
+    async def update_progress(
+        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, JsonValue]
+    ) -> dict[str, object]:
         """Update book reading progress."""
         await self._require_owned_book(book_id=content_id, user_id=user_id, operation="update_progress")
         try:
-            updated_progress = await self._progress_service.update_progress(content_id, user_id, progress_data)
+            updated_progress = await self._progress_service.update_progress(content_id, user_id, dict(progress_data))
         except NotFoundError:
             raise
         except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
@@ -423,12 +438,13 @@ class BooksFacade:
         progress_dict = self._build_progress_dict(progress_data)
         result = await self.update_progress(book_id, user_id, progress_dict)
         progress = result.get("progress", {})
-        return BookResponseBuilder.build_progress_response(progress, book_id)
+        progress_payload = cast("dict[str, object]", progress) if isinstance(progress, dict) else {}
+        return BookResponseBuilder.build_progress_response(progress_payload, book_id)
 
     @staticmethod
-    def _build_progress_dict(progress_data: BookProgressUpdate) -> dict[str, Any]:
+    def _build_progress_dict(progress_data: BookProgressUpdate) -> dict[str, JsonValue]:
         """Build the service progress payload from an update request."""
-        progress_dict: dict[str, Any] = {}
+        progress_dict: dict[str, JsonValue] = {}
 
         if (
             progress_data.total_pages is not None
@@ -457,10 +473,10 @@ class BooksFacade:
 
         return progress_dict
 
-    async def update_book(self, book_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, Any]) -> BookResponse:
+    async def update_book(self, book_id: uuid.UUID, user_id: uuid.UUID, update_data: dict[str, JsonValue]) -> BookResponse:
         """Update book metadata."""
         try:
-            book = await self._content_service.update_book(book_id, update_data, user_id)
+            book = await self._content_service.update_book(book_id, dict(update_data), user_id)
             return BookResponse.model_validate(book)
         except NotFoundError:
             raise
@@ -471,7 +487,7 @@ class BooksFacade:
             )
             raise
 
-    async def get_user_books(self, user_id: uuid.UUID, include_progress: bool = True) -> list[dict[str, Any]]:
+    async def get_user_books(self, user_id: uuid.UUID, include_progress: bool = True) -> list[dict[str, object]]:
         """Get all books for a user."""
         try:
             result = await self._session.execute(
@@ -479,7 +495,7 @@ class BooksFacade:
             )
             books = list(result.scalars().all())
 
-            book_dicts: list[dict[str, Any]] = []
+            book_dicts: list[dict[str, object]] = []
             for book in books:
                 book_response = BookResponse.model_validate(book)
                 book_payload = book_response.model_dump()
@@ -498,7 +514,7 @@ class BooksFacade:
         try:
             book = await self._require_owned_book(book_id=book_id, user_id=user_id, operation="get_chapters")
 
-            chapters: list[dict[str, Any]] = []
+            chapters: list[dict[str, JsonValue]] = []
             if isinstance(book.table_of_contents, str) and book.table_of_contents:
                 try:
                     parsed_toc = json.loads(book.table_of_contents)
@@ -511,7 +527,7 @@ class BooksFacade:
                 progress = await self._progress_service.get_progress(book_id, user_id)
                 completed_chapters = progress.get("toc_progress", {})
                 if isinstance(completed_chapters, dict):
-                    _apply_completed_chapters(chapters, completed_chapters)
+                    _apply_completed_chapters(chapters, cast("dict[str, bool]", completed_chapters))
 
             return [BookTocChapterResponse.model_validate(chapter) for chapter in chapters]
         except NotFoundError:
@@ -542,7 +558,7 @@ class BooksFacade:
         message = f"Updated chapter {chapter_id} was not found in book {book_id}"
         raise NotFoundError(message=message)
 
-    async def get_book_rag_status_payload(self, book_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+    async def get_book_rag_status_payload(self, book_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, object]:
         """Get RAG status payload for a book owned by a user."""
         book = await self._require_owned_book(book_id=book_id, user_id=user_id, operation="get_rag_status")
 

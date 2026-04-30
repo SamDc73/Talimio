@@ -1,8 +1,8 @@
 import json
 import logging
 import uuid
-from collections.abc import AsyncGenerator
-from typing import Annotated, Any
+from collections.abc import AsyncGenerator, Callable
+from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -31,6 +31,8 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
+
+type BookContentStreamer = Callable[[], AsyncGenerator[bytes]]
 
 
 def get_books_facade(auth: CurrentAuth) -> BooksFacade:
@@ -180,8 +182,16 @@ async def serve_book_file(book_id: uuid.UUID, auth: CurrentAuth) -> FileResponse
     )
 
 
+class BookPresignedUrlResponse(BaseModel):
+    """Direct book download URL response."""
+
+    url: str
+    expires_in: int
+    content_type: str
+
+
 @router.get("/{book_id}/presigned-url")
-async def get_book_presigned_url(book_id: uuid.UUID, auth: CurrentAuth) -> dict[str, Any]:
+async def get_book_presigned_url(book_id: uuid.UUID, auth: CurrentAuth) -> BookPresignedUrlResponse:
     """Get a presigned URL for direct book download from storage."""
     book = await auth.get_or_404(Book, book_id, "book")
 
@@ -191,11 +201,11 @@ async def get_book_presigned_url(book_id: uuid.UUID, auth: CurrentAuth) -> dict[
     storage = get_storage_provider()
     url = await storage.get_download_url(book.file_path)
 
-    return {
-        "url": url,
-        "expires_in": 3600,
-        "content_type": "application/pdf" if book.file_type == "pdf" else "application/epub+zip",
-    }
+    return BookPresignedUrlResponse(
+        url=url,
+        expires_in=3600,
+        content_type="application/pdf" if book.file_type == "pdf" else "application/epub+zip",
+    )
 
 
 def _get_media_type(file_type: str) -> str:
@@ -227,7 +237,7 @@ async def _handle_range_request(
     url: str,
     range_header: str,
     media_type: str,
-    stream_func: Any,
+    stream_func: BookContentStreamer,
 ) -> StreamingResponse | None:
     """Handle range requests for partial content."""
     async with httpx.AsyncClient(timeout=10.0) as client:

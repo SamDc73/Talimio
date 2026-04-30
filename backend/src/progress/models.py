@@ -3,9 +3,9 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 
 ContentType = Literal["book", "video", "course"]
@@ -34,7 +34,7 @@ class ProgressUpdate(BaseModel):
     """Request model for updating progress."""
 
     progress_percentage: float = Field(ge=0, le=100)
-    metadata: dict[str, Any] | None = Field(default_factory=dict)
+    metadata: dict[str, JsonValue] | None = Field(default_factory=dict)
 
     @field_validator("progress_percentage")
     @classmethod
@@ -50,7 +50,7 @@ class ProgressResponse(BaseModel):
     content_id: uuid.UUID
     content_type: ContentType
     progress_percentage: float
-    metadata: dict[str, Any]
+    metadata: dict[str, JsonValue]
     updated_at: datetime | None = None
     created_at: datetime | None = None
 
@@ -73,7 +73,7 @@ class ProgressData(BaseModel):
     """Progress data with metadata."""
 
     progress_percentage: float
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class BatchProgressResponse(BaseModel):

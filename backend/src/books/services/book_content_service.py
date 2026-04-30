@@ -4,8 +4,8 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
+from pydantic import JsonValue
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,14 +22,14 @@ class BookContentService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def create_book(self, data: dict[str, Any], user_id: uuid.UUID) -> Book:
+    async def create_book(self, data: dict[str, JsonValue], user_id: uuid.UUID) -> Book:
         """Create a new book with user isolation."""
         if "tags" in data and data["tags"] is not None:
             data["tags"] = json.dumps(data["tags"])
 
         return await self._create_with_session(self._session, data, user_id)
 
-    async def _create_with_session(self, session: AsyncSession, data: dict[str, Any], user_id: uuid.UUID) -> Book:
+    async def _create_with_session(self, session: AsyncSession, data: dict[str, JsonValue], user_id: uuid.UUID) -> Book:
         existing_book: Book | None = None
         file_hash = data.get("file_hash")
         if file_hash:
@@ -49,7 +49,7 @@ class BookContentService:
         logger.info("Book created", extra={"user_id": str(user_id), "book_id": str(book.id), "title": book.title})
         return book
 
-    async def update_book(self, book_id: uuid.UUID, data: dict[str, Any], user_id: uuid.UUID) -> Book:
+    async def update_book(self, book_id: uuid.UUID, data: dict[str, JsonValue], user_id: uuid.UUID) -> Book:
         """Update an existing book with ownership validation."""
         query = select(Book).where(Book.id == book_id, Book.user_id == user_id)
         result = await self._session.execute(query)

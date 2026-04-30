@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 import logging
-from typing import Any, cast
+from typing import cast
 
+from pydantic import JsonValue
 from sqlalchemy import func, select, text
 
 from src.books.models import Book
@@ -192,7 +193,7 @@ class BookQueryService:
         """
         # Map status to progress conditions
         # Build status-based ID selection from user_progress
-        params: dict[str, Any] = {"user_id": str(self.user_id)}
+        params: dict[str, JsonValue] = {"user_id": str(self.user_id)}
         if status == "not_started":
             id_sql = text(
                 """
@@ -254,7 +255,7 @@ class BookQueryService:
         books = cast("list[Book]", result.scalars().all())
         return BookResponseBuilder.build_book_list(books)
 
-    async def get_book_stats(self) -> dict[str, Any]:
+    async def get_book_stats(self) -> dict[str, JsonValue]:
         """Get statistics about books in the library.
 
         Returns

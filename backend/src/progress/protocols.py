@@ -5,19 +5,19 @@ This module defines the contracts for progress tracking across different content
 
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Protocol
+from typing import Protocol
 
 
 class ProgressTracker(Protocol):
     """Protocol for tracking content progress across different content types."""
 
-    async def get_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+    async def get_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, object]:
         """Get progress data for specific content and user."""
         ...
 
     async def update_progress(
-        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, object]
+    ) -> dict[str, object]:
         """Update progress data for specific content and user."""
         ...
 
@@ -34,17 +34,17 @@ class ContentFacade(ABC):
     """
 
     @abstractmethod
-    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, Any]:
+    async def get_content_with_progress(self, content_id: uuid.UUID, user_id: uuid.UUID) -> dict[str, object]:
         """Get content with progress information."""
 
     @abstractmethod
-    async def create_content(self, content_data: dict[str, Any], user_id: uuid.UUID) -> dict[str, Any]:
+    async def create_content(self, content_data: dict[str, object], user_id: uuid.UUID) -> dict[str, object]:
         """Create new content."""
 
     @abstractmethod
     async def update_progress(
-        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, Any]
-    ) -> dict[str, Any]:
+        self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, object]
+    ) -> dict[str, object]:
         """Update content progress."""
 
     @abstractmethod
