@@ -1,13 +1,12 @@
 import { motion } from "framer-motion"
 import { Loader2 } from "lucide-react"
-import { useId, useState } from "react"
+import { useRef, useState } from "react"
 
 import { createVideo } from "@/api/videosApi"
 import { Button } from "@/components/Button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
-import { Input } from "@/components/Input"
-import { Label } from "@/components/Label"
+import { Dialog, DialogContent } from "@/components/Dialog"
 import { YouTubeMark } from "@/components/YouTubeMark"
+import { DialogIconHeader } from "@/features/home/components/dialogs/DialogIconHeader"
 import logger from "@/lib/logger"
 
 const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/
@@ -19,6 +18,8 @@ const YOUTUBE_HOSTS = new Set([
 	"youtube-nocookie.com",
 	"www.youtube-nocookie.com",
 ])
+const YOUTUBE_URL_FIELDSET_CLASS_NAME =
+	"relative flex flex-col rounded-lg border border-border/70 bg-background/95 shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-video) focus-within:ring-4 focus-within:ring-(--color-video)/10"
 
 function extractYouTubeVideoId(rawUrl) {
 	let parsedUrl
@@ -55,7 +56,7 @@ function extractYouTubeVideoId(rawUrl) {
 export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 	const [youtubeUrl, setYoutubeUrl] = useState("")
 	const [isAddingVideo, setIsAddingVideo] = useState(false)
-	const youtubeUrlId = useId()
+	const urlInputRef = useRef(null)
 
 	const trimmedUrl = youtubeUrl.trim()
 	const isValidUrl = Boolean(extractYouTubeVideoId(trimmedUrl))
@@ -68,6 +69,11 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 		if (isAddingVideo) return
 		setYoutubeUrl("")
 		onOpenChange(false)
+	}
+
+	const handleOpenAutoFocus = (event) => {
+		event.preventDefault()
+		urlInputRef.current?.focus()
 	}
 
 	const handleYoutubeAdd = async () => {
@@ -91,45 +97,34 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-[560px] gap-5">
+			<DialogContent className="gap-lg sm:max-w-container-lg" onOpenAutoFocus={handleOpenAutoFocus}>
 				<motion.div
 					aria-busy={isAddingVideo}
 					initial={{ opacity: 0, y: 8 }}
 					animate={{ opacity: 1, y: 0 }}
 					exit={{ opacity: 0, y: -8 }}
 					transition={{ duration: 0.18 }}
-					className="space-y-5"
+					className="space-y-lg"
 				>
-					<DialogHeader className="space-y-2">
-						<div className="flex items-center gap-3">
-							<div className="rounded-lg bg-linear-to-br from-video/90 to-video p-2.5">
-								<YouTubeMark className="size-5 text-video-text" />
-							</div>
-							<DialogTitle className="text-2xl">Add a YouTube Video</DialogTitle>
-						</div>
-					</DialogHeader>
+					<DialogIconHeader title="Add a YouTube Video" icon={YouTubeMark} tone="video" wideLogo />
 
-					<div className="space-y-2">
-						<Label htmlFor={youtubeUrlId} className="text-base">
-							YouTube URL
-						</Label>
-						<Input
-							id={youtubeUrlId}
+					<fieldset className={YOUTUBE_URL_FIELDSET_CLASS_NAME}>
+						<input
+							ref={urlInputRef}
 							type="url"
+							aria-label="YouTube video URL"
 							value={youtubeUrl}
 							onChange={(e) => setYoutubeUrl(e.target.value)}
 							placeholder="https://www.youtube.com/watch?v=..."
-							autoFocus
 							autoCapitalize="none"
 							autoCorrect="off"
 							spellCheck={false}
 							disabled={isAddingVideo}
-							className="focus:outline-none focus:ring-2 focus:ring-video/20 focus:border-video focus-visible:ring-video focus-visible:ring-offset-2"
+							className="w-full bg-transparent p-sm  subheading placeholder:text-muted-foreground/45 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 						/>
-						<p className="text-xs text-muted-foreground">Paste any YouTube video link.</p>
-					</div>
+					</fieldset>
 
-					<div className="flex justify-end gap-2.5 pt-2.5">
+					<div className="flex justify-end gap-xs pt-md">
 						<Button type="button" variant="outline" onClick={handleClose} disabled={isAddingVideo}>
 							Cancel
 						</Button>
@@ -137,18 +132,15 @@ export function YouTubeDialog({ open, onOpenChange, onVideoAdded }) {
 							type="button"
 							onClick={handleYoutubeAdd}
 							disabled={!isValidUrl || isAddingVideo}
-							className="min-w-[140px] bg-video text-video-text hover:bg-video-accent"
+							className="min-w-3xl bg-video text-video-text hover:bg-video-accent"
 						>
 							{isAddingVideo ? (
-								<div className="flex items-center gap-2">
-									<Loader2 className="size-4 animate-spin" />
+								<div className="flex items-center gap-2xs">
+									<Loader2 className="size-md animate-spin" />
 									<span>Adding…</span>
 								</div>
 							) : (
-								<div className="flex items-center gap-2">
-									<YouTubeMark className="size-4" />
-									<span>Add Video</span>
-								</div>
+								"Add Video"
 							)}
 						</Button>
 					</div>

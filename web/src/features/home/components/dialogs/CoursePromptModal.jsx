@@ -3,18 +3,18 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion"
-import { FileText, HelpCircle, Image, Loader2, Paperclip, Sparkles, X } from "lucide-react"
+import { BookOpen, FileText, Image, Loader2, Paperclip, Sparkles, X, Zap } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
 import { useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/Dialog"
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/Dialog"
 import { Input } from "@/components/Input"
-import { Label } from "@/components/Label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
+import { DialogIconHeader } from "@/features/home/components/dialogs/DialogIconHeader"
+import SelfAssessmentDialog from "@/features/home/components/dialogs/SelfAssessmentDialog"
 import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
 import useAppStore, { selectSelfAssessmentEnabled, selectSetSelfAssessmentEnabled } from "@/stores/useAppStore"
-import SelfAssessmentDialog from "./SelfAssessmentDialog"
 
 const MODAL_STEPS = {
 	PROMPT: "prompt",
@@ -75,23 +75,53 @@ const ACCEPTED_ATTACHMENT_MIME_TYPES = {
 	"image/jpeg": ".jpg",
 }
 
-const COURSE_PROMPT_ICON_SHELL_CLASS_NAME =
-	"rounded-lg bg-(--color-course)/10 p-2.5 ring-1 ring-inset ring-(--color-course)/15"
 const COURSE_PROMPT_FIELDSET_CLASS_NAME =
-	"relative flex flex-col rounded-xl border border-border bg-background shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
+	"relative flex flex-col rounded-lg border border-border/70 bg-background/95 shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
 const COURSE_ATTACHMENT_CHIP_CLASS_NAME =
-	"group flex items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-foreground"
-const COURSE_MODE_TOGGLE_CLASS_NAME = "relative inline-flex rounded-full bg-(--color-course)/5 p-0.5"
-const COURSE_MODE_ACTIVE_PILL_CLASS_NAME =
-	"absolute top-0.5 left-0.5 h-[calc(100%-4px)] w-1/2 rounded-full border border-(--color-course)/15 bg-(--color-course)/10 transition-transform duration-280 ease-[cubic-bezier(0.22,1,0.36,1)]"
-const COURSE_CHECKBOX_CLASS_NAME =
-	"size-4 rounded-sm border-border text-(--color-course) transition-all focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0"
+	"caption-bold group flex items-center gap-2xs rounded-md border border-border/70 bg-muted/40 px-sm py-xs text-foreground"
+const ACTIVE_CHIP =
+	"bg-(--color-course)/10 text-(--color-course) font-medium ring-1 ring-inset ring-(--color-course)/20"
+const IDLE_CHIP = "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+const DISABLED_CHIP = "disabled:opacity-50 disabled:cursor-not-allowed"
 const COURSE_PRIMARY_ACTION_CLASS_NAME =
-	"min-w-[140px] bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
+	"min-w-3xl bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
 const COURSE_LOADING_OVERLAY_CLASS_NAME =
 	"absolute inset-0 top-12 z-20 flex items-center justify-center rounded-lg border border-(--color-course)/10 bg-card/95 shadow-sm backdrop-blur-sm"
 const COURSE_ERROR_OVERLAY_CLASS_NAME =
 	"absolute inset-0 top-12 z-20 flex flex-col items-center justify-center rounded-lg border border-destructive/20 bg-card/95 shadow-sm backdrop-blur-sm"
+
+function CourseOptionSwitch({ checked, disabled }) {
+	return (
+		<span
+			aria-hidden="true"
+			className={cn(
+				"relative inline-flex h-lg w-xl shrink-0 items-center rounded-full border transition-all duration-200",
+				checked ? "border-(--color-course)/30 bg-(--color-course)/15" : "border-border bg-muted",
+				disabled && "opacity-50"
+			)}
+		>
+			<span
+				className={cn(
+					"pointer-events-none inline-block size-md rounded-full shadow-sm transition-all duration-200",
+					checked
+						? "translate-x-[calc(var(--lk-size-xl)-var(--lk-size-md)-var(--lk-size-2xs))] bg-(--color-course)"
+						: "translate-x-2xs bg-muted-foreground/50"
+				)}
+			/>
+		</span>
+	)
+}
+
+function HoverTooltip({ content, children }) {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>{children}</TooltipTrigger>
+			<TooltipContent side="top" className="text-xs max-w-[200px]">
+				{content}
+			</TooltipContent>
+		</Tooltip>
+	)
+}
 
 function buildPastedFileName(extension) {
 	const isoTimestamp = new Date().toISOString().replace(/[:.]/g, "-")
@@ -229,10 +259,10 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const [showInitial, setShowInitial] = useState(true)
 	const [errorIndex, setErrorIndex] = useState(0)
 	const fileInputRef = useRef(null)
+	const promptInputRef = useRef(null)
 	const attachmentSequenceRef = useRef(0)
 	const attachmentsRef = useRef([])
 	const promptId = useId()
-	const selfAssessmentId = useId()
 
 	const courseService = useCourseService()
 
@@ -296,9 +326,9 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		}
 	}
 
-	const handleToggleSelfAssessment = (event) => {
-		const { checked } = event.target
-		setSelfAssessmentEnabled(checked)
+	const handleOpenAutoFocus = (event) => {
+		event.preventDefault()
+		promptInputRef.current?.focus()
 	}
 
 	const addAttachments = (files) => {
@@ -497,305 +527,250 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			animate={{ opacity: 1, x: 0 }}
 			exit={{ opacity: 0, x: -16 }}
 			transition={{ duration: 0.2 }}
-			className="space-y-5"
+			className="space-y-lg"
 		>
-			<DialogHeader className="space-y-2">
-				<div className="flex items-center gap-3">
-					<div className={COURSE_PROMPT_ICON_SHELL_CLASS_NAME}>
-						<Sparkles className="size-5 text-(--color-course)" />
-					</div>
-					<DialogTitle className="text-2xl">Create Course</DialogTitle>
-				</div>
-			</DialogHeader>
+			<DialogIconHeader title="Create Course" icon={Sparkles} tone="course" />
 
-			<form onSubmit={handlePromptSubmit} onPaste={handlePaste} className="space-y-5">
-				<div className="space-y-3">
-					<Label htmlFor={promptId} className="text-base font-medium">
-						What would you like to learn?
-					</Label>
-					<fieldset
-						aria-label="Course prompt editor and file drop zone"
+			<form onSubmit={handlePromptSubmit} onPaste={handlePaste} className="space-y-lg">
+				<fieldset
+					aria-label="Course prompt editor and file drop zone"
+					className={cn(
+						COURSE_PROMPT_FIELDSET_CLASS_NAME,
+						dragActive ? "border-(--color-course) bg-(--color-course)/5 ring-4 ring-(--color-course)/10" : null
+					)}
+					onDragEnter={handleDrag}
+					onDragOver={handleDrag}
+					onDragLeave={handleDrag}
+					onDrop={handleDrop}
+				>
+					<textarea
+						id={promptId}
+						ref={promptInputRef}
+						aria-label="Course prompt"
+						value={prompt}
+						onChange={(event) => setPrompt(event.target.value)}
+						placeholder="Describe what you want to learn..."
+						disabled={isGenerating}
 						className={cn(
-							COURSE_PROMPT_FIELDSET_CLASS_NAME,
-							dragActive ? "border-(--color-course) bg-(--color-course)/5 ring-4 ring-(--color-course)/10" : null
+							"w-full bg-transparent p-sm  placeholder:text-muted-foreground/45",
+							"subheading resize-none focus:outline-none focus-visible:outline-none",
+							"min-h-3xl"
 						)}
-						onDragEnter={handleDrag}
-						onDragOver={handleDrag}
-						onDragLeave={handleDrag}
-						onDrop={handleDrop}
-					>
-						<textarea
-							id={promptId}
-							value={prompt}
-							onChange={(event) => setPrompt(event.target.value)}
-							placeholder="Describe what you want to learn..."
-							disabled={isGenerating}
-							className={cn(
-								"w-full bg-transparent px-4 py-3 placeholder:text-muted-foreground/50",
-								"resize-none text-sm/relaxed focus:outline-none",
-								"min-h-[120px]"
-							)}
-							rows={4}
-						/>
+						rows={4}
+					/>
 
-						<div className="flex items-end justify-between px-3 pb-3 pt-2 gap-2">
-							<div className="flex items-center gap-2 flex-1 flex-wrap">
-								<Input
-									type="file"
-									ref={fileInputRef}
-									multiple
-									accept={ACCEPTED_ATTACHMENT_ACCEPT_ATTR}
-									onChange={handleFileInputChange}
-									disabled={isGenerating}
-									className="hidden"
-								/>
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<button
-											type="button"
-											onClick={() => fileInputRef.current?.click()}
-											disabled={isGenerating}
-											className={cn(
-												"inline-flex items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors",
-												"hover:bg-secondary hover:text-foreground",
-												isAddingAttachments && "animate-pulse cursor-wait",
-												isGenerating && "opacity-50 cursor-not-allowed"
-											)}
-										>
-											<Paperclip className="size-4" />
-											<span className="sr-only">Attach files</span>
-										</button>
-									</TooltipTrigger>
-									<TooltipContent side="right" className="text-xs">
-										Attach files ({ACCEPTED_ATTACHMENT_EXTENSIONS.join(", ")})
-									</TooltipContent>
-								</Tooltip>
+					<div className="flex items-end justify-between gap-xs px-sm pt-2xs pb-sm">
+						<div className="flex flex-1 flex-wrap items-center gap-xs">
+							<Input
+								type="file"
+								ref={fileInputRef}
+								multiple
+								accept={ACCEPTED_ATTACHMENT_ACCEPT_ATTR}
+								onChange={handleFileInputChange}
+								disabled={isGenerating}
+								className="hidden"
+							/>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<button
+										type="button"
+										onClick={() => fileInputRef.current?.click()}
+										disabled={isGenerating}
+										className={cn(
+											"inline-flex items-center justify-center rounded-md p-xs text-muted-foreground transition-colors",
+											"hover:bg-secondary hover:text-foreground",
+											isAddingAttachments && "animate-pulse cursor-wait",
+											isGenerating && "opacity-50 cursor-not-allowed"
+										)}
+									>
+										<Paperclip className="size-md" />
+										<span className="sr-only">Attach files</span>
+									</button>
+								</TooltipTrigger>
+								<TooltipContent side="right" className="text-xs">
+									Attach files ({ACCEPTED_ATTACHMENT_EXTENSIONS.join(", ")})
+								</TooltipContent>
+							</Tooltip>
 
-								<AnimatePresence>
-									{attachments.length > 0 && (
-										<motion.div
-											initial={{ opacity: 0, width: 0 }}
-											animate={{ opacity: 1, width: "auto" }}
-											exit={{ opacity: 0, width: 0 }}
-											className="flex flex-wrap gap-2"
-										>
-											{attachments.map((attachment) => {
-												const fileName = attachment.file?.name ?? "Untitled"
-												const isImage = isImageAttachmentFile(attachment.file)
+							<AnimatePresence>
+								{attachments.length > 0 && (
+									<motion.div
+										initial={{ opacity: 0, width: 0 }}
+										animate={{ opacity: 1, width: "auto" }}
+										exit={{ opacity: 0, width: 0 }}
+										className="flex flex-wrap gap-2xs"
+									>
+										{attachments.map((attachment) => {
+											const fileName = attachment.file?.name ?? "Untitled"
+											const isImage = isImageAttachmentFile(attachment.file)
 
-												return (
-													<motion.div
-														key={attachment.id}
-														layout
-														initial={{ scale: 0.8, opacity: 0 }}
-														animate={{ scale: 1, opacity: 1 }}
-														exit={{ scale: 0.8, opacity: 0 }}
-														className={COURSE_ATTACHMENT_CHIP_CLASS_NAME}
-													>
-														{isImage && attachment.previewUrl ? (
-															<Dialog>
-																<DialogTrigger asChild>
-																	<button
-																		type="button"
-																		className="flex min-w-0 items-center gap-2 rounded-sm transition-opacity hover:opacity-75"
-																		aria-label={`Preview ${fileName}`}
-																	>
-																		<span className="size-5 overflow-hidden rounded-sm bg-muted">
-																			<img
-																				src={attachment.previewUrl}
-																				alt={fileName}
-																				className="size-full object-cover"
-																				loading="eager"
-																				decoding="async"
-																			/>
-																		</span>
-																		<span className="truncate max-w-[100px]" title={fileName}>
-																			{fileName}
-																		</span>
-																	</button>
-																</DialogTrigger>
-																<DialogContent className="p-2 sm:max-w-3xl [&_svg]:text-background [&>button]:rounded-full [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0! [&>button]:hover:[&_svg]:text-destructive">
-																	<DialogTitle className="sr-only">Image Attachment Preview</DialogTitle>
-																	<div className="relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden bg-background">
+											return (
+												<motion.div
+													key={attachment.id}
+													layout
+													initial={{ scale: 0.8, opacity: 0 }}
+													animate={{ scale: 1, opacity: 1 }}
+													exit={{ scale: 0.8, opacity: 0 }}
+													className={COURSE_ATTACHMENT_CHIP_CLASS_NAME}
+												>
+													{isImage && attachment.previewUrl ? (
+														<Dialog>
+															<DialogTrigger asChild>
+																<button
+																	type="button"
+																	className="flex min-w-0 items-center gap-2 rounded-sm transition-opacity hover:opacity-75"
+																	aria-label={`Preview ${fileName}`}
+																>
+																	<span className="size-5 overflow-hidden rounded-sm bg-muted">
 																		<img
 																			src={attachment.previewUrl}
 																			alt={fileName}
-																			className="block size-auto max-h-[80vh] max-w-full object-contain"
+																			className="size-full object-cover"
 																			loading="eager"
 																			decoding="async"
 																		/>
-																	</div>
-																</DialogContent>
-															</Dialog>
-														) : (
-															<>
-																{isImage ? (
-																	<Image className="size-3.5 text-muted-foreground/70" />
-																) : (
-																	<FileText className="size-3.5 text-muted-foreground/70" />
-																)}
-																<span className="truncate max-w-[100px]" title={fileName}>
-																	{fileName}
-																</span>
-															</>
-														)}
-														<button
-															type="button"
-															onClick={() => removeAttachment(attachment.id)}
-															className="ml-1 text-muted-foreground/50 hover:text-destructive transition-colors"
-														>
-															<X className="size-3.5" />
-														</button>
-													</motion.div>
-												)
-											})}
-										</motion.div>
-									)}
-								</AnimatePresence>
-
-								{attachments.length === 0 && (
-									<span className="text-xs text-muted-foreground/40 hidden sm:inline-block ml-1 select-none">
-										Drag & drop files
-									</span>
+																	</span>
+																	<span className="truncate max-w-[100px]" title={fileName}>
+																		{fileName}
+																	</span>
+																</button>
+															</DialogTrigger>
+															<DialogContent className="p-2 sm:max-w-container-3xl [&_svg]:text-background [&>button]:rounded-full [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0! [&>button]:hover:[&_svg]:text-destructive">
+																<DialogTitle className="sr-only">Image Attachment Preview</DialogTitle>
+																<div className="relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden bg-background">
+																	<img
+																		src={attachment.previewUrl}
+																		alt={fileName}
+																		className="block size-auto max-h-[80vh] max-w-full object-contain"
+																		loading="eager"
+																		decoding="async"
+																	/>
+																</div>
+															</DialogContent>
+														</Dialog>
+													) : (
+														<>
+															{isImage ? (
+																<Image className="size-3.5 text-muted-foreground/70" />
+															) : (
+																<FileText className="size-3.5 text-muted-foreground/70" />
+															)}
+															<span className="truncate max-w-[100px]" title={fileName}>
+																{fileName}
+															</span>
+														</>
+													)}
+													<button
+														type="button"
+														onClick={() => removeAttachment(attachment.id)}
+														className="ml-1 text-muted-foreground/50 hover:text-destructive transition-colors"
+													>
+														<X className="size-3.5" />
+													</button>
+												</motion.div>
+											)
+										})}
+									</motion.div>
 								)}
-							</div>
+							</AnimatePresence>
+
+							{attachments.length === 0 && (
+								<span className="caption hidden select-none text-muted-foreground/40 sm:inline-block">
+									Drag & drop files
+								</span>
+							)}
 						</div>
-					</fieldset>
+					</div>
+				</fieldset>
+
+				<div className="flex flex-wrap gap-2xs">
+					{examplePrompts.map((example) => (
+						<button
+							key={example}
+							type="button"
+							onClick={() => setPrompt(example)}
+							disabled={isGenerating}
+							className={cn(
+								"caption rounded-full px-sm py-xs",
+								"bg-secondary/60 hover:bg-secondary text-secondary-foreground",
+								"border border-border/40 hover:border-border",
+								"transition-all duration-200",
+								"disabled:opacity-50 disabled:cursor-not-allowed"
+							)}
+						>
+							{example}
+						</button>
+					))}
 				</div>
 
-				<div className="space-y-2">
-					<div className="flex flex-wrap gap-2">
-						{examplePrompts.map((example) => (
+				<div className="py-2xs">
+					<div className="inline-flex items-center gap-3xs rounded-full bg-muted/35 p-3xs ring-1 ring-inset ring-border/40">
+						<HoverTooltip content={adaptiveModeTooltipCopy.adaptive}>
 							<button
-								key={example}
 								type="button"
-								onClick={() => setPrompt(example)}
+								onClick={() => !isGenerating && setAdaptiveEnabled(true)}
 								disabled={isGenerating}
 								className={cn(
-									"text-xs px-3 py-1.5 rounded-full",
-									"bg-secondary/60 hover:bg-secondary text-secondary-foreground",
-									"border border-border/40 hover:border-border",
-									"transition-all duration-200",
-									"disabled:opacity-50 disabled:cursor-not-allowed"
+									"inline-flex items-center gap-2xs rounded-full px-sm py-2xs transition-all duration-200 select-none",
+									adaptiveEnabled ? ACTIVE_CHIP : IDLE_CHIP,
+									DISABLED_CHIP
 								)}
 							>
-								{example}
+								<Zap className="size-md" />
+								<span className={cn("subheading", adaptiveEnabled && "font-medium")}>Adaptive</span>
 							</button>
-						))}
+						</HoverTooltip>
+						<HoverTooltip content={adaptiveModeTooltipCopy.standard}>
+							<button
+								type="button"
+								onClick={() => !isGenerating && setAdaptiveEnabled(false)}
+								disabled={isGenerating}
+								className={cn(
+									"inline-flex items-center gap-2xs rounded-full px-sm py-2xs transition-all duration-200 select-none",
+									!adaptiveEnabled ? ACTIVE_CHIP : IDLE_CHIP,
+									DISABLED_CHIP
+								)}
+							>
+								<BookOpen className="size-md" />
+								<span className={cn("subheading", !adaptiveEnabled && "font-medium")}>Standard</span>
+							</button>
+						</HoverTooltip>
+						<div className="mx-2xs h-lg w-px bg-border/40" />
+						<HoverTooltip content={tooltipCopy}>
+							<button
+								type="button"
+								role="switch"
+								aria-checked={selfAssessmentEnabled}
+								onClick={() => !isGenerating && setSelfAssessmentEnabled(!selfAssessmentEnabled)}
+								disabled={isGenerating}
+								className="inline-flex cursor-pointer select-none items-center gap-sm rounded-full px-sm py-2xs transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								<span
+									className={cn(
+										"subheading transition-colors duration-200",
+										selfAssessmentEnabled ? "text-foreground font-medium" : "text-muted-foreground"
+									)}
+								>
+									Self-assessment
+								</span>
+								<CourseOptionSwitch checked={selfAssessmentEnabled} disabled={isGenerating} />
+							</button>
+						</HoverTooltip>
 					</div>
 				</div>
 
-				<div className="space-y-2.5 py-2">
-					<div className="relative inline-flex items-center gap-2">
-						<div className={COURSE_MODE_TOGGLE_CLASS_NAME}>
-							<div className={cn(COURSE_MODE_ACTIVE_PILL_CLASS_NAME, !adaptiveEnabled && "translate-x-full")} />
-							<label
-								className={cn(
-									"relative z-10 px-4 py-2 text-sm rounded-full cursor-pointer",
-									"transition-colors duration-200 min-w-[90px] text-center select-none",
-									adaptiveEnabled ? "font-medium text-course-accent" : "text-muted-foreground",
-									isGenerating && "opacity-50 cursor-not-allowed"
-								)}
-							>
-								<input
-									type="radio"
-									name="learning-mode"
-									checked={adaptiveEnabled}
-									onChange={() => !isGenerating && setAdaptiveEnabled(true)}
-									disabled={isGenerating}
-									className="sr-only"
-								/>
-								Adaptive
-							</label>
-							<label
-								className={cn(
-									"relative z-10 px-4 py-2 text-sm rounded-full cursor-pointer",
-									"transition-colors duration-200 min-w-[90px] text-center select-none",
-									!adaptiveEnabled ? "font-medium text-course-accent" : "text-muted-foreground",
-									isGenerating && "opacity-50 cursor-not-allowed"
-								)}
-							>
-								<input
-									type="radio"
-									name="learning-mode"
-									checked={!adaptiveEnabled}
-									onChange={() => !isGenerating && setAdaptiveEnabled(false)}
-									disabled={isGenerating}
-									className="sr-only"
-								/>
-								Standard
-							</label>
-						</div>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									onClick={(e) => e.preventDefault()}
-									disabled={isGenerating}
-									className="text-muted-foreground/50 hover:text-muted-foreground transition-colors duration-150"
-									aria-label="Learning mode information"
-								>
-									<HelpCircle className="size-3.5" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent side="top" className="text-xs max-w-[200px]">
-								{adaptiveEnabled ? adaptiveModeTooltipCopy.adaptive : adaptiveModeTooltipCopy.standard}
-							</TooltipContent>
-						</Tooltip>
-					</div>
-
-					<label
-						htmlFor={selfAssessmentId}
-						className={cn(
-							"flex items-center gap-2.5 px-1 py-1.5 -mx-1 rounded-md",
-							"transition-colors duration-150",
-							"cursor-pointer hover:bg-muted/40",
-							isGenerating && "opacity-50 cursor-not-allowed"
-						)}
-					>
-						<input
-							type="checkbox"
-							id={selfAssessmentId}
-							checked={selfAssessmentEnabled}
-							onChange={handleToggleSelfAssessment}
-							disabled={isGenerating}
-							className={COURSE_CHECKBOX_CLASS_NAME}
-						/>
-						<span className="text-sm text-foreground select-none">Self-assessment</span>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									onClick={(e) => e.preventDefault()}
-									disabled={isGenerating}
-									className="ml-0.5 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-									aria-label="Self-assessment information"
-								>
-									<HelpCircle className="size-3.5" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent side="top" className="text-xs">
-								{tooltipCopy}
-							</TooltipContent>
-						</Tooltip>
-					</label>
-				</div>
-
-				<div className="flex justify-end gap-2.5 pt-2.5">
+				<div className="flex justify-end gap-xs pt-md">
 					<Button type="button" variant="outline" onClick={closeModal} disabled={isGenerating}>
 						Cancel
 					</Button>
 					<Button type="submit" disabled={isGenerating || !prompt.trim()} className={COURSE_PRIMARY_ACTION_CLASS_NAME}>
 						{isGenerating ? (
-							<div className="flex items-center gap-2">
-								<Loader2 className="size-4 animate-spin" />
+							<div className="flex items-center gap-2xs">
+								<Loader2 className="size-md animate-spin" />
 								<span>Creating…</span>
 							</div>
 						) : (
-							<div className="flex items-center gap-2">
-								<Sparkles className="size-4" />
-								<span>Continue</span>
-							</div>
+							"Continue"
 						)}
 					</Button>
 				</div>
@@ -826,7 +801,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 
 	return (
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-[560px] gap-5">
+			<DialogContent className="gap-lg sm:max-w-container-lg" onOpenAutoFocus={handleOpenAutoFocus}>
 				<div className="relative">
 					<AnimatePresence>
 						{isGenerating && (

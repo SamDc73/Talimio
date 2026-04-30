@@ -3,9 +3,9 @@ import { BookOpen, Loader2, Upload } from "lucide-react"
 import { useId, useRef, useState } from "react"
 
 import { Button } from "@/components/Button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/Dialog"
+import { Dialog, DialogContent } from "@/components/Dialog"
 import { Input } from "@/components/Input"
-import { Label } from "@/components/Label"
+import { DialogIconHeader } from "@/features/home/components/dialogs/DialogIconHeader"
 import { api } from "@/lib/apiClient"
 import logger from "@/lib/logger"
 
@@ -18,8 +18,6 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 	const fileInputRef = useRef(null)
 	const fileInputId = useId()
 	const fileButtonId = useId()
-	const titleInputId = useId()
-	const authorInputId = useId()
 
 	const handleOpenChange = (nextOpen) => {
 		if (!nextOpen) handleClose()
@@ -117,12 +115,12 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-[580px] gap-6">
+			<DialogContent className="gap-lg sm:max-w-container-lg">
 				<div className="relative">
 					{isUploadingBook && (
-						<div className="absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-background/75 backdrop-blur-sm">
-							<div className="flex items-center gap-3 text-sm">
-								<Loader2 className="size-5 animate-spin text-book" />
+						<div className="absolute inset-0 z-50 flex items-center justify-center rounded-xs bg-background/75 backdrop-blur-sm">
+							<div className="subheading flex items-center gap-xs">
+								<Loader2 className="size-md animate-spin text-book" />
 								<span className="font-medium">Uploading book…</span>
 							</div>
 						</div>
@@ -134,88 +132,70 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 						animate={{ opacity: 1, y: 0 }}
 						exit={{ opacity: 0, y: -8 }}
 						transition={{ duration: 0.18 }}
-						className="space-y-6"
+						className="space-y-lg"
 					>
-						<DialogHeader className="space-y-3">
-							<div className="flex items-center gap-3">
-								<div className="rounded-lg bg-linear-to-br from-book/90 to-book p-2.5">
-									<BookOpen className="size-5 text-book-text" />
-								</div>
-								<DialogTitle className="text-2xl">Upload Book</DialogTitle>
-							</div>
-						</DialogHeader>
+						<DialogIconHeader title="Upload Book" icon={BookOpen} tone="book" />
 
-						<div className="space-y-4">
-							<div className="space-y-2">
-								<Label htmlFor={fileInputId}>Book File</Label>
-								<button
-									id={fileButtonId}
-									type="button"
-									className={`w-full rounded-lg border border-dashed ${
-										dragActive ? "border-book bg-book/10" : "border-border"
-									} p-6 text-center transition-colors hover:bg-muted/60`}
-									onDragEnter={handleDrag}
-									onDragOver={handleDrag}
-									onDragLeave={handleDrag}
-									onDrop={handleDrop}
-									onClick={handleFileInputClick}
-									onKeyDown={(e) => {
-										if (e.key === "Enter" || e.key === " ") {
-											e.preventDefault()
-											handleFileInputClick()
-										}
-									}}
-								>
-									<Upload className="mx-auto size-10  text-muted-foreground/70 mb-2" />
-									<p className="text-sm font-medium text-foreground">
-										{selectedFile ? "Replace file" : "Drag PDF/EPUB here"}
+						<div className="space-y-md">
+							<button
+								id={fileButtonId}
+								type="button"
+								className={`w-full rounded-xs border border-dashed ${
+									dragActive ? "border-book bg-book/10" : "border-border"
+								} p-lg text-center transition-colors hover:bg-muted/60`}
+								onDragEnter={handleDrag}
+								onDragOver={handleDrag}
+								onDragLeave={handleDrag}
+								onDrop={handleDrop}
+								onClick={handleFileInputClick}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault()
+										handleFileInputClick()
+									}
+								}}
+							>
+								<Upload className="mx-auto mb-xs size-xl text-muted-foreground/70" />
+								<p className="subheading-bold text-foreground">
+									{selectedFile ? "Replace file" : "Drag PDF/EPUB here"}
+								</p>
+								<p className="caption mt-3xs text-muted-foreground">or click to browse</p>
+								{selectedFile && (
+									<p className="caption mt-xs text-muted-foreground">
+										Selected: <span className="font-medium text-foreground">{selectedFile.name}</span>
 									</p>
-									<p className="text-xs text-muted-foreground mt-1">or click to browse</p>
-									{selectedFile && (
-										<p className="mt-3 text-xs text-muted-foreground">
-											Selected: <span className="font-medium text-foreground">{selectedFile.name}</span>
-										</p>
-									)}
-									<input
-										id={fileInputId}
-										ref={fileInputRef}
-										type="file"
-										accept=".pdf,.epub,application/pdf,application/epub+zip"
-										onChange={handleFileInputChange}
-										className="hidden"
-										disabled={isUploadingBook}
-									/>
-								</button>
-							</div>
+								)}
+								<input
+									id={fileInputId}
+									ref={fileInputRef}
+									type="file"
+									accept=".pdf,.epub,application/pdf,application/epub+zip"
+									onChange={handleFileInputChange}
+									className="hidden"
+									disabled={isUploadingBook}
+								/>
+							</button>
 
 							{selectedFile && (
-								<div className="space-y-2">
-									<Label htmlFor={titleInputId}>Title</Label>
-									<Input
-										id={titleInputId}
-										value={bookTitle}
-										onChange={(e) => setBookTitle(e.target.value)}
-										placeholder="e.g. The Pragmatic Programmer"
-										disabled={isUploadingBook}
-									/>
-								</div>
+								<Input
+									value={bookTitle}
+									onChange={(e) => setBookTitle(e.target.value)}
+									placeholder="Title (e.g. The Pragmatic Programmer)"
+									disabled={isUploadingBook}
+								/>
 							)}
 
 							{selectedFile && (
-								<div className="space-y-2">
-									<Label htmlFor={authorInputId}>Author</Label>
-									<Input
-										id={authorInputId}
-										value={bookAuthor}
-										onChange={(e) => setBookAuthor(e.target.value)}
-										placeholder="e.g. Andrew Hunt, David Thomas"
-										disabled={isUploadingBook}
-									/>
-								</div>
+								<Input
+									value={bookAuthor}
+									onChange={(e) => setBookAuthor(e.target.value)}
+									placeholder="Author (e.g. Andrew Hunt, David Thomas)"
+									disabled={isUploadingBook}
+								/>
 							)}
 						</div>
 
-						<div className="flex justify-end gap-3 pt-2">
+						<div className="flex justify-end gap-xs pt-md">
 							<Button type="button" variant="outline" onClick={handleClose} disabled={isUploadingBook}>
 								Cancel
 							</Button>
@@ -223,11 +203,11 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 								type="button"
 								onClick={handleUpload}
 								disabled={!selectedFile || !bookTitle.trim() || isUploadingBook}
-								className="min-w-[140px] bg-book text-book-text hover:bg-book-accent"
+								className="min-w-3xl bg-book text-book-text hover:bg-book-accent"
 							>
 								{isUploadingBook ? (
-									<div className="flex items-center gap-2">
-										<Loader2 className="size-4 animate-spin" />
+									<div className="flex items-center gap-2xs">
+										<Loader2 className="size-md animate-spin" />
 										<span>Uploading…</span>
 									</div>
 								) : (
