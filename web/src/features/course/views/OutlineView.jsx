@@ -269,7 +269,7 @@ function OutlineView() {
 		const showModules = !focusMode && modules.length > 0
 		return (
 			<div className="flex-1 bg-background">
-				<div className="mx-auto w-full max-w-4xl px-4 py-6 md:px-6 md:py-8 lg:px-8 lg:py-10">
+				<div className="mx-auto w-full max-w-container-4xl px-4 py-6 md:px-6 md:py-8 lg:px-8 lg:py-10">
 					<div className="flex flex-col gap-6 md:gap-8 lg:gap-10">
 						<section className="rounded-3xl border border-border/70 bg-card/95 shadow-sm ring-1 ring-border/40">
 							<div className="flex flex-col gap-6 p-5 md:p-6 lg:p-7">
@@ -327,7 +327,7 @@ function OutlineView() {
 
 	return (
 		<div className="flex-1 bg-background">
-			<div className="mx-auto w-full max-w-4xl px-4 py-6 md:px-6 md:py-8 lg:px-8 lg:py-10">
+			<div className="mx-auto w-full max-w-container-4xl px-4 py-6 md:px-6 md:py-8 lg:px-8 lg:py-10">
 				<div className="flex flex-col gap-6 md:gap-8 lg:gap-10">
 					{/* Next Up - Hero Card */}
 					<section className="rounded-3xl border border-border/70 bg-card/95 shadow-sm ring-1 ring-border/40">

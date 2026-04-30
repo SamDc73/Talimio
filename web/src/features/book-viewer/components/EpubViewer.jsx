@@ -396,7 +396,7 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 	if (error) {
 		return (
 			<div className="h-full flex items-center justify-center bg-background">
-				<div className="text-center max-w-md">
+				<div className="max-w-container-md text-center">
 					<h3 className="text-lg font-semibold text-destructive mb-2">Failed to load EPUB</h3>
 					<p className="text-muted-foreground">{error}</p>
 				</div>
@@ -411,7 +411,7 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 
 	return (
 		<div ref={containerRef} className="h-full bg-background epub-container" data-selection-zone="true">
-			<div className="max-w-4xl mx-auto p-8 h-full">
+			<div className="mx-auto h-full max-w-container-4xl p-8">
 				<div className="bg-card rounded-lg shadow-sm h-full">
 					<ReactReader
 						url={epubUrl}

@@ -107,7 +107,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 
 	return (
 		<Dialog open={isOpen} onOpenChange={handleOpenChange}>
-			<DialogContent className="max-w-3xl gap-0 p-0 max-h-[90vh] overflow-y-auto">
+			<DialogContent className="max-h-[90vh] max-w-container-3xl gap-0 overflow-y-auto p-0">
 				<div className="flex items-center border-b border-border p-6 pr-14">
 					<DialogTitle className="text-xl font-semibold text-foreground">Add Documents to Course</DialogTitle>
 				</div>

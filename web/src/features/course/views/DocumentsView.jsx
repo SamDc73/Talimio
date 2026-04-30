@@ -257,7 +257,7 @@ function DocumentsView() {
 									<Search className="size-8  text-muted-foreground" />
 								</div>
 								<h3 className="text-lg font-medium text-foreground mb-2">No documents yet</h3>
-								<p className="text-muted-foreground mb-6 max-w-md mx-auto">
+								<p className="mx-auto mb-6 max-w-container-md text-muted-foreground">
 									Upload documents to enable RAG-powered features like intelligent lesson generation and context-aware
 									assistant responses.
 								</p>

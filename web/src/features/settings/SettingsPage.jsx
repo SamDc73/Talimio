@@ -16,7 +16,7 @@ export function SettingsPage() {
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay/60 p-4">
-			<div className="w-full max-w-3xl bg-background rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+			<div className="flex max-h-[90vh] w-full max-w-container-3xl flex-col overflow-hidden rounded-2xl bg-background shadow-2xl">
 				<header className="flex items-center gap-4 px-6 py-4 border-b border-border">
 					<button
 						type="button"

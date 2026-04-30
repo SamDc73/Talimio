@@ -449,7 +449,7 @@ export function LessonViewer({
 		return (
 			<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
 				<div className="flex flex-col items-center justify-center min-h-full text-destructive">
-					<div className="mx-auto max-w-3xl rounded-2xl border border-destructive/30 bg-destructive/10 p-6 shadow-sm">
+					<div className="mx-auto max-w-container-3xl rounded-2xl border border-destructive/30 bg-destructive/10 p-6 shadow-sm">
 						<h2 className="text-xl font-semibold mb-4">Error loading lesson</h2>
 						<p className="mb-4">{error}</p>
 						<Button onClick={onBack} variant="outline" size="sm">
@@ -467,7 +467,7 @@ export function LessonViewer({
 		return (
 			<div className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
 				<div className="flex flex-col items-center justify-center min-h-full text-muted-foreground">
-					<div className="mx-auto max-w-3xl rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+					<div className="mx-auto max-w-container-3xl rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
 						<h2 className="text-xl font-semibold mb-4 text-foreground">No lesson available</h2>
 						<p className="mb-4">This lesson could not be loaded.</p>
 						<Button onClick={onBack} variant="outline" size="sm">
@@ -482,7 +482,7 @@ export function LessonViewer({
 
 	return (
 		<div ref={containerRef} className="h-[calc(100vh-4rem)] overflow-y-auto w-full">
-			<div className="max-w-4xl w-full mx-auto px-4 flex justify-center">
+			<div className="mx-auto flex w-full max-w-container-4xl justify-center px-4">
 				<div className="my-8 flex w-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
 					{/* Header */}
 					<div className={cn(LESSON_SHELL_HEADER_CLASS_NAME, "px-6 pt-5 pb-6 md:px-8 md:pt-6 md:pb-8")}>
@@ -613,11 +613,11 @@ export function LessonViewer({
 							</div>
 
 							<div className="space-y-2.5">
-								<h1 className="max-w-3xl text-3xl/tight font-semibold tracking-tight text-foreground md:text-4xl/tight">
+								<h1 className="max-w-container-3xl text-3xl/tight font-semibold tracking-tight text-foreground md:text-4xl/tight">
 									{lesson.title || lesson.slug || "Lesson"}
 								</h1>
 								{lesson.description ? (
-									<p className="max-w-2xl text-sm/relaxed text-muted-foreground md:text-base/relaxed">
+									<p className="max-w-container-2xl text-sm/relaxed text-muted-foreground md:text-base/relaxed">
 										{lesson.description}
 									</p>
 								) : null}

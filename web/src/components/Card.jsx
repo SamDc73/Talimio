@@ -1,13 +1,7 @@
 import { cn } from "@/lib/utils"
 
 function Card({ className, ref, ...props }) {
-	return (
-		<div
-			ref={ref}
-			className={cn("rounded-lg border border-border bg-background text-foreground shadow-sm", className)}
-			{...props}
-		/>
-	)
+	return <div ref={ref} className={cn("rounded-lg bg-background text-foreground shadow-sm", className)} {...props} />
 }
 
 function CardHeader({ className, ref, ...props }) {

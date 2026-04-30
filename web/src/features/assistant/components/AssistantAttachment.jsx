@@ -75,7 +75,7 @@ function AttachmentPreviewDialog({ children }) {
 			>
 				{children}
 			</DialogTrigger>
-			<DialogContent className="aui-attachment-preview-dialog-content p-2 sm:max-w-3xl [&_svg]:text-background [&>button]:rounded-full [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0! [&>button]:hover:[&_svg]:text-destructive">
+			<DialogContent className="aui-attachment-preview-dialog-content p-2 sm:max-w-container-3xl [&_svg]:text-background [&>button]:rounded-full [&>button]:bg-foreground/60 [&>button]:p-1 [&>button]:opacity-100 [&>button]:ring-0! [&>button]:hover:[&_svg]:text-destructive">
 				<DialogTitle className="aui-sr-only sr-only">Image Attachment Preview</DialogTitle>
 				<div className="aui-attachment-preview relative mx-auto flex max-h-[80dvh] w-full items-center justify-center overflow-hidden bg-background">
 					<AttachmentPreview src={src} />

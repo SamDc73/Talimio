@@ -259,7 +259,7 @@ export function MainHeader({ transparent = false, className }) {
 								animate={{ width: 320, opacity: 1 }}
 								exit={{ width: 40, opacity: 0 }}
 								transition={{ duration: 0.2 }}
-								className="relative max-w-md w-full"
+								className="relative w-full max-w-container-md"
 							>
 								<Input
 									type="text"

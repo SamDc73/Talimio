@@ -201,7 +201,7 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 
 	return (
 		<div key={`track-${modules.length}`} className="flex-1 min-h-screen flex flex-col p-4 md:p-6 lg:p-8">
-			<div className="flex-1 max-w-2xl mx-auto w-full flex flex-col">
+			<div className="mx-auto flex w-full max-w-container-2xl flex-1 flex-col">
 				{/* Duolingo-style vertical learning path */}
 				<div className="flex-1 relative">
 					{/* Central path - curved line */}
@@ -306,7 +306,7 @@ export default function TrackPath({ courseId, modules = [], availableLessonIds }
 									</div>
 
 									{sortedLessons.length > 0 ? (
-										<div className="relative mx-auto max-w-md">
+										<div className="relative mx-auto max-w-container-md">
 											<div className="relative">
 												{sortedLessons.map((lesson, lessonIndex) => {
 													const completed = isCompleted(lesson.id)

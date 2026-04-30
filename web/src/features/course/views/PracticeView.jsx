@@ -612,7 +612,7 @@ export default function PracticeView() {
 
 	if (!adaptiveEnabled) {
 		return (
-			<div className="w-full max-w-3xl mx-auto py-12 px-6">
+			<div className="mx-auto w-full max-w-container-3xl px-6 py-12">
 				<div className="rounded-xl border border-border bg-card p-6 space-y-3">
 					<h1 className="text-2xl font-semibold text-foreground">Practice</h1>
 					<p className="text-muted-foreground">Practice bowl is available only for adaptive courses.</p>
@@ -631,7 +631,7 @@ export default function PracticeView() {
 
 	if (mode === "focused" && focusConceptIdParam && !focusConcept) {
 		return (
-			<div className="w-full max-w-3xl mx-auto py-12 px-6">
+			<div className="mx-auto w-full max-w-container-3xl px-6 py-12">
 				<div className="rounded-xl border border-border bg-card p-6 space-y-3">
 					<h1 className="text-2xl font-semibold text-foreground">Practice</h1>
 					<p className="text-muted-foreground">The requested concept is not available in this course right now.</p>
@@ -646,7 +646,7 @@ export default function PracticeView() {
 	if (mode === "scheduled" && dueConcepts.length === 0) {
 		const hasSuggestions = bonusPracticeSuggestions.length > 0
 		return (
-			<div className="w-full max-w-3xl mx-auto py-12 px-6">
+			<div className="mx-auto w-full max-w-container-3xl px-6 py-12">
 				<div className="rounded-xl border border-border bg-card p-6 space-y-3">
 					<h1 className="text-2xl font-semibold text-foreground">Practice</h1>
 					<p className="text-muted-foreground">You&apos;re caught up.</p>
@@ -672,7 +672,7 @@ export default function PracticeView() {
 	if (scheduledComplete) {
 		const hasSuggestions = bonusPracticeSuggestions.length > 0
 		return (
-			<div className="w-full max-w-3xl mx-auto py-12 px-6">
+			<div className="mx-auto w-full max-w-container-3xl px-6 py-12">
 				<div className="rounded-xl border border-border bg-card p-6 space-y-3">
 					<h1 className="text-2xl font-semibold text-foreground">Practice</h1>
 					<p className="text-muted-foreground">You&apos;re caught up.</p>
@@ -745,7 +745,7 @@ export default function PracticeView() {
 	}
 
 	return (
-		<div className="w-full max-w-4xl mx-auto py-8 px-4 md:px-6">
+		<div className="mx-auto w-full max-w-container-4xl px-4 py-8 md:px-6">
 			<div className="rounded-xl border border-border bg-card shadow-sm p-6 space-y-6">
 				<div className="space-y-2">
 					<p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Adaptive Practice</p>

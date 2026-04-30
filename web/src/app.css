@@ -5,6 +5,85 @@
 @import "mathlive/fonts.css";
 @import "../node_modules/jsxgraph/distrib/jsxgraph.css";
 
+@source inline("{gap-,w-,h-}{3xs,2xs,xs,sm,md,lg,xl,2xl,3xl,4xl}");
+
+:root {
+	font-size: 1rem;
+	--lk-scalefactor: 1.618;
+	--lk-wholestep: var(--lk-scalefactor);
+	--lk-halfstep: calc(round(pow(var(--lk-scalefactor), 0.5), 0.001));
+	--lk-quarterstep: round(pow(var(--lk-scalefactor), 0.25), 0.001);
+	--lk-eighthstep: round(pow(var(--lk-scalefactor), 0.125), 0.001);
+	--lk-wholestep-dec: calc(var(--lk-wholestep) - 1);
+	--lk-halfstep-dec: calc(var(--lk-halfstep) - 1);
+	--lk-quarterstep-dec: calc(var(--lk-quarterstep) - 1);
+	--lk-eighthstep-dec: calc(var(--lk-eighthstep) - 1);
+	--lk-size-md: 1em;
+	--lk-size-sm: calc(1em / var(--lk-scalefactor));
+	--lk-size-xs: calc(1em * round(pow(var(--lk-scalefactor), -1), 0.001));
+	--lk-size-2xs: calc(1em * round(pow(var(--lk-scalefactor), -2), 0.001));
+	--lk-size-3xs: calc(1em * round(pow(var(--lk-scalefactor), -3), 0.001));
+	--lk-size-lg: calc(1em * var(--lk-scalefactor));
+	--lk-size-xl: calc(1em * round(pow(var(--lk-scalefactor), 2), 0.001));
+	--lk-size-2xl: calc(1em * round(pow(var(--lk-scalefactor), 3), 0.001));
+	--lk-size-3xl: calc(1em * round(pow(var(--lk-scalefactor), 4), 0.001));
+	--lk-size-4xl: calc(1em * round(pow(var(--lk-scalefactor), 5), 0.001));
+	--lk-size-sm-unitless: calc(1 / var(--lk-scalefactor));
+	--lk-size-xs-unitless: calc(var(--lk-size-sm-unitless) / var(--lk-scalefactor));
+	--lk-size-2xs-unitless: calc(var(--lk-size-xs-unitless) / var(--lk-scalefactor));
+	--lk-size-lg-unitless: calc(1 * var(--lk-scalefactor));
+	--lk-size-xl-unitless: calc(var(--lk-size-lg-unitless) * var(--lk-scalefactor));
+	--lk-size-2xl-unitless: calc(var(--lk-size-xl-unitless) * var(--lk-scalefactor));
+	--display1-font-size: calc(1em * pow(var(--lk-wholestep), 3));
+	--display2-font-size: calc(1em * pow(var(--lk-wholestep), 2));
+	--title1-font-size: calc(1em * var(--lk-wholestep) * var(--lk-halfstep));
+	--title2-font-size: calc(1em * var(--lk-wholestep));
+	--title3-font-size: calc(1em * var(--lk-halfstep));
+	--heading-font-size: calc(1em * var(--lk-quarterstep));
+	--subheading-font-size: calc(1em / var(--lk-quarterstep));
+	--body-font-size: 1em;
+	--callout-font-size: calc(1em / var(--lk-eighthstep));
+	--label-font-size: calc((1em / var(--lk-quarterstep)) / var(--lk-eighthstep));
+	--caption-font-size: calc(1em / var(--lk-halfstep));
+	--capline-font-size: calc(1em / var(--lk-halfstep));
+	--display1-line-height: var(--lk-quarterstep);
+	--display2-line-height: var(--lk-halfstep);
+	--title1-line-height: var(--lk-halfstep);
+	--title2-line-height: var(--lk-halfstep);
+	--title3-line-height: var(--lk-halfstep);
+	--heading-line-height: var(--lk-halfstep);
+	--subheading-line-height: var(--lk-halfstep);
+	--body-line-height: var(--lk-wholestep);
+	--callout-line-height: var(--lk-halfstep);
+	--label-line-height: var(--lk-halfstep);
+	--caption-line-height: var(--lk-halfstep);
+	--capline-line-height: var(--lk-halfstep);
+	--display1-offset: calc(var(--display1-font-size) * calc(var(--display1-line-height) / var(--lk-wholestep)));
+	--display2-offset: calc(var(--display2-font-size) * calc(var(--display2-line-height) / var(--lk-wholestep)));
+	--title1-offset: calc(var(--title1-font-size) * calc(var(--title1-line-height) / var(--lk-wholestep)));
+	--title2-offset: calc(var(--title2-font-size) * calc(var(--title2-line-height) / var(--lk-wholestep)));
+	--title3-offset: calc(var(--title3-font-size) * calc(var(--title3-line-height) / var(--lk-wholestep)));
+	--heading-offset: calc(var(--heading-font-size) * calc(var(--heading-line-height) / var(--lk-wholestep)));
+	--subheading-offset: calc(var(--subheading-font-size) * calc(var(--subheading-line-height) / var(--lk-wholestep)));
+	--body-offset: calc(var(--body-font-size) / var(--lk-wholestep));
+	--callout-offset: calc(var(--callout-font-size) * calc(var(--callout-line-height) / var(--lk-wholestep)));
+	--label-offset: calc(var(--label-font-size) * calc(var(--label-line-height) / var(--lk-wholestep)));
+	--caption-offset: calc(var(--caption-font-size) * calc(var(--caption-line-height) / var(--lk-wholestep)));
+	--capline-offset: calc(var(--capline-font-size) * calc(var(--capline-line-height) / var(--lk-wholestep)));
+	--display1BoxHeight: calc(var(--display1-font-size) * var(--display1-line-height));
+	--display2BoxHeight: calc(var(--display2-font-size) * var(--display2-line-height));
+	--title1BoxHeight: calc(var(--title1-font-size) * var(--title1-line-height));
+	--title2BoxHeight: calc(var(--title2-font-size) * var(--title2-line-height));
+	--title3BoxHeight: calc(var(--title3-font-size) * var(--title3-line-height));
+	--headingBoxHeight: calc(var(--heading-font-size) * var(--heading-line-height));
+	--subheadingBoxHeight: calc(var(--subheading-font-size) * var(--subheading-line-height));
+	--bodyBoxHeight: calc(var(--body-font-size) * var(--body-line-height));
+	--calloutBoxHeight: calc(var(--callout-font-size) * var(--callout-line-height));
+	--labelBoxHeight: calc(var(--label-font-size) * var(--label-line-height));
+	--captionBoxHeight: calc(var(--caption-font-size) * var(--caption-line-height));
+	--caplineBoxHeight: calc(var(--capline-font-size) * var(--capline-line-height));
+}
+
 /* Tailwind v4 @theme configuration */
 @theme {
 	/* Core Colors - Using OKLCH for better color consistency */
@@ -75,28 +154,52 @@
 	--font-sans: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 
 	/* Border Radius */
-	--radius-sm: 0.125rem;
-	--radius-md: 0.375rem;
-	--radius-lg: 0.5rem;
-	--radius-xl: 0.75rem;
-	--radius-2xl: 1rem;
-	--radius-3xl: 1.5rem;
+	--radius-3xs: var(--lk-size-3xs);
+	--radius-2xs: var(--lk-size-2xs);
+	--radius-xs: var(--lk-size-xs);
+	--radius-sm: var(--lk-size-3xs);
+	--radius-md: var(--lk-size-2xs);
+	--radius-lg: var(--lk-size-xs);
+	--radius-xl: var(--lk-size-sm);
+	--radius-2xl: var(--lk-size-md);
+	--radius-3xl: var(--lk-size-lg);
+	--radius-4xl: var(--lk-size-xl);
+	--rounded-3xs: var(--lk-size-3xs);
+	--rounded-2xs: var(--lk-size-2xs);
+	--rounded-xs: var(--lk-size-xs);
+	--rounded-sm: var(--lk-size-sm);
+	--rounded-md: var(--lk-size-md);
+	--rounded-lg: var(--lk-size-lg);
+	--rounded-xl: var(--lk-size-xl);
+	--rounded-2xl: var(--lk-size-2xl);
+	--rounded-3xl: var(--lk-size-3xl);
+	--rounded-4xl: var(--lk-size-4xl);
 
 	/* Container */
 	--container-padding: 2rem;
 	--container-max-width: 1400px;
 
-	/* Breakpoints - Custom breakpoint for large screens */
+	/* Breakpoints */
+	--breakpoint-tablet: 47.9375rem;
+	--breakpoint-mobile: 29.9375rem;
 	--breakpoint-3xl: 120rem;
 
 	/* Shadows */
-	--shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-	--shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-	--shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-	--shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-	--shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+	--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+	--shadow-md: 0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+	--shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.04), 0 10px 20px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+	--shadow-xl: 0px 0px 1px 0px var(--color-border), 0px 50px 100px 0px rgba(0, 0, 0, 0.15);
+	--shadow-2xl: 0 25px 50px rgba(0, 0, 0, 0.23), 0 9px 18px rgba(0, 0, 0, 0.1), 0 0 1px rgba(0, 0, 0, 0.4);
 
-	/* Spacing Scale */
+	/* Scale */
+	--scale-up-w: var(--lk-wholestep);
+	--scale-up-h: var(--lk-halfstep);
+	--scale-up-q: var(--lk-quarterstep);
+	--scale-down-w: calc(1 / var(--lk-wholestep));
+	--scale-down-h: calc(1 / var(--lk-halfstep));
+	--scale-down-q: calc(1 / var(--lk-quarterstep));
+
+	/* Spacing Scale — Tailwind linear (default) */
 	--spacing-0: 0;
 	--spacing-1: 0.25rem;
 	--spacing-2: 0.5rem;
@@ -126,6 +229,18 @@
 	--spacing-72: 18rem;
 	--spacing-80: 20rem;
 	--spacing-96: 24rem;
+
+	/* Ratio-based size scale */
+	--spacing-3xs: var(--lk-size-3xs);
+	--spacing-2xs: var(--lk-size-2xs);
+	--spacing-xs: var(--lk-size-xs);
+	--spacing-sm: var(--lk-size-sm);
+	--spacing-md: var(--lk-size-md);
+	--spacing-lg: var(--lk-size-lg);
+	--spacing-xl: var(--lk-size-xl);
+	--spacing-2xl: var(--lk-size-2xl);
+	--spacing-3xl: var(--lk-size-3xl);
+	--spacing-4xl: var(--lk-size-4xl);
 
 	/* Font Sizes */
 	--text-xs: 0.75rem;
@@ -160,6 +275,434 @@
 	--leading-normal: 1.5;
 	--leading-relaxed: 1.625;
 	--leading-loose: 2;
+}
+
+@utility max-w-container-xs {
+	max-width: var(--container-xs);
+}
+
+@utility max-w-container-sm {
+	max-width: var(--container-sm);
+}
+
+@utility max-w-container-md {
+	max-width: var(--container-md);
+}
+
+@utility max-w-container-lg {
+	max-width: var(--container-lg);
+}
+
+@utility max-w-container-xl {
+	max-width: var(--container-xl);
+}
+
+@utility max-w-container-2xl {
+	max-width: var(--container-2xl);
+}
+
+@utility max-w-container-3xl {
+	max-width: var(--container-3xl);
+}
+
+@utility max-w-container-4xl {
+	max-width: var(--container-4xl);
+}
+
+@utility display1 {
+	--lineHeightInEms: calc(1em * var(--lk-quarterstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.022em;
+	font-size: var(--display1-font-size);
+	font-weight: 400;
+	line-height: var(--lk-quarterstep);
+
+	@variant max-tablet {
+		font-size: 3.3301em;
+	}
+
+	@variant max-mobile {
+		font-size: 2.61743em;
+	}
+}
+
+@utility display1-bold {
+	--lineHeightInEms: calc(1em * var(--lk-quarterstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.022em;
+	font-size: var(--display1-font-size);
+	font-weight: 700;
+	line-height: var(--lk-quarterstep);
+
+	@variant max-tablet {
+		font-size: 3.3301em;
+	}
+
+	@variant max-mobile {
+		font-size: 2.61743em;
+	}
+}
+
+@utility display2 {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.022em;
+	font-size: var(--display2-font-size);
+	font-weight: 400;
+	line-height: var(--lk-halfstep);
+
+	@variant max-mobile {
+		font-size: 2.05818em;
+	}
+}
+
+@utility display2-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.022em;
+	font-size: var(--display2-font-size);
+	font-weight: 700;
+	line-height: var(--lk-halfstep);
+
+	@variant max-mobile {
+		font-size: 2.05818em;
+	}
+}
+
+@utility title1 {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.022em;
+	font-size: var(--title1-font-size);
+	font-weight: 400;
+	line-height: var(--lk-halfstep);
+
+	@variant max-mobile {
+		font-size: 1.82285em;
+	}
+}
+
+@utility title1-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.022em;
+	font-size: var(--title1-font-size);
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
+
+	@variant max-mobile {
+		font-size: 1.82285em;
+	}
+}
+
+@utility title2 {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.02em;
+	font-size: var(--title2-font-size);
+	font-weight: 400;
+	line-height: var(--lk-halfstep);
+}
+
+@utility title2-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.02em;
+	font-size: var(--title2-font-size);
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
+}
+
+@utility title3 {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.017em;
+	font-size: var(--title3-font-size);
+	font-weight: 400;
+	line-height: var(--lk-halfstep);
+}
+
+@utility title3-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.017em;
+	font-size: var(--title3-font-size);
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
+}
+
+@utility heading {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.014em;
+	font-size: var(--heading-font-size);
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
+}
+
+@utility heading-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.014em;
+	font-size: var(--heading-font-size);
+	font-weight: 700;
+	line-height: var(--lk-halfstep);
+}
+
+@utility subheading {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.007em;
+	font-size: var(--subheading-font-size);
+	font-weight: 400;
+	line-height: var(--lk-halfstep);
+}
+
+@utility subheading-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.007em;
+	font-size: var(--subheading-font-size);
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
+}
+
+@utility body {
+	--lineHeightInEms: calc(1em * var(--lk-wholestep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.011em;
+	font-size: 1em;
+	font-weight: 400;
+	line-height: var(--lk-wholestep);
+}
+
+@utility body-bold {
+	--lineHeightInEms: calc(1em * var(--lk-wholestep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.011em;
+	padding: 0;
+	font-size: 1em;
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
+}
+
+@utility callout {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.009em;
+	font-size: var(--callout-font-size);
+	font-weight: 400;
+	line-height: var(--lk-halfstep);
+}
+
+@utility callout-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.009em;
+	font-size: var(--callout-font-size);
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
+	text-decoration: none;
+}
+
+@utility label {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.004em;
+	font-size: var(--label-font-size);
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
+}
+
+@utility label-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.004em;
+	font-size: var(--label-font-size);
+	font-weight: 700;
+	line-height: var(--lk-halfstep);
+}
+
+@utility caption {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.007em;
+	font-size: var(--caption-font-size);
+	font-weight: 400;
+	line-height: var(--lk-halfstep);
+}
+
+@utility caption-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: -0.007em;
+	font-size: var(--caption-font-size);
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
+}
+
+@utility capline {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: 0.0618em;
+	text-transform: uppercase;
+	font-size: var(--capline-font-size);
+	font-weight: 400;
+	line-height: var(--lk-halfstep);
+}
+
+@utility capline-bold {
+	--lineHeightInEms: calc(1em * var(--lk-halfstep));
+	--spacing-md: var(--lineHeightInEms);
+	--spacing-sm: calc(var(--lineHeightInEms) * var(--lk-wholestep-dec));
+	--spacing-xs: calc(var(--lineHeightInEms) * var(--lk-halfstep-dec));
+	--spacing-2xs: calc(var(--lineHeightInEms) * var(--lk-quarterstep-dec));
+	--spacing-lg: calc(var(--lineHeightInEms) * var(--lk-wholestep));
+	--spacing-xl: calc(var(--spacing-lg) * var(--lk-wholestep));
+	--spacing-2xl: calc(var(--spacing-xl) * var(--lk-wholestep));
+	letter-spacing: 0.0618em;
+	text-transform: uppercase;
+	font-size: var(--capline-font-size);
+	font-weight: 600;
+	line-height: var(--lk-halfstep);
 }
 
 /* Dark mode support and base styles */
