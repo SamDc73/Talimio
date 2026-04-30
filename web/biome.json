@@ -25,7 +25,7 @@
 			"suspicious": {
 				"noArrayIndexKey": "error",
 				"noConsole": "warn",
-				"noEmptyBlockStatements": "off",
+				"noEmptyBlockStatements": "error",
 				"noExplicitAny": "off",
 				"noReactSpecificProps": "off",
 				"noCommentText": "warn",
@@ -64,7 +64,7 @@
 									"kind": "const",
 									"scope": "global"
 								},
-								"formats": ["CONSTANT_CASE", "camelCase", "PascalCase"]
+								"formats": ["CONSTANT_CASE"]
 							},
 							{
 								"selector": {
