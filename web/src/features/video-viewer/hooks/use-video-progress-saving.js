@@ -6,7 +6,14 @@ import { CSRF_HEADER_NAME, getCsrfToken } from "@/lib/csrf"
  * Hook to handle video progress saving
  * Saves progress periodically and on unmount
  */
-export function useVideoProgressSaving({ video, videoId, currentTime, duration, updateProgress }) {
+export function useVideoProgressSaving({
+	video,
+	videoId,
+	currentTime,
+	duration,
+	progressMetadata = {},
+	updateProgress,
+}) {
 	const progressDataRef = useRef({ currentTime: 0, duration: 0 })
 	const lastSavedTimeRef = useRef(0)
 
@@ -46,6 +53,7 @@ export function useVideoProgressSaving({ video, videoId, currentTime, duration, 
 				const data = JSON.stringify({
 					progress_percentage: duration > 0 ? Math.round((currentTime / duration) * 100) : 0,
 					metadata: {
+						...progressMetadata,
 						content_type: "video",
 						position: Math.floor(currentTime),
 						duration,
@@ -70,5 +78,5 @@ export function useVideoProgressSaving({ video, videoId, currentTime, duration, 
 		return () => {
 			window.removeEventListener("beforeunload", handleBeforeUnload)
 		}
-	}, [currentTime, duration, video, videoId])
+	}, [currentTime, duration, progressMetadata, video, videoId])
 }

@@ -148,7 +148,7 @@ export function VideoSidebar({ video, currentTime, onSeek, progressPercentage, p
 	}).length
 
 	const isFullyCompleted = chapters.length > 0 && completedChapterCount === chapters.length
-	const displayProgress = isFullyCompleted ? 100 : progressPercentage || 0
+	const displayProgress = isFullyCompleted ? 100 : (progressPercentage ?? 0)
 	const displaySuffix = isFullyCompleted ? "Done" : "Watched"
 
 	return (

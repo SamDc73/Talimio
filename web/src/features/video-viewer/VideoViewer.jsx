@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { getVideo } from "@/api/videosApi"
 import { VideoHeader } from "@/features/video-viewer/components/VideoHeader"
 import VideoSidebarContainer from "@/features/video-viewer/components/VideoSidebarContainer"
-import { useVideoProgress, useVideoProgressWithPosition } from "@/features/video-viewer/hooks/use-video-progress"
+import { useVideoProgressWithPosition } from "@/features/video-viewer/hooks/use-video-progress"
 import useAppStore, { selectSidebarOpen, selectToggleSidebar } from "@/stores/useAppStore"
 import { useVideoProgressSaving } from "./hooks/use-video-progress-saving"
 import { VideoContentTabs } from "./VideoContentTabs"
@@ -22,8 +22,12 @@ function VideoViewerContent() {
 	const toggleSidebar = useAppStore(selectToggleSidebar)
 
 	// Use unified progress hooks
-	const { updateVideoProgress: updateProgress } = useVideoProgressWithPosition(videoId)
-	const { progress: chapterProgress } = useVideoProgress(videoId)
+	const {
+		progress: serverProgress,
+		rawMetadata: progressMetadata,
+		savedPosition,
+		updatePlaybackProgress,
+	} = useVideoProgressWithPosition(videoId)
 
 	// Local state
 	const [video, setVideo] = useState(null)
@@ -35,6 +39,7 @@ function VideoViewerContent() {
 
 	// High-performance YouTube player ref
 	const youtubePlayerRef = useRef(null)
+	const initialPositionAppliedRef = useRef(false)
 
 	// Load video on mount
 	useEffect(() => {
@@ -42,6 +47,7 @@ function VideoViewerContent() {
 			try {
 				setLoading(true)
 				setError(null)
+				initialPositionAppliedRef.current = false
 
 				const data = await getVideo(videoId)
 				setVideo(data)
@@ -50,10 +56,6 @@ function VideoViewerContent() {
 				if (data.duration) {
 					setDuration(data.duration)
 				}
-
-				// Set initial progress from server
-				const savedProgress = data.progress?.lastPosition || data.lastPosition || 0
-				setCurrentTime(savedProgress)
 			} catch (err) {
 				setError(err.message || "Failed to load video")
 			} finally {
@@ -64,12 +66,25 @@ function VideoViewerContent() {
 		loadVideo()
 	}, [videoId])
 
+	useEffect(() => {
+		if (initialPositionAppliedRef.current || !video || !savedPosition || currentTime > 0) {
+			return
+		}
+
+		initialPositionAppliedRef.current = true
+		setCurrentTime(savedPosition)
+		if (youtubePlayerRef.current) {
+			youtubePlayerRef.current.seekTo(savedPosition, true)
+		}
+	}, [currentTime, savedPosition, video])
+
 	// Handle YouTube player ready - memoized to prevent recreating player
 	const handlePlayerReady = useCallback(() => {
 		// Seek to saved position if available
-		const savedPosition = video?.progress?.lastPosition || video?.lastPosition || 0
 		if (savedPosition > 0 && youtubePlayerRef.current) {
 			youtubePlayerRef.current.seekTo(savedPosition)
+			setCurrentTime(savedPosition)
+			initialPositionAppliedRef.current = true
 		}
 
 		// Get initial duration on player ready
@@ -77,16 +92,17 @@ function VideoViewerContent() {
 			const dur = youtubePlayerRef.current.getDuration()
 			if (dur) setDuration(dur)
 
-			// Get initial time position
-			const time = youtubePlayerRef.current.getCurrentTime()
-			if (typeof time === "number" && !Number.isNaN(time)) {
-				setCurrentTime(time)
+			if (savedPosition <= 0) {
+				const time = youtubePlayerRef.current.getCurrentTime()
+				if (typeof time === "number" && !Number.isNaN(time)) {
+					setCurrentTime(time)
+				}
 			}
 		}
 
 		// Note: Time updates now come from VideoTranscriptSync through onTimeUpdate
 		// This eliminates competing polling loops and ensures single source of truth
-	}, [video]) // Only depend on video object
+	}, [savedPosition])
 
 	// Handle player state changes - memoized to prevent recreating player
 	const handleStateChange = useCallback((event) => {
@@ -120,7 +136,8 @@ function VideoViewerContent() {
 		videoId,
 		currentTime,
 		duration,
-		updateProgress,
+		progressMetadata,
+		updateProgress: updatePlaybackProgress,
 	})
 
 	// Clean up polling on unmount
@@ -139,7 +156,6 @@ function VideoViewerContent() {
 		if (youtubePlayerRef.current) {
 			youtubePlayerRef.current.seekTo(timestamp, true)
 			setCurrentTime(timestamp) // Update immediately for responsive UI
-		} else {
 		}
 	}, [])
 
@@ -159,17 +175,17 @@ function VideoViewerContent() {
 			cc_load_policy: 0,
 			fs: 1,
 			playsinline: 1,
-			start: Math.floor(video?.progress?.lastPosition || video?.lastPosition || 0), // Use initial saved position from video data
+			start: Math.floor(savedPosition),
 		}),
-		[video?.progress?.lastPosition, video?.lastPosition]
+		[savedPosition]
 	)
 
 	// Calculate progress percentage
 	const timeBased =
 		duration > 0
 			? Math.round((currentTime / duration) * 100)
-			: Math.round(video?.progress || video?.completionPercentage || 0)
-	const chapterBased = Math.round(chapterProgress?.percentage || 0)
+			: Math.round(serverProgress?.percentage ?? video?.completionPercentage ?? 0)
+	const chapterBased = Math.round(serverProgress?.percentage ?? 0)
 	const progressPercentage = Math.max(chapterBased, timeBased)
 
 	// Format duration helper
