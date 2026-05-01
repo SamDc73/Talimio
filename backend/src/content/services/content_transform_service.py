@@ -34,6 +34,7 @@ class ContentProjectionRow(Protocol):
     extra2: str | None
     count1: int | None
     count2: int | None
+    count3: int | None
     progress: float | None
     created_at: datetime
     last_accessed: datetime | None
@@ -134,7 +135,6 @@ class ContentTransformService:
 
         metadata = ContentMetadata(platform="youtube", video_id=video_id)
 
-        # Progress will be calculated later by the progress service
         progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=0)
 
         return VideoContent(
@@ -163,7 +163,6 @@ class ContentTransformService:
             file_type="pdf",  # Default for now, could be extracted from file
         )
 
-        # Progress will be calculated later by the progress service
         progress = _create_progress_data(percentage=row.progress or 0, completed_items=0, total_items=0)
 
         return BookContent(
@@ -185,14 +184,14 @@ class ContentTransformService:
     @staticmethod
     def _create_course_content(row: ContentProjectionRow) -> CourseContent:
         """Create CourseContent from row data."""
+        completed_lesson_count = row.count3 or 0
         metadata = ContentMetadata(
             ai_generated=True,
             modules_count=row.count2 or 0,
         )
 
-        # Progress will be calculated later by the progress service
         progress = _create_progress_data(
-            percentage=row.progress or 0, completed_items=row.count2 or 0, total_items=row.count1 or 0
+            percentage=row.progress or 0, completed_items=completed_lesson_count, total_items=row.count1 or 0
         )
 
         return CourseContent(
@@ -200,7 +199,7 @@ class ContentTransformService:
             title=row.title,
             description=row.description,
             lesson_count=row.count1 or 0,
-            completed_lessons=row.count2 or 0,
+            completed_lessons=completed_lesson_count,
             author="AI",  # Default for AI-generated courses
             created_at=row.created_at,
             updated_at=row.last_accessed or row.created_at,

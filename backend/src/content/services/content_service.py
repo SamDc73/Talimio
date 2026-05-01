@@ -1,14 +1,12 @@
 """Main content service."""
 
 import logging
-
-# Progress calculation imports removed - progress now fetched separately
-# AuthContext removed - using uuid.UUID directly
 import uuid
 from typing import Protocol, cast
 
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy import select, text
+from sqlalchemy import Float, Numeric, and_, case, cast as sql_cast, column, func, select, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +14,7 @@ from src.books.models import Book
 from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
 from src.content.services.content_transform_service import ContentProjectionRow, ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
-from src.courses.models import Course
+from src.courses.models import Course, CourseConcept, UserConceptState
 from src.exceptions import NotFoundError
 from src.videos.models import Video
 
@@ -71,10 +69,6 @@ class ContentService:
         rows = await self.get_paginated_results(session, combined_query, search_term, page_size, offset, user_id)
         items = ContentTransformService.transform_rows_to_items(rows)
 
-        # PERFORMANCE OPTIMIZATION: Progress calculations removed
-        # Progress is now fetched separately via /api/v1/progress endpoints
-        # This reduces content endpoint response time from 300ms+ to <100ms
-
         return ContentListResponse(
             items=items,
             total=total,
@@ -91,14 +85,127 @@ class ContentService:
         offset: int,
         user_id: uuid.UUID | None = None,
     ) -> list[ContentProjectionRow]:
-        """Get paginated results."""
+        """Get paginated results with canonical progress for the current page."""
         combined_subquery = QueryBuilderService.build_combined_subquery(combined_query)
-        statement = (
+        page_subquery = (
             select(combined_subquery)
             .order_by(combined_subquery.c.last_accessed.desc())
             .limit(page_size)
             .offset(offset)
+            .subquery("page")
         )
+
+        statement = select(page_subquery).order_by(page_subquery.c.last_accessed.desc())
+
+        if user_id is not None:
+            progress_subquery = (
+                text(
+                    """
+                    SELECT content_id::text AS content_id, progress_percentage, metadata
+                    FROM user_progress
+                    WHERE user_id = :user_id
+                    """
+                )
+                .columns(column("content_id"), column("progress_percentage"), column("metadata", JSONB))
+                .subquery("progress")
+            )
+
+            page_content_id = sql_cast(page_subquery.c.id, PG_UUID(as_uuid=True))
+            adaptive_progress = (
+                select(
+                    sql_cast(
+                        func.round(
+                            sql_cast(func.avg(func.coalesce(UserConceptState.s_mastery, 0.0)) * 100.0, Numeric),
+                            2,
+                        ),
+                        Float,
+                    )
+                )
+                .select_from(
+                    CourseConcept.__table__.outerjoin(
+                        UserConceptState.__table__,
+                        and_(
+                            UserConceptState.concept_id == CourseConcept.concept_id,
+                            UserConceptState.user_id == user_id,
+                        ),
+                    )
+                )
+                .where(CourseConcept.course_id == page_content_id)
+                .scalar_subquery()
+            )
+            completed_lessons = progress_subquery.c.metadata["completed_lessons"]
+            completed_lesson_id = func.jsonb_array_elements_text(completed_lessons).column_valued("completed_lesson_id")
+            completed_lesson_count = case(
+                (
+                    func.jsonb_typeof(completed_lessons) == "array",
+                    select(func.count(func.distinct(completed_lesson_id))).scalar_subquery(),
+                ),
+                else_=0,
+            )
+            lesson_progress = case(
+                (
+                    and_(page_subquery.c.count1 > 0, completed_lesson_count > 0),
+                    func.least(
+                        100.0,
+                        sql_cast(
+                            func.round(sql_cast((completed_lesson_count * 100.0) / page_subquery.c.count1, Numeric), 2),
+                            Float,
+                        ),
+                    ),
+                ),
+                else_=0,
+            )
+            stored_progress = func.coalesce(progress_subquery.c.progress_percentage, 0)
+            course_progress = case(
+                (
+                    Course.adaptive_enabled.is_(True),
+                    func.coalesce(adaptive_progress, 0),
+                ),
+                (
+                    stored_progress == 0,
+                    lesson_progress,
+                ),
+                else_=stored_progress,
+            )
+            progress = case(
+                (page_subquery.c.type == "course", course_progress),
+                else_=stored_progress,
+            )
+            statement = (
+                select(
+                    page_subquery.c.id,
+                    page_subquery.c.title,
+                    page_subquery.c.description,
+                    page_subquery.c.type,
+                    page_subquery.c.last_accessed,
+                    page_subquery.c.created_at,
+                    page_subquery.c.tags,
+                    page_subquery.c.extra1,
+                    page_subquery.c.extra2,
+                    progress.label("progress"),
+                    page_subquery.c.count1,
+                    page_subquery.c.count2,
+                    case(
+                        (page_subquery.c.type == "course", completed_lesson_count),
+                        else_=page_subquery.c.count3,
+                    ).label("count3"),
+                    page_subquery.c.archived,
+                    page_subquery.c.toc_progress,
+                    page_subquery.c.table_of_contents,
+                )
+                .select_from(
+                    page_subquery.outerjoin(progress_subquery, page_subquery.c.id == progress_subquery.c.content_id)
+                    .outerjoin(
+                        Course,
+                        and_(
+                            page_subquery.c.type == "course",
+                            Course.id == page_content_id,
+                            Course.user_id == user_id,
+                        ),
+                    )
+                )
+                .order_by(page_subquery.c.last_accessed.desc())
+            )
         params: dict[str, str | uuid.UUID] = {}
         if search_term:
             params["search"] = search_term

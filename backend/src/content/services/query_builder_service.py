@@ -37,6 +37,7 @@ class QueryBuilderService:
             column("progress"),
             column("count1"),
             column("count2"),
+            column("count3"),
             column("archived"),
             column("toc_progress"),
             column("table_of_contents"),
@@ -81,8 +82,7 @@ class QueryBuilderService:
         include_archived: bool = False,
         user_id: uuid.UUID | None = None,
     ) -> str:
-        """Get SQL query for videos WITHOUT progress (optimized for performance)."""
-        # No more progress JOINs - progress is fetched separately
+        """Get SQL query for videos before page-level progress enrichment."""
         query = """
             SELECT
                 v.id::text as id,
@@ -97,6 +97,7 @@ class QueryBuilderService:
                 0 as progress,
                 COALESCE(v.duration, 0) as count1,
                 0 as count2,
+                0 as count3,
                 COALESCE(v.archived, false) as archived,
                 NULL::text as toc_progress,
                 NULL::text as table_of_contents
@@ -133,8 +134,7 @@ class QueryBuilderService:
     def get_books_query(
         search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: uuid.UUID | None = None
     ) -> str:
-        """Get SQL query for books WITHOUT progress (optimized for performance)."""
-        # No more progress JOINs - progress is fetched separately
+        """Get SQL query for books before page-level progress enrichment."""
         query = """
             SELECT
                 b.id::text,
@@ -149,6 +149,7 @@ class QueryBuilderService:
                 0 as progress,
                 COALESCE(b.total_pages, 0) as count1,
                 0 as count2,
+                0 as count3,
                 COALESCE(b.archived, false) as archived,
                 '{}'::text as toc_progress,
                 NULL::text as table_of_contents
@@ -182,7 +183,7 @@ class QueryBuilderService:
         include_archived: bool = False,
         user_id: uuid.UUID | None = None,
     ) -> str:
-        """Get SQL query for courses WITHOUT progress (optimized for performance)."""
+        """Get SQL query for courses before page-level progress enrichment."""
         query = """
             SELECT
                 c.id::text,
@@ -205,6 +206,7 @@ class QueryBuilderService:
                     FROM lessons l
                     WHERE l.course_id = c.id AND l.module_name IS NOT NULL
                 ) as count2,
+                0 as count3,
                 COALESCE(c.archived, false) as archived,
                 NULL::text as toc_progress,
                 NULL::text as table_of_contents
