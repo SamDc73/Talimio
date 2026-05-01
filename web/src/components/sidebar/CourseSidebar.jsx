@@ -39,7 +39,7 @@ function CourseSidebar({
 	}
 
 	const progress =
-		adaptiveEnabled && typeof adaptiveProgressPct === "number" ? adaptiveProgressPct : courseProgress?.percentage || 0
+		adaptiveEnabled && typeof adaptiveProgressPct === "number" ? adaptiveProgressPct : (courseProgress?.percentage ?? 0)
 
 	const countLessons = (items = []) => {
 		let total = 0

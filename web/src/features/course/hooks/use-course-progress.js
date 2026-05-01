@@ -1,19 +1,17 @@
 import { useCallback, useMemo } from "react"
-import { useProgress, useUpdateProgress } from "@/hooks/use-progress"
+import { useSingleProgress, useUpdateProgress } from "@/hooks/use-progress"
 
 /**
  * Course progress hook backed by the unified progress API
  */
 
 export function useCourseProgress(courseId) {
-	const contentIds = courseId ? [courseId] : []
-
-	const progressQuery = useProgress(contentIds)
+	const progressQuery = useSingleProgress(courseId)
 	const updateProgress = useUpdateProgress()
 
 	// Current progress and normalized metadata
-	const currentProgress = progressQuery.data?.[courseId] || 0
-	const rawMetadata = progressQuery.metadata?.[courseId] || {}
+	const currentProgress = progressQuery.data ?? 0
+	const rawMetadata = progressQuery.metadata || {}
 
 	// Extract values with defaults
 	let completedLessonsArray = rawMetadata.completed_lessons
@@ -21,7 +19,7 @@ export function useCourseProgress(courseId) {
 		completedLessonsArray = []
 	}
 	const currentLessonId = rawMetadata.current_lesson_id
-	const totalLessons = rawMetadata.total_lessons || 0
+	const totalLessons = rawMetadata.total_lessons ?? 0
 
 	// Helper to calculate progress from completed lessons
 	const calculateProgressFromLessons = (completedLessons, totalLessons) => {

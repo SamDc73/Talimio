@@ -1,23 +1,21 @@
-import { useProgress, useUpdateProgress } from "@/hooks/use-progress"
+import { useSingleProgress, useUpdateProgress } from "@/hooks/use-progress"
 
 /**
  * Book progress hook backed by the unified progress API
  */
 
 export function useBookProgress(bookId) {
-	const contentIds = bookId ? [bookId] : []
-
-	const progressQuery = useProgress(contentIds)
+	const progressQuery = useSingleProgress(bookId)
 	const updateProgress = useUpdateProgress()
 
 	// Current progress and normalized metadata
-	const currentProgress = progressQuery.data?.[bookId] || 0
-	const rawMetadata = progressQuery.metadata?.[bookId] || {}
+	const currentProgress = progressQuery.data ?? 0
+	const rawMetadata = progressQuery.metadata || {}
 
 	// Extract values with defaults (snake_case only)
-	const tocProgress = rawMetadata.toc_progress || {}
-	const currentPage = rawMetadata.current_page || 0
-	const totalPages = rawMetadata.total_pages || 0
+	const tocProgress = rawMetadata.toc_progress ?? {}
+	const currentPage = rawMetadata.current_page ?? 0
+	const totalPages = rawMetadata.total_pages ?? 0
 	const tocChapterCount = Object.keys(tocProgress).length
 	const totalChaptersFromMetadata =
 		typeof rawMetadata.total_chapters === "number" ? rawMetadata.total_chapters : tocChapterCount
@@ -57,11 +55,7 @@ export function useBookProgress(bookId) {
 			}
 
 			// Calculate new progress based on completed chapters
-			const totalChapters =
-				totalChaptersOverride ??
-				rawMetadata.total_chapters ??
-				rawMetadata.totalChapters ??
-				Object.keys(newTocProgress).length
+			const totalChapters = totalChaptersOverride ?? rawMetadata.total_chapters ?? Object.keys(newTocProgress).length
 			const newProgress = calculateProgressFromToc(newTocProgress, totalChapters)
 
 			await updateProgress.mutateAsync({
@@ -77,7 +71,7 @@ export function useBookProgress(bookId) {
 				},
 			})
 		},
-		batchUpdate: async (updates, totalChaptersOverride) => {
+		updateCompletions: async (updates, totalChaptersOverride) => {
 			const newTocProgress = { ...tocProgress }
 
 			updates.forEach(({ itemId, completed }) => {
@@ -86,11 +80,7 @@ export function useBookProgress(bookId) {
 			})
 
 			// Calculate new progress based on completed chapters
-			const totalChapters =
-				totalChaptersOverride ??
-				rawMetadata.total_chapters ??
-				rawMetadata.totalChapters ??
-				Object.keys(newTocProgress).length
+			const totalChapters = totalChaptersOverride ?? rawMetadata.total_chapters ?? Object.keys(newTocProgress).length
 			const newProgress = calculateProgressFromToc(newTocProgress, totalChapters)
 
 			await updateProgress.mutateAsync({

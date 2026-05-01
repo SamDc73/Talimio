@@ -53,7 +53,7 @@ function BookSidebar({
 	const progress = progressApi?.progress
 	const toggleCompletion = progressApi?.toggleCompletion
 	const isCompleted = progressApi?.isCompleted || (() => false)
-	const batchUpdate = progressApi?.batchUpdate
+	const updateCompletions = progressApi?.updateCompletions
 	const refetch = progressApi?.refetch
 
 	/**
@@ -107,7 +107,7 @@ function BookSidebar({
 		const hasChildren = section.children?.length > 0
 
 		if (hasChildren) {
-			if (!batchUpdate) {
+			if (!updateCompletions) {
 				return
 			}
 			const allChildren = getAllChildrenIds(section)
@@ -126,7 +126,7 @@ function BookSidebar({
 					itemId: id,
 					completed: newStatus,
 				}))
-				await batchUpdate(updates, totalChapters)
+				await updateCompletions(updates, totalChapters)
 				setOptimisticCompletions((prev) => {
 					const newState = { ...prev }
 					allIds.forEach((id) => {
@@ -302,7 +302,7 @@ function BookSidebar({
 
 	const chapters = book.tableOfContents?.length > 0 ? book.tableOfContents : ApiChapters
 
-	const overallProgress = progress?.percentage || progressPercentage || 0
+	const overallProgress = progress?.percentage ?? progressPercentage ?? 0
 
 	const totalLeafChapters = countTotalLeafChapters(chapters)
 
