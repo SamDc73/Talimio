@@ -13,7 +13,7 @@ class HighlightCreate(BaseModel):
     """Schema for creating a new highlight."""
 
     source_data: dict[str, object] = Field(
-        ..., description="Web-highlighter source data containing startMeta, endMeta, text, etc."
+        description="Web-highlighter source data containing startMeta, endMeta, text, etc."
     )
 
     model_config = build_camel_config()

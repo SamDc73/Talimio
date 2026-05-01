@@ -50,7 +50,7 @@ class TaggedContent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tags: list[TagWithConfidence] = Field(
-        ..., description="List of tags with confidence scores", min_length=1, max_length=10
+        description="List of tags with confidence scores"
     )
 
 

@@ -67,7 +67,7 @@ class ContentItemBase(BaseModel):
     updated_at: datetime
 
     # Common optional fields
-    tags: list[str] = []
+    tags: list[str] = Field(default_factory=list)
     status: ContentItemStatus = "active"
     estimated_time: int | None = None  # in minutes
 
