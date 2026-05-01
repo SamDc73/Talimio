@@ -1,5 +1,6 @@
 import { useLocation } from "react-router-dom"
 
+import { useSingleProgress } from "@/hooks/use-progress"
 import useAppStore from "@/stores/useAppStore"
 
 /**
@@ -12,8 +13,6 @@ import useAppStore from "@/stores/useAppStore"
  */
 export function useCurrentContext() {
 	const location = useLocation()
-	const getVideoProgress = useAppStore((state) => state.getVideoProgress)
-	const getBookProgress = useAppStore((state) => state.getBookProgress)
 
 	const pathname = location.pathname || ""
 	const segments = pathname.split("/").filter(Boolean)
@@ -25,21 +24,15 @@ export function useCurrentContext() {
 	// videos/:videoId
 	if (segments[0] === "videos" && segments[1]) {
 		const videoId = segments[1]
-		const videoProgress = getVideoProgress?.(videoId)
-		const currentTime = videoProgress?.currentTime || 0
 		contextType = "video"
 		contextId = videoId
-		contextMeta = { timestamp: currentTime }
 	}
 
 	// books/:bookId
 	else if (segments[0] === "books" && segments[1]) {
 		const bookId = segments[1]
-		const bookProgress = getBookProgress?.(bookId)
-		const currentPage = bookProgress?.currentPage || 1
 		contextType = "book"
 		contextId = bookId
-		contextMeta = { page: Math.max(0, Number(currentPage) - 1) }
 	}
 
 	// course/:courseId or course/preview/:courseId or courses/:courseId
@@ -72,6 +65,19 @@ export function useCurrentContext() {
 			contextId = courseId
 			contextMeta = { lesson_id: lessonId || null }
 		}
+	}
+
+	const bookReadingState = useAppStore((state) =>
+		contextType === "book" && contextId ? state.books.readingState[contextId] : null
+	)
+	const progressQuery = useSingleProgress(contextType === "video" ? contextId : null)
+
+	if (contextType === "video") {
+		const metadata = progressQuery.metadata || {}
+		contextMeta = { timestamp: metadata.position ?? metadata.last_position ?? 0 }
+	} else if (contextType === "book") {
+		const currentPage = bookReadingState?.currentPage ?? 1
+		contextMeta = { page: Math.max(0, Number(currentPage) - 1) }
 	}
 
 	if (contextType && contextId) {

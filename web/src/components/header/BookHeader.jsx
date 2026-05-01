@@ -6,19 +6,21 @@ import { useChatSidebar } from "@/contexts/ChatSidebarContext"
 import useAppStore from "@/stores/useAppStore"
 import { formatProgressText } from "@/utils/progressUtils"
 
+const noop = () => undefined
+
 export function BookHeader({
 	book,
 	bookId, // Always use explicit bookId from parent
 	onToggleSidebar,
 	isSidebarOpen,
-	onZoomIn = () => {},
-	onZoomOut = () => {},
-	onFitToScreen = () => {},
+	onZoomIn = noop,
+	onZoomOut = noop,
+	onFitToScreen = noop,
 	zoomLevel = 100,
 	showZoomControls = false,
 	showFontControls = false,
-	onFontIncrease = () => {},
-	onFontDecrease = () => {},
+	onFontIncrease = noop,
+	onFontDecrease = noop,
 	fontSize = 100,
 }) {
 	const { toggleChat } = useChatSidebar()
@@ -28,13 +30,8 @@ export function BookHeader({
 	const currentPage = useAppStore((state) => state.books?.readingState?.[bookId]?.currentPage || 1)
 	const storedTotalPages = useAppStore((state) => state.books?.readingState?.[bookId]?.totalPages)
 	const totalPages = storedTotalPages || book?.totalPages || 0
-	// For EPUB, progress is tracked via epubState.progress (0-100). Fallback to books.progress slice.
 	const epubProgressFromReading = useAppStore((state) => state.books?.readingState?.[bookId]?.epubState?.progress)
-	const epubProgressFromSlice = useAppStore((state) => state.books?.progress?.[bookId]?.percentage)
-	const epubProgressPct =
-		(typeof epubProgressFromReading === "number" ? epubProgressFromReading : undefined) ??
-		(typeof epubProgressFromSlice === "number" ? epubProgressFromSlice : undefined) ??
-		0
+	const epubProgressPct = typeof epubProgressFromReading === "number" ? epubProgressFromReading : 0
 	let progressPercentage = 0
 	if (isEpub) {
 		progressPercentage = epubProgressPct

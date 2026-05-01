@@ -5,7 +5,7 @@ import { immer } from "zustand/middleware/immer"
 /* eslint-disable sonarjs/todo-tag */
 
 // Stable default objects to prevent infinite re-renders
-const DEFAULT_BOOK_PROGRESS = {
+const DEFAULT_BOOK_READING_STATE = {
 	currentPage: 1,
 	totalPages: 0,
 	zoomLevel: 100,
@@ -17,21 +17,7 @@ const DEFAULT_BOOK_PROGRESS = {
 	},
 }
 
-const dispatchProgressUpdated = (contentId, progressValue, metadata = {}) => {
-	if (typeof window === "undefined" || !contentId) {
-		return
-	}
-
-	window.dispatchEvent(
-		new CustomEvent("progressUpdated", {
-			detail: {
-				contentId,
-				progress: progressValue,
-				metadata,
-			},
-		})
-	)
-}
+const LEGACY_BOOK_STATE_KEYS = ["progress", "tocProgress", "metadata"]
 
 /**
  * Main application store with all state slices
@@ -46,138 +32,12 @@ const useAppStore = create(
 				// Authentication actions
 				// ========== BOOKS SLICE ==========
 				books: {
-					progress: {},
 					loading: {},
 					error: {},
 					readingState: {},
 				},
 
 				// ========== BOOK ACTIONS ==========
-				// Standardized actions matching course/video patterns
-
-				// Set book progress
-				setBookProgress: (bookId, progress) => {
-					const nextProgress = {
-						...progress,
-						lastUpdated: Date.now(),
-					}
-
-					set((state) => {
-						state.books.progress[bookId] = nextProgress
-					})
-
-					const metadata = {
-						content_type: "book",
-						toc_progress: nextProgress.items || {},
-						total_chapters: nextProgress.totalItems ?? Object.keys(nextProgress.items || {}).length,
-						completed_chapters_count: nextProgress.completedItems ?? 0,
-					}
-
-					if (nextProgress.currentPage !== undefined) {
-						metadata.current_page = nextProgress.currentPage
-					}
-					if (nextProgress.totalPages !== undefined) {
-						metadata.total_pages = nextProgress.totalPages
-					}
-					if (nextProgress.zoomLevel !== undefined) {
-						metadata.zoom_level = nextProgress.zoomLevel
-					}
-
-					dispatchProgressUpdated(bookId, nextProgress.percentage ?? 0, metadata)
-				},
-
-				// Toggle book item completion (chapters)
-				toggleBookItem: (bookId, chapterId) => {
-					const progress = get().books.progress[bookId] || {
-						percentage: 0,
-						totalItems: 0,
-						completedItems: 0,
-						items: {},
-					}
-
-					const wasCompleted = progress.items[chapterId] || false
-					const isCompleted = !wasCompleted
-
-					// Calculate new progress
-					const completedItems = progress.completedItems + (isCompleted ? 1 : -1)
-					const percentage = progress.totalItems > 0 ? Math.round((completedItems / progress.totalItems) * 100) : 0
-
-					const newProgress = {
-						...progress,
-						items: {
-							...progress.items,
-							[chapterId]: isCompleted,
-						},
-						completedItems,
-						percentage,
-						lastUpdated: Date.now(),
-						// clientId: getClientId(), // Track which client made the change - TODO: implement getClientId
-					}
-
-					// Track this as a local update to prevent echo
-
-					// Update optimistically
-					set((state) => {
-						state.books.progress[bookId] = newProgress
-					})
-
-					// Dispatch unified progress event for dashboard sync
-					const metadata = {
-						content_type: "book",
-						toc_progress: newProgress.items || {},
-						total_chapters: newProgress.totalItems ?? Object.keys(newProgress.items || {}).length,
-						completed_chapters_count: newProgress.completedItems ?? 0,
-					}
-
-					dispatchProgressUpdated(bookId, newProgress.percentage ?? 0, metadata)
-				},
-
-				// Batch update book items
-				batchUpdateBook: (bookId, updates) => {
-					const progress = get().books.progress[bookId] || {
-						percentage: 0,
-						totalItems: 0,
-						completedItems: 0,
-						items: {},
-					}
-
-					// Apply all updates
-					const newItems = { ...progress.items }
-					for (const { itemId, completed } of updates) {
-						newItems[itemId] = completed
-					}
-
-					// Calculate new progress
-					const completedItems = Object.values(newItems).filter(Boolean).length
-					const percentage = progress.totalItems > 0 ? Math.round((completedItems / progress.totalItems) * 100) : 0
-
-					const newProgress = {
-						...progress,
-						items: newItems,
-						completedItems,
-						percentage,
-						lastUpdated: Date.now(),
-						// clientId: getClientId(), // Track which client made the change - TODO: implement getClientId
-					}
-
-					// Track this as a local update to prevent echo
-
-					// Update state
-					set((state) => {
-						state.books.progress[bookId] = newProgress
-					})
-
-					// Dispatch unified progress event
-					const metadata = {
-						content_type: "book",
-						toc_progress: newProgress.items || {},
-						total_chapters: newProgress.totalItems ?? Object.keys(newProgress.items || {}).length,
-						completed_chapters_count: newProgress.completedItems ?? 0,
-					}
-
-					dispatchProgressUpdated(bookId, newProgress.percentage ?? 0, metadata)
-				},
-
 				// Set book loading state
 				setBookLoading: (bookId, isLoading) => {
 					set((state) => {
@@ -192,12 +52,7 @@ const useAppStore = create(
 					})
 				},
 
-				// Get book progress
-				getBookProgress: (bookId) => {
-					return get().books.progress[bookId] || null
-				},
-
-				// Reading state management (separate from progress)
+				// Reading state management (separate from server progress)
 				updateBookReadingState: (bookId, readingState, _skipSync = false) => {
 					// Ensure bookId is valid
 					if (!bookId) {
@@ -236,13 +91,13 @@ const useAppStore = create(
 				},
 
 				getBookReadingState: (bookId) => {
-					return get().books.readingState[bookId] || DEFAULT_BOOK_PROGRESS
+					return get().books.readingState[bookId] || DEFAULT_BOOK_READING_STATE
 				},
 
 				setBookZoom: (bookId, zoomLevel) => {
 					set((state) => {
 						if (!state.books.readingState[bookId]) {
-							state.books.readingState[bookId] = { ...DEFAULT_BOOK_PROGRESS }
+							state.books.readingState[bookId] = { ...DEFAULT_BOOK_READING_STATE }
 						}
 						state.books.readingState[bookId].zoomLevel = zoomLevel
 						state.books.readingState[bookId].lastUpdated = Date.now()
@@ -252,25 +107,10 @@ const useAppStore = create(
 				// ========== EPUB SPECIFIC ACTIONS ==========
 
 				/**
-				 * Calculate EPUB progress percentage from rendition data
-				 * @param {number|undefined} displayPercentage - The percentage from react-reader (0-1)
-				 * @returns {number} Progress percentage (0-100)
-				 */
-				calculateEpubProgress: (displayPercentage) => {
-					if (displayPercentage === undefined || displayPercentage === null) {
-						return 0
-					}
-					// displayPercentage comes as a decimal (0-1), convert to percentage (0-100)
-					return Math.round(displayPercentage * 100)
-				},
-
-				/**
 				 * Handle EPUB location changes with business logic
-				 * Updates location, calculates progress, and syncs to API
+				 * Updates local reading location and EPUB display progress.
 				 */
 				onEpubLocationChange: (bookId, location, displayPercentage) => {
-					const { calculateEpubProgress } = get()
-
 					set((state) => {
 						// Initialize reading state if needed
 						if (!state.books.readingState[bookId]) {
@@ -286,15 +126,8 @@ const useAppStore = create(
 
 						// Calculate and update progress if percentage is provided
 						if (displayPercentage !== undefined) {
-							const progressPercentage = calculateEpubProgress(displayPercentage)
+							const progressPercentage = displayPercentage === null ? 0 : Math.round(displayPercentage * 100)
 							state.books.readingState[bookId].epubState.progress = progressPercentage
-
-							// Update overall book progress
-							if (!state.books.progress[bookId]) {
-								state.books.progress[bookId] = { percentage: 0 }
-							}
-							state.books.progress[bookId].percentage = progressPercentage
-							state.books.progress[bookId].lastUpdated = Date.now()
 						}
 					})
 				},
@@ -319,55 +152,6 @@ const useAppStore = create(
 							lastUpdated: null,
 						}
 					)
-				},
-
-				// ========== VIDEOS SLICE ==========
-				videos: {
-					progress: {},
-					playbackState: {},
-				},
-
-				// ========== VIDEO ACTIONS ==========
-
-				// Get video progress
-				getVideoProgress: (videoId) => {
-					return (
-						get().videos.progress[videoId] || {
-							percentage: 0,
-							totalItems: 0,
-							completedItems: 0,
-							items: {},
-							lastUpdated: null,
-						}
-					)
-				},
-
-				// Video progress update (used by VideoViewer)
-				updateVideoProgress: (videoId, progressData) => {
-					const position = progressData.position ?? progressData.lastPosition ?? 0
-					const percentage = progressData.percentage || 0
-
-					set((state) => {
-						state.videos.playbackState[videoId] = {
-							...state.videos.playbackState[videoId],
-							currentTime: position,
-							lastUpdated: Date.now(),
-						}
-					})
-
-					const storedVideoProgress = get().videos.progress[videoId] || {}
-					const duration = progressData.duration ?? storedVideoProgress.duration ?? 0
-
-					const metadata = {
-						content_type: "video",
-						position,
-						duration,
-						completed_chapters: storedVideoProgress.items || {},
-						total_chapters: storedVideoProgress.totalItems ?? Object.keys(storedVideoProgress.items || {}).length,
-						completed_chapters_count: storedVideoProgress.completedItems ?? 0,
-					}
-
-					dispatchProgressUpdated(videoId, percentage, metadata)
 				},
 
 				// ========== PREFERENCES SLICE ==========
@@ -422,16 +206,11 @@ const useAppStore = create(
 				storage: createJSONStorage(() => localStorage),
 				partialize: (state) => ({
 					books: {
-						progress: state.books.progress,
 						readingState: state.books.readingState,
-					},
-					videos: {
-						progress: state.videos.progress,
-						playbackState: state.videos.playbackState,
 					},
 					preferences: state.preferences,
 				}),
-				version: 5,
+				version: 6,
 				// Persisted slices only store nested subsets, so merge them explicitly and
 				// keep runtime defaults like books.loading and new preference keys intact.
 				merge: (persistedState, currentState) => {
@@ -439,18 +218,9 @@ const useAppStore = create(
 
 					return {
 						...currentState,
-						...persisted,
 						books: {
 							...currentState.books,
-							...persisted.books,
-							progress: persisted.books?.progress ?? currentState.books.progress,
 							readingState: persisted.books?.readingState ?? currentState.books.readingState,
-						},
-						videos: {
-							...currentState.videos,
-							...persisted.videos,
-							progress: persisted.videos?.progress ?? currentState.videos.progress,
-							playbackState: persisted.videos?.playbackState ?? currentState.videos.playbackState,
 						},
 						preferences: {
 							...currentState.preferences,
@@ -459,89 +229,17 @@ const useAppStore = create(
 					}
 				},
 				migrate: (persistedState, version) => {
-					if (version <= 4) {
-						delete persistedState.courses
+					if (!persistedState || typeof persistedState !== "object") {
+						return persistedState
 					}
 
-					// Migration from legacy store shapes to the current persisted slices
-					if (version <= 3) {
-						if (persistedState.course) {
-							delete persistedState.course
-						}
-
-						// Migrate book data to new structure
-						if (persistedState.books) {
-							const oldBooks = persistedState.books
-							persistedState.books = {
-								progress: {},
-								readingState: oldBooks.progress || {},
-							}
-
-							// Convert old toc progress to standardized progress
-							if (oldBooks.tocProgress) {
-								for (const [bookId, tocItems] of Object.entries(oldBooks.tocProgress)) {
-									const items = tocItems || {}
-									const completedItems = Object.values(items).filter(Boolean).length
-									const book = oldBooks.metadata?.[bookId]
-									let totalItems = 0
-									if (book?.tableOfContents) {
-										const getAllChapters = (chapters, seenIds = new Set()) => {
-											const allChapters = []
-											for (const chapter of chapters) {
-												if (!seenIds.has(chapter.id)) {
-													allChapters.push(chapter)
-													seenIds.add(chapter.id)
-												}
-												if (chapter.children && chapter.children.length > 0) {
-													const childChapters = getAllChapters(chapter.children, seenIds)
-													allChapters.push(...childChapters)
-												}
-											}
-											return allChapters
-										}
-										const allChapters = getAllChapters(
-											Array.isArray(book.tableOfContents) ? book.tableOfContents : [book.tableOfContents]
-										)
-										totalItems = allChapters.length
-									}
-
-									const percentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
-
-									persistedState.books.progress[bookId] = {
-										percentage,
-										totalItems,
-										completedItems,
-										items,
-										lastUpdated: Date.now(),
-									}
-								}
-							}
-						}
-
-						// Migrate video data to new structure
-						if (persistedState.videos) {
-							const oldVideos = persistedState.videos
-							persistedState.videos = {
-								progress: {},
-								playbackState: oldVideos.progress || {},
-							}
-
-							// Convert old chapter completion to standardized progress
-							if (oldVideos.chapterCompletion) {
-								for (const [videoId, chapters] of Object.entries(oldVideos.chapterCompletion)) {
-									const items = chapters || {}
-									const completedItems = Object.values(items).filter(Boolean).length
-									const totalItems = Object.keys(items).length
-									const percentage = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0
-
-									persistedState.videos.progress[videoId] = {
-										percentage,
-										totalItems,
-										completedItems,
-										items,
-										lastUpdated: Date.now(),
-									}
-								}
+					if (version <= 5) {
+						delete persistedState.course
+						delete persistedState.courses
+						delete persistedState.videos
+						if (persistedState.books && typeof persistedState.books === "object") {
+							for (const key of LEGACY_BOOK_STATE_KEYS) {
+								delete persistedState.books[key]
 							}
 						}
 					}

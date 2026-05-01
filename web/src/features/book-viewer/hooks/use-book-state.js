@@ -33,9 +33,6 @@ export const useBookTotalPages = (bookId) => {
 export const useBookActions = () => {
 	const updateBookReadingState = useAppStore((state) => state.updateBookReadingState)
 	const setBookZoom = useAppStore((state) => state.setBookZoom)
-	const setBookProgress = useAppStore((state) => state.setBookProgress)
-	const toggleBookItem = useAppStore((state) => state.toggleBookItem)
-	const batchUpdateBook = useAppStore((state) => state.batchUpdateBook)
 	const setBookLoading = useAppStore((state) => state.setBookLoading)
 	const setBookError = useAppStore((state) => state.setBookError)
 
@@ -47,9 +44,6 @@ export const useBookActions = () => {
 	return {
 		updateBookReadingState,
 		setBookZoom,
-		setBookProgress,
-		toggleBookItem,
-		batchUpdateBook,
 		setBookLoading,
 		setBookError,
 		// EPUB-specific actions
@@ -71,11 +65,6 @@ export const useToggleSidebar = () => {
 // Book reading state hook
 export const useBookReadingState = (bookId) => {
 	return useAppStore((state) => state.books.readingState[bookId] || EMPTY_READING_STATE)
-}
-
-// Book progress hook
-export const useBookProgress = (bookId) => {
-	return useAppStore((state) => state.books.progress[bookId] || null)
 }
 
 // Book loading state hook

@@ -1,12 +1,7 @@
 import { useCallback } from "react"
 import { useNavigate } from "react-router-dom"
 import { useCourseNavigation } from "@/utils/navigationUtils"
-import {
-	useLessonCompleteMutation,
-	useLessonNextPassMutation,
-	useLessonProgressMutation,
-	useLessonRegenerateMutation,
-} from "./use-lesson-data"
+import { useLessonCompleteMutation, useLessonNextPassMutation, useLessonRegenerateMutation } from "./use-lesson-data"
 
 /**
  * Business logic actions for lessons
@@ -15,7 +10,6 @@ import {
 export function useLessonActions(courseId) {
 	const navigate = useNavigate()
 	const { goToLesson } = useCourseNavigation()
-	const progressMutation = useLessonProgressMutation(courseId)
 	const completeMutation = useLessonCompleteMutation(courseId)
 	const regenerateMutation = useLessonRegenerateMutation(courseId)
 	const nextPassMutation = useLessonNextPassMutation(courseId)
@@ -63,26 +57,6 @@ export function useLessonActions(courseId) {
 			)
 		},
 		[completeMutation, courseId]
-	)
-
-	// Action: Update lesson progress
-	const handleProgressUpdate = useCallback(
-		(lessonId, progress, targetCourseId) => {
-			const courseToUse = targetCourseId ?? courseId
-			if (!courseToUse || !lessonId) {
-				return
-			}
-
-			progressMutation.mutate({ lessonId, progress })
-
-			// Emit event for progress updates
-			window.dispatchEvent(
-				new CustomEvent("lessonProgressUpdate", {
-					detail: { courseId: courseToUse, lessonId, progress },
-				})
-			)
-		},
-		[courseId, progressMutation]
 	)
 
 	// Action: Regenerate lesson content
@@ -138,7 +112,6 @@ export function useLessonActions(courseId) {
 
 		// Progress actions
 		handleMarkComplete,
-		handleProgressUpdate,
 
 		// Content actions
 		handleRegenerate,
@@ -148,12 +121,9 @@ export function useLessonActions(courseId) {
 		isCompletingLesson: completeMutation.isPending,
 		isStartingNextPass: nextPassMutation.isPending,
 		isRegeneratingLesson: regenerateMutation.isPending,
-		isUpdatingProgress: progressMutation.isPending,
-
 		// Error states
 		completeError: completeMutation.error,
 		nextPassError: nextPassMutation.error,
 		regenerateError: regenerateMutation.error,
-		progressError: progressMutation.error,
 	}
 }
