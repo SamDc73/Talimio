@@ -10,30 +10,22 @@ import json
 import logging
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Protocol, TypedDict
+from typing import Protocol
 
 from pydantic import JsonValue
 from sqlalchemy import text
 
 from src.exceptions import NotFoundError
 
-from .models import BatchProgressResponse, ContentType, ProgressData, ProgressResponse, ProgressUpdate
+from .models import ContentType, ProgressResponse, ProgressUpdate
 from .queries import (
     DELETE_PROGRESS_QUERY,
-    GET_BATCH_PROGRESS_QUERY,
     GET_SINGLE_PROGRESS_QUERY,
     UPSERT_PROGRESS_QUERY,
 )
 
 
 logger = logging.getLogger(__name__)
-
-
-class StoredProgress(TypedDict):
-    """Progress payload read from user_progress rows."""
-
-    progress_percentage: float
-    metadata: dict[str, JsonValue]
 
 
 class ProgressRow(Protocol):
@@ -99,55 +91,6 @@ class ProgressService:
     def __init__(self, session: AsyncSession) -> None:
         """Initialize progress service."""
         self.session = session
-
-    async def get_batch_progress(self, user_id: uuid.UUID, content_ids: list[uuid.UUID]) -> dict[str, StoredProgress]:
-        """Get progress for multiple content items."""
-        if not content_ids:
-            return {}
-
-        result = await self.session.execute(
-            text(GET_BATCH_PROGRESS_QUERY), {"user_id": str(user_id), "content_ids": [str(cid) for cid in content_ids]}
-        )
-
-        progress_map: dict[str, StoredProgress] = {}
-        for row in result:
-            # Parse metadata if it's a string (JSON)
-            metadata = _json_object_from_unknown(row.metadata)
-            if isinstance(row.metadata, str) and not metadata:
-                logger.warning("Failed to parse metadata for content %s: %s", row.content_id, row.metadata)
-
-            progress_map[str(row.content_id)] = {"progress_percentage": row.progress_percentage, "metadata": metadata}
-
-        return progress_map
-
-    async def get_batch_progress_response(
-        self,
-        user_id: uuid.UUID,
-        content_ids: list[uuid.UUID],
-    ) -> BatchProgressResponse:
-        """Get stored progress with canonical course progress where applicable."""
-        from src.courses.services.course_progress_service import CourseProgressService
-
-        progress_data = await self.get_batch_progress(user_id, content_ids)
-        progress_map: dict[str, ProgressData] = {
-            content_id: ProgressData(progress_percentage=data["progress_percentage"], metadata=data["metadata"])
-            for content_id, data in progress_data.items()
-        }
-
-        course_progress_service = CourseProgressService(self.session)
-        for content_id in content_ids:
-            content_type = await self.get_content_type(content_id, user_id)
-            if content_type != "course":
-                continue
-
-            computed = await course_progress_service.get_progress(content_id, user_id)
-            metadata = _json_object_from_unknown({key: value for key, value in computed.items() if key != "completion_percentage"})
-            progress_map[str(content_id)] = ProgressData(
-                progress_percentage=_progress_percentage_from_unknown(computed.get("completion_percentage", 0.0)),
-                metadata=metadata,
-            )
-
-        return BatchProgressResponse(progress=progress_map)
 
     async def get_single_progress(self, user_id: uuid.UUID, content_id: uuid.UUID) -> ProgressResponse | None:
         """Get progress for a single content item."""

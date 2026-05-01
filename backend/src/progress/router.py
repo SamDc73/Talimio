@@ -3,13 +3,11 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, status
 
 from src.auth import CurrentAuth
 
 from .models import (
-    BatchProgressRequest,
-    BatchProgressResponse,
     ProgressResponse,
     ProgressUpdate,
 )
@@ -18,29 +16,10 @@ from .service import ProgressService
 
 router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
 
-MAX_BATCH_SIZE = 100  # Prevent unbounded requests
-
 
 def get_progress_service(auth: CurrentAuth) -> ProgressService:
     """Provide request-scoped progress service."""
     return ProgressService(auth.session)
-
-
-@router.post("/batch")
-async def get_batch_progress(
-    request: BatchProgressRequest,
-    _response: Response,
-    auth: CurrentAuth,
-    service: Annotated[ProgressService, Depends(get_progress_service)],
-) -> BatchProgressResponse:
-    """Get progress for multiple content items in one request."""
-    if len(request.content_ids) > MAX_BATCH_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Batch size exceeds maximum of {MAX_BATCH_SIZE}",
-        )
-
-    return await service.get_batch_progress_response(auth.user_id, request.content_ids)
 
 
 @router.get("/{content_id}")

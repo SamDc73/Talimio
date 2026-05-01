@@ -4,13 +4,6 @@
 # SQLAlchemy with asyncpg doesn't support ::type casting in parameters
 # We cast to UUID in the service layer instead
 
-GET_BATCH_PROGRESS_QUERY = """
-SELECT content_id, progress_percentage, metadata
-FROM user_progress
-WHERE user_id = :user_id
-AND content_id = ANY(:content_ids)
-"""
-
 UPSERT_PROGRESS_QUERY = """
 INSERT INTO user_progress (user_id, content_id, content_type, progress_percentage, metadata)
 VALUES (:user_id, :content_id, :content_type, :progress_percentage, CAST(:metadata AS jsonb))

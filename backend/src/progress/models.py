@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from pydantic import BaseModel, Field, JsonValue, field_validator
 
 
 ContentType = Literal["book", "video", "course"]
@@ -23,7 +23,7 @@ class ProgressMetadata(BaseModel):
     duration: float | None = None  # Total duration in seconds
 
     # Course-specific
-    completed_lessons: list[str] | None = []
+    completed_lessons: list[str] | None = Field(default_factory=list)
 
     # Generic
     last_accessed: datetime | None = None
@@ -53,30 +53,3 @@ class ProgressResponse(BaseModel):
     metadata: dict[str, JsonValue]
     updated_at: datetime | None = None
     created_at: datetime | None = None
-
-
-class BatchProgressRequest(BaseModel):
-    """Request model for batch progress fetching."""
-
-    content_ids: list[uuid.UUID] = Field(max_length=100, alias="contentIds")
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    @field_validator("content_ids")
-    @classmethod
-    def validate_content_ids(cls, v: list[uuid.UUID]) -> list[uuid.UUID]:
-        """Ensure unique content IDs."""
-        return list(set(v))
-
-
-class ProgressData(BaseModel):
-    """Progress data with metadata."""
-
-    progress_percentage: float
-    metadata: dict[str, JsonValue] = Field(default_factory=dict)
-
-
-class BatchProgressResponse(BaseModel):
-    """Response model for batch progress data."""
-
-    progress: dict[str, ProgressData]  # content_id -> ProgressData
