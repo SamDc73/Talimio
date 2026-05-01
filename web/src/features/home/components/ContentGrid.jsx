@@ -10,12 +10,12 @@ export default function ContentGrid({
 	visible,
 	unpinned,
 	showAll,
+	hasMoreContent = false,
 	renderCard,
 	onShowMoreToggle,
 	onGenerateCourse,
 	onUploadBook,
 	onAddYoutube,
-	_progressLoading,
 }) {
 	let gridContent = (
 		<EmptyState onGenerateCourse={onGenerateCourse} onUploadBook={onUploadBook} onAddYoutube={onAddYoutube} />
@@ -32,7 +32,7 @@ export default function ContentGrid({
 		<>
 			<div className="grid grid-cols-1 gap-lg md:grid-cols-2 lg:grid-cols-3">{gridContent}</div>
 
-			{!isLoading && unpinned.length > 3 && (
+			{!isLoading && (unpinned.length > 3 || hasMoreContent) && (
 				<div className="mt-xl">
 					<Button variant="outline" onClick={onShowMoreToggle} className="gap-2xs px-md py-2xs text-sm font-medium">
 						{showAll ? (
@@ -43,7 +43,7 @@ export default function ContentGrid({
 						) : (
 							<>
 								<ChevronDown className="size-4  -mt-px" />
-								<span>See {unpinned.length - 3} More</span>
+								<span>{hasMoreContent ? "See More" : `See ${unpinned.length - 3} More`}</span>
 							</>
 						)}
 					</Button>

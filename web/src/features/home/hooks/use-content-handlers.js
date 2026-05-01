@@ -1,4 +1,7 @@
+import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "react-router-dom"
+
+import { patchContentItemInCache } from "@/lib/content-query-cache"
 
 /**
  * Content Handlers Hook:
@@ -9,8 +12,9 @@ import { useNavigate } from "react-router-dom"
  * - Server data handled by React Query (loadContentData)
  * - UI state updates are optimistic
  */
-export function useContentHandlers({ filters, pinning, setContentItems, loadContentData }) {
+export function useContentHandlers({ filters, pinning, loadContentData }) {
 	const navigate = useNavigate()
+	const queryClient = useQueryClient()
 
 	// Event handler: user created course
 	const handleCourseCreated = async (newCourse) => {
@@ -69,10 +73,7 @@ export function useContentHandlers({ filters, pinning, setContentItems, loadCont
 
 	// Event handler: user updated tags
 	const handleTagsUpdated = async (itemId, _contentType, newTags) => {
-		// Optimistic update using immutable pattern
-		setContentItems((prevItems) =>
-			prevItems.map((item) => (item.id === itemId || item.uuid === itemId ? { ...item, tags: newTags } : item))
-		)
+		patchContentItemInCache(queryClient, itemId, (item) => ({ ...item, tags: newTags }))
 
 		// Refresh data via React Query
 		await loadContentData()

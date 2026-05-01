@@ -9,7 +9,7 @@ import { useContentList, useInvalidateContent } from "./use-content-queries"
  */
 export function useContentData(filters, _pinning) {
 	// Use React Query for server data
-	const { data, isLoading, error, refetch } = useContentList(filters)
+	const { data, isLoading, error, refetch, hasMoreContent, loadRemainingContent } = useContentList(filters)
 
 	// Get invalidate function for manual refresh
 	const invalidateContent = useInvalidateContent()
@@ -36,13 +36,12 @@ export function useContentData(filters, _pinning) {
 
 	return {
 		contentItems,
-		setContentItems: () => {},
 		filterOptions,
-		setFilterOptions: () => {},
 		sortOptions,
-		setSortOptions: () => {},
 		isLoading,
 		error,
+		hasMoreContent,
 		loadContentData: refetch, // Map to React Query's refetch
+		loadRemainingContent,
 	}
 }

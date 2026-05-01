@@ -30,9 +30,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 	const deleteContentMutation = useDeleteContent()
 	const archiveContentMutation = useArchiveContent()
 
-	// Use unified API progress data - extract percentage from progress object
-	const progressValue =
-		typeof item.progress === "object" && item.progress !== null ? (item.progress.percentage ?? 0) : item.progress || 0
+	const progressValue = item.progress ?? 0
 
 	const handleDeleteClick = () => {
 		setShowDeleteConfirm(true)
@@ -90,7 +88,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 				initial={{ opacity: 0, y: 20 }}
 				animate={{ opacity: 1, y: 0 }}
 				exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
-				transition={{ duration: 0.4, delay: 0.1 * index }}
+				transition={{ duration: 0.4, delay: Math.min(index, 3) * 0.04 }}
 				whileHover={{ y: -5, transition: { duration: 0.2 } }}
 				className={`bg-background rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
 					pinned ? "shadow-md border-2 border-primary/15 bg-primary/5" : "shadow-sm hover:shadow-md"

@@ -20,16 +20,12 @@ import WelcomeHeader from "@/features/home/components/WelcomeHeader"
 import { useContentData } from "@/features/home/hooks/use-content-data"
 import { useContentFilters } from "@/features/home/hooks/use-content-filters"
 import { useContentHandlers } from "@/features/home/hooks/use-content-handlers"
-import { useContentProgressSync } from "@/features/home/hooks/use-content-progress-sync"
 import { useDialogStates } from "@/features/home/hooks/use-dialog-states"
 import { usePinning } from "@/features/home/hooks/use-pinning"
-import { useProgress } from "@/hooks/use-progress"
 
 export default function HomePage() {
 	const isGenerating = false
 	const [isFabExpanded, setIsFabExpanded] = useState(false)
-	const [page, setPage] = useState(0)
-	const itemsPerPage = 20
 
 	// Use extracted hooks
 	const dialogs = useDialogStates()
@@ -39,27 +35,16 @@ export default function HomePage() {
 	// Use content data hook
 	const {
 		contentItems,
-		setContentItems,
 		filterOptions,
 		sortOptions,
 		isLoading: contentLoading,
+		hasMoreContent,
 		loadContentData,
+		loadRemainingContent,
 	} = useContentData(filters, pinning)
 
-	// Extract visible content IDs (pagination-aware)
-	const filteredContent = filters.getFilteredAndSortedContent(contentItems)
-	const start = page * itemsPerPage
-	const end = start + itemsPerPage
-	const visibleIds = filteredContent.slice(start, end).map((item) => item.id)
-
-	// Load progress for visible items only
-	const { data: progressData, isLoading: progressLoading } = useProgress(visibleIds)
-
-	// Merge content with progress
-	const contentWithProgress = filteredContent.slice(start, end).map((item) => ({
-		...item,
-		progress: progressData?.[item.id] || item.progress || 0,
-	}))
+	// Apply filters and sorting using extracted hook
+	const filteredAndSortedContent = filters.getFilteredAndSortedContent(contentItems)
 
 	// Use content handlers hook
 	const {
@@ -73,16 +58,8 @@ export default function HomePage() {
 	} = useContentHandlers({
 		filters,
 		pinning,
-		setContentItems,
 		loadContentData,
 	})
-
-	// Use content progress sync hook for all content types
-	// Note: We don't pass loadContentData to prevent infinite loops
-	useContentProgressSync(setContentItems)
-
-	// Apply filters and sorting using extracted hook
-	const filteredAndSortedContent = filters.getFilteredAndSortedContent(contentItems)
 
 	// Removed debug logging for performance
 
@@ -94,7 +71,7 @@ export default function HomePage() {
 		return sortOptions.find((option) => option.id === filters.activeSort)?.label || "Last Opened"
 	}
 
-	const unpinned = pinning.getUnpinnedItems(contentWithProgress)
+	const unpinned = pinning.getUnpinnedItems(filteredAndSortedContent)
 	const visible = filters.showAll ? unpinned : unpinned.slice(0, 3)
 
 	const renderCard = (item, i) => (
@@ -111,10 +88,15 @@ export default function HomePage() {
 		/>
 	)
 
-	const pinnedItems = pinning.getPinnedItems(contentWithProgress)
+	const pinnedItems = pinning.getPinnedItems(filteredAndSortedContent)
 
-	// Total pages for pagination
-	const totalPages = Math.ceil((filteredAndSortedContent.length || 0) / itemsPerPage)
+	const handleShowMoreToggle = async () => {
+		if (!filters.showAll && hasMoreContent) {
+			await loadRemainingContent()
+		}
+
+		filters.setShowAll(!filters.showAll)
+	}
 
 	// Show loading skeleton while content is loading
 	if (contentLoading) {
@@ -206,45 +188,19 @@ export default function HomePage() {
 							<PinnedSection pinnedItems={pinnedItems} renderCard={renderCard} />
 							<ContentGrid
 								isLoading={contentLoading}
-								filteredAndSortedContent={contentWithProgress}
+								filteredAndSortedContent={filteredAndSortedContent}
 								visible={visible}
 								unpinned={unpinned}
 								showAll={filters.showAll}
+								hasMoreContent={hasMoreContent}
 								renderCard={renderCard}
-								onShowMoreToggle={() => filters.setShowAll(!filters.showAll)}
+								onShowMoreToggle={handleShowMoreToggle}
 								onGenerateCourse={() => filters.setIsGenerateMode(true)}
 								onUploadBook={() => {
 									dialogs.setShowUploadDialog(true)
 								}}
 								onAddYoutube={() => dialogs.setShowYoutubeDialog(true)}
-								progressLoading={progressLoading}
 							/>
-							{/* Add pagination if we have more than one page */}
-							{totalPages > 1 && (
-								<div className="mt-xl flex justify-center">
-									<div className="flex gap-2xs">
-										<button
-											type="button"
-											onClick={() => setPage(Math.max(0, page - 1))}
-											disabled={page === 0}
-											className="rounded-md bg-muted px-md py-2xs hover:bg-muted/70 disabled:opacity-50"
-										>
-											Previous
-										</button>
-										<span className="px-md py-2xs">
-											Page {page + 1} of {totalPages}
-										</span>
-										<button
-											type="button"
-											onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-											disabled={page >= totalPages - 1}
-											className="rounded-md bg-muted px-md py-2xs hover:bg-muted/70 disabled:opacity-50"
-										>
-											Next
-										</button>
-									</div>
-								</div>
-							)}
 						</motion.div>
 					</div>
 

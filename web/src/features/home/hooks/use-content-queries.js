@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { archiveContent, deleteContent, unarchiveContent } from "@/api/contentApi"
 import { api } from "@/lib/apiClient"
+import { contentKeys, patchContentItemInCache } from "@/lib/content-query-cache"
 
 /**
  * React Query hooks for content operations (following state-management.md)
@@ -10,11 +11,33 @@ import { api } from "@/lib/apiClient"
  * - Smart cache invalidation
  */
 
-// Query key factory for consistent key generation
-export const contentKeys = {
-	all: ["content"],
-	list: (filters) => [...contentKeys.all, "list", filters],
-	item: (id) => [...contentKeys.all, "item", id],
+const DASHBOARD_CONTENT_PAGE_SIZE = 100
+
+const buildContentListUrl = ({ includeArchived, page }) => {
+	const params = new URLSearchParams({
+		page: String(page),
+		page_size: String(DASHBOARD_CONTENT_PAGE_SIZE),
+	})
+
+	if (includeArchived) {
+		params.set("include_archived", "true")
+	}
+
+	return `/content?${params.toString()}`
+}
+
+const fetchContentPage = (includeArchived, page) => {
+	return api.get(buildContentListUrl({ includeArchived, page }))
+}
+
+const getProgressPercentage = (progress) => {
+	if (typeof progress === "number") {
+		return progress
+	}
+	if (progress && typeof progress === "object" && typeof progress.percentage === "number") {
+		return progress.percentage
+	}
+	return 0
 }
 
 const removeItemFromCache = (old, itemId) => {
@@ -35,14 +58,6 @@ const updateItemArchiveStatus = (old, itemId, archive) => {
 	}
 }
 
-const updateItemTags = (old, itemId, tags) => {
-	if (!old) return old
-	return {
-		...old,
-		items: old.items?.map((item) => (item.id === itemId || item.uuid === itemId ? { ...item, tags } : item)),
-	}
-}
-
 const scheduleArchiveRemoval = (queryClient, itemId) => {
 	setTimeout(() => {
 		queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => removeItemFromCache(old, itemId))
@@ -53,39 +68,66 @@ const scheduleArchiveRemoval = (queryClient, itemId) => {
  * Fetch content list with proper caching
  */
 export function useContentList(filters = {}) {
+	const queryClient = useQueryClient()
 	const includeArchived = filters.archiveFilter === "archived" || filters.archiveFilter === "all"
+	const queryKey = contentKeys.list({ includeArchived })
 
-	return useQuery({
-		queryKey: contentKeys.list({ includeArchived }),
+	const transformContentItems = (items) =>
+		items.map((item) => ({
+			id: item.id,
+			type: item.type === "youtube" ? "video" : item.type,
+			title: item.title,
+			description: item.description,
+			lastAccessedDate: item.lastAccessedDate,
+			createdDate: item.createdDate,
+			progress: getProgressPercentage(item.progress),
+			tags: item.tags || [],
+			archived: item.archived || false,
+			...(item.type === "youtube" && {
+				channel: item.channel,
+				duration: item.length,
+			}),
+			...(item.type === "book" && {
+				author: item.author,
+				pageCount: item.pageCount || item.page_count || item.totalPages,
+				currentPage: item.currentPage,
+				tocProgress: item.tocProgress || {},
+			}),
+			...(item.type === "course" && {
+				lessonCount: item.lessonCount,
+				completedLessons: item.completedLessons,
+			}),
+		}))
+
+	const loadRemainingContent = async () => {
+		const currentData = queryClient.getQueryData(queryKey)
+		if (!currentData?.items?.length || currentData.items.length >= currentData.total) {
+			return
+		}
+
+		const perPage = currentData.perPage || DASHBOARD_CONTENT_PAGE_SIZE
+		const loadedPages = Math.ceil(currentData.items.length / perPage)
+		const totalPages = Math.ceil(currentData.total / perPage)
+		const remainingPageNumbers = Array.from({ length: totalPages - loadedPages }, (_, index) => loadedPages + index + 1)
+		const remainingPages = await Promise.all(
+			remainingPageNumbers.map((pageNumber) => fetchContentPage(includeArchived, pageNumber))
+		)
+		const remainingItems = transformContentItems(remainingPages.flatMap((pageData) => pageData.items || []))
+
+		queryClient.setQueryData(queryKey, {
+			...currentData,
+			items: [...currentData.items, ...remainingItems],
+			page: totalPages,
+		})
+	}
+
+	const query = useQuery({
+		queryKey,
 		queryFn: async () => {
-			const response = await api.get(includeArchived ? "/content?include_archived=true" : "/content")
+			const contentPage = await fetchContentPage(includeArchived, 1)
+			const responseItems = contentPage.items || []
 
-			// Transform the raw API response
-			const data = (response.items || []).map((item) => ({
-				id: item.id,
-				type: item.type === "youtube" ? "video" : item.type,
-				title: item.title,
-				description: item.description,
-				lastAccessedDate: item.lastAccessedDate,
-				createdDate: item.createdDate,
-				progress: item.progress?.percentage || item.progress || 0,
-				tags: item.tags || [],
-				archived: item.archived || false,
-				...(item.type === "youtube" && {
-					channel: item.channel,
-					duration: item.length,
-				}),
-				...(item.type === "book" && {
-					author: item.author,
-					pageCount: item.pageCount || item.page_count || item.totalPages,
-					currentPage: item.currentPage,
-					tocProgress: item.tocProgress || {},
-				}),
-				...(item.type === "course" && {
-					lessonCount: item.lessonCount,
-					completedLessons: item.completedLessons,
-				}),
-			}))
+			const data = transformContentItems(responseItems)
 
 			// Return processed data with filter and sort options
 			const filterOptions = [
@@ -104,6 +146,9 @@ export function useContentList(filters = {}) {
 
 			return {
 				items: data,
+				total: contentPage.total ?? data.length,
+				page: contentPage.page ?? 1,
+				perPage: contentPage.perPage ?? contentPage.per_page ?? DASHBOARD_CONTENT_PAGE_SIZE,
 				filterOptions,
 				sortOptions,
 			}
@@ -111,6 +156,12 @@ export function useContentList(filters = {}) {
 		staleTime: 30 * 1000, // Data fresh for 30 seconds
 		gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
 	})
+
+	return {
+		...query,
+		hasMoreContent: Boolean(query.data?.items && query.data.items.length < query.data.total),
+		loadRemainingContent,
+	}
 }
 
 /**
@@ -244,7 +295,7 @@ export function useUpdateContentTags() {
 			})
 
 			// Update the item's tags
-			queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => updateItemTags(old, itemId, tags))
+			patchContentItemInCache(queryClient, itemId, (item) => ({ ...item, tags }))
 
 			return { previousContent }
 		},
@@ -257,9 +308,6 @@ export function useUpdateContentTags() {
 				})
 			}
 		},
-
-		// Success notification
-		onSuccess: () => {},
 	})
 }
 
