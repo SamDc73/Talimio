@@ -243,7 +243,7 @@ class CourseProgressService(ProgressTracker):
         current_progress = await progress_service.get_single_progress(user_id, content_id)
 
         # Get course for validation and defaults
-        course_query = select(Course).where(Course.id == content_id)
+        course_query = select(Course).where(Course.id == content_id, Course.user_id == user_id)
         course_result = await session.execute(course_query)
         course = course_result.scalar_one_or_none()
 

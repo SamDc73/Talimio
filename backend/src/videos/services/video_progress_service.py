@@ -67,8 +67,8 @@ class VideoProgressService(ProgressTracker):
         self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, object]
     ) -> dict[str, object]:
         """Update progress data for specific video and user."""
-        # Check if video exists
-        video_query = select(Video).where(Video.id == content_id)
+        # Progress writes must only target content owned by the current user.
+        video_query = select(Video).where(Video.id == content_id, Video.user_id == user_id)
         video_result = await self._session.execute(video_query)
         video = video_result.scalar_one_or_none()
 
