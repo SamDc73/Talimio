@@ -15,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
-from src.ai.rag.chunker import chunk_text_async
+from src.ai.rag.chunker import chunk_text_with_metadata_async
 from src.ai.rag.config import get_rag_config
 from src.ai.rag.exceptions import (
     RagCourseNotFoundError,
@@ -251,9 +251,12 @@ class RAGService:
             else:
                 raise RagValidationError(MISSING_FILE_PATH_ERROR_MESSAGE)
 
-            chunks = await chunk_text_async(text_content)
+            chunks, per_chunk_metadata = await chunk_text_with_metadata_async(
+                text_content,
+                document_title=str(doc_dict.get("title") or ""),
+            )
             logger.info("Document %s chunked into %s pieces", document_id, len(chunks))
-            await self._store_document_chunks(session, document_id, chunks)
+            await self._store_document_chunks(session, document_id, chunks, per_chunk_metadata)
 
             await session.execute(
                 text(
@@ -378,7 +381,10 @@ class RAGService:
                     raise
 
             # Chunk
-            chunks = await chunk_text_async(text_content)
+            chunks, per_chunk_metadata = await chunk_text_with_metadata_async(
+                text_content,
+                document_title=book.title or "",
+            )
 
             # Store chunks
             if not hasattr(self, "_vector_rag"):
@@ -392,6 +398,7 @@ class RAGService:
                 doc_id=book.id,
                 title=book.title or "",
                 chunks=chunks,
+                per_chunk_metadata=per_chunk_metadata,
             )
 
             # Mark completed
@@ -504,7 +511,13 @@ class RAGService:
 
         return chunks, per_chunk_meta
 
-    async def _store_document_chunks(self, session: AsyncSession, document_id: int, chunks: list[str]) -> None:
+    async def _store_document_chunks(
+        self,
+        session: AsyncSession,
+        document_id: int,
+        chunks: list[str],
+        per_chunk_metadata: list[dict[str, object]],
+    ) -> None:
         """Store document chunks with embeddings using VectorRAG."""
         try:
             # Get document metadata
@@ -549,6 +562,7 @@ class RAGService:
                 extra_metadata={
                     "document_id": document_id,
                 },
+                per_chunk_metadata=per_chunk_metadata,
             )
 
             logger.info("Successfully stored %s chunks for document %s in pgvector", len(chunks), document_id)

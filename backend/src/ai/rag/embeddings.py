@@ -56,6 +56,8 @@ _VECTOR_SEARCH_FALLBACK_ERROR_TYPES = (
     SQLAlchemyError,
     *_EMBEDDING_RUNTIME_ERROR_TYPES,
 )
+_NEIGHBOR_CONTEXT_WINDOW = 1
+_NEIGHBOR_CONTEXT_MAX_CHARS = 5_500
 
 
 def _is_json_value(value: object) -> bool:
@@ -310,10 +312,18 @@ class VectorRAG:
                 row_metadata = dict(row.metadata) if isinstance(row.metadata, dict) else {}
                 metadata = self._normalize_metadata(row_metadata)
                 similarity = row.similarity if row.similarity and row.similarity > 0 else 0.1
+                content = await self._expand_search_result_content(
+                    session=session,
+                    doc_type=doc_type,
+                    doc_id=str(row.doc_id),
+                    chunk_index=int(row.chunk_index),
+                    content=str(row.content),
+                    metadata=metadata,
+                )
                 search_results.append(
                     SearchResult(
                         chunk_id=f"{row.doc_id}_{row.chunk_index}",
-                        content=row.content,
+                        content=content,
                         similarity_score=similarity,
                         metadata=metadata,
                     )
@@ -333,6 +343,53 @@ class VectorRAG:
             return []
 
     # Removed legacy helpers that are now handled by RAG service + chonkie
+
+    async def _expand_search_result_content(
+        self,
+        *,
+        session: AsyncSession,
+        doc_type: str,
+        doc_id: str,
+        chunk_index: int,
+        content: str,
+        metadata: dict[str, JsonValue],
+    ) -> str:
+        """Add adjacent same-section chunks for structured document retrieval."""
+        if metadata.get("contextualized") is not True:
+            return content
+
+        result = await session.execute(
+            text(
+                """
+                SELECT chunk_index, content, metadata
+                FROM rag_document_chunks
+                WHERE doc_type = :doc_type
+                  AND doc_id = :doc_id
+                  AND chunk_index BETWEEN :start_index AND :end_index
+                ORDER BY chunk_index
+                """
+            ),
+            {
+                "doc_type": doc_type,
+                "doc_id": doc_id,
+                "start_index": chunk_index - _NEIGHBOR_CONTEXT_WINDOW,
+                "end_index": chunk_index + _NEIGHBOR_CONTEXT_WINDOW,
+            },
+        )
+
+        section_path = metadata.get("section_path")
+        parts: list[str] = []
+        for row in result.fetchall():
+            row_metadata = dict(row.metadata) if isinstance(row.metadata, dict) else {}
+            row_section_path = row_metadata.get("section_path")
+            if row.chunk_index != chunk_index and section_path and row_section_path != section_path:
+                continue
+            parts.append(str(row.content).strip())
+
+        expanded_content = "\n\n".join(part for part in parts if part)
+        if not expanded_content or len(expanded_content) > _NEIGHBOR_CONTEXT_MAX_CHARS:
+            return content
+        return expanded_content
 
     async def _ensure_dimensions(self, session: AsyncSession) -> None:
         """Validate embedding dimensions against database schema."""
