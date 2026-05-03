@@ -90,6 +90,7 @@ from src.learning_capabilities.schemas import (
 logger = logging.getLogger(__name__)
 
 _CONCEPT_EMBEDDING_FALLBACK_ERROR_TYPES = (
+    RagUnavailableError,
     RuntimeError,
     TimeoutError,
     TypeError,
