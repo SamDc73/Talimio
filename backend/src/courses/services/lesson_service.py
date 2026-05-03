@@ -1,6 +1,6 @@
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
+from src.ai.rag.exceptions import RagUnavailableError, RagValidationError
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.models import (
     Concept,
@@ -58,21 +59,14 @@ class _OutlineWindowItem(TypedDict):
 
 
 _LESSON_RAG_CONTEXT_FALLBACK_ERROR_TYPES = (
-    ImportError,
     SQLAlchemyError,
-    RuntimeError,
-    TypeError,
-    ValueError,
+    RagUnavailableError,
+    RagValidationError,
     OSError,
     ConnectionError,
     TimeoutError,
 )
-_LESSON_OUTLINE_FALLBACK_ERROR_TYPES = (
-    SQLAlchemyError,
-    RuntimeError,
-    TypeError,
-    ValueError,
-)
+_LESSON_OUTLINE_FALLBACK_ERROR_TYPES = (SQLAlchemyError,)
 _LESSON_GENERATION_HTTP_500_ERROR_TYPES = (
     SQLAlchemyError,
     OSError,
@@ -274,11 +268,16 @@ class LessonService:
     async def _build_rag_context(
         self,
         *,
+        course: Course,
+        lesson: Lesson,
         course_id: uuid.UUID,
-        title: str,
-        description: str,
+        outline_window: list[_OutlineWindowItem],
     ) -> str:
-        search_query = f"{title} {description}".strip()
+        search_query = self._build_lesson_retrieval_query(
+            course=course,
+            lesson=lesson,
+            outline_window=outline_window,
+        )
         if not search_query:
             return ""
 
@@ -286,21 +285,33 @@ class LessonService:
             from src.ai.rag.service import RAGService
 
             rag_service = RAGService()
-            search_results = await rag_service.search_documents(
+            learner_level = await self._resolve_learner_level(concept_id=lesson.concept_id)
+            search_results = await rag_service.search_lesson_documents(
                 session=self.session,
-                user_id=self.user_id,
                 course_id=course_id,
                 query=search_query,
+                learner_level=learner_level,
                 top_k=5,
             )
             if not search_results:
                 return ""
 
             context_parts = ["## Course Context"]
-            for i, result in enumerate(search_results[:5], 1):
-                context_parts.append(f"### Context {i}")
+            seen_context_keys: set[str] = set()
+            context_index = 1
+            for result in search_results[:5]:
+                section_label = self._build_source_section_label(result.metadata)
+                context_key = f"{result.chunk_id}:{section_label}:{result.content.strip()}"
+                if context_key in seen_context_keys:
+                    continue
+                seen_context_keys.add(context_key)
+
+                context_parts.append(f"### Source Excerpt {context_index}")
+                if section_label:
+                    context_parts.append(f"Source section: {section_label}")
                 context_parts.append(result.content)
                 context_parts.append("")
+                context_index += 1
 
             return "\n".join(context_parts).strip()
         except _LESSON_RAG_CONTEXT_FALLBACK_ERROR_TYPES:
@@ -309,6 +320,59 @@ class LessonService:
                 extra={"user_id": str(self.user_id), "course_id": str(course_id)},
             )
             return ""
+
+    def _build_lesson_retrieval_query(
+        self,
+        *,
+        course: Course,
+        lesson: Lesson,
+        outline_window: list[_OutlineWindowItem],
+    ) -> str:
+        lines = [
+            f"Course title: {course.title}",
+            "Course goal/prompt:",
+            course.description,
+        ]
+        if lesson.module_name:
+            lines.append(f"Module title: {lesson.module_name}")
+        lines.append(f"Lesson title: {lesson.title}")
+        if lesson.description:
+            lines.extend(["Lesson description:", lesson.description])
+
+        nearby_titles = [
+            item["title"]
+            for item in outline_window
+            if item.get("title") and item.get("title") != lesson.title
+        ]
+        if nearby_titles:
+            lines.extend(["Nearby lesson titles:", "; ".join(nearby_titles)])
+        return "\n".join(line for line in lines if line).strip()
+
+    async def _resolve_learner_level(self, *, concept_id: uuid.UUID | None) -> str | None:
+        if concept_id is None:
+            return None
+        state = await self.session.scalar(
+            select(UserConceptState).where(
+                UserConceptState.user_id == self.user_id,
+                UserConceptState.concept_id == concept_id,
+            )
+        )
+        if state is None:
+            return None
+
+        mastery = float(state.s_mastery)
+        if mastery < 0.35:
+            return "beginner"
+        if mastery < 0.75:
+            return "intermediate"
+        return "advanced"
+
+    def _build_source_section_label(self, metadata: Mapping[str, object]) -> str:
+        title = metadata.get("title")
+        section_path = metadata.get("section_path")
+        section_title = metadata.get("section_title")
+        parts = [part for part in (title, section_path or section_title) if isinstance(part, str) and part.strip()]
+        return " > ".join(parts)
 
     def _build_outline_window_text(self, outline_window: list[_OutlineWindowItem]) -> str:
         if not outline_window:
@@ -791,9 +855,10 @@ class LessonService:
         )
 
         rag_context = await self._build_rag_context(
+            course=course,
+            lesson=lesson,
             course_id=course.id,
-            title=lesson.title,
-            description=lesson.description or "",
+            outline_window=outline_window,
         )
         return "\n\n".join([*context_sections, rag_context]).strip()
 

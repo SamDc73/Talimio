@@ -22,8 +22,6 @@ _SKIPPED_SECTION_TITLES = {
     "contents",
     "how to contact us",
     "navigating this book",
-    "o'reilly online learning",
-    "praise for ai engineering",
     "revision history for the first edition",
     "table of contents",
     "using code examples",
@@ -38,11 +36,19 @@ _JUNK_TEXT_PREFIXES = (
     "copyright ",
     "printed in ",
     "published by ",
-    "see http://oreilly.com/catalog/errata",
-    "the o'reilly logo is a registered trademark",
+    "see http://",
+    "see https://",
     "the views expressed in this work",
 )
 _FAST_STRATEGY_EXTENSIONS = {".epub", ".md", ".txt"}
+_BODY_START_BRIDGE_CATEGORIES = {
+    "CodeSnippet",
+    "Formula",
+    "ListItem",
+    "Table",
+    "Title",
+    "UncategorizedText",
+}
 
 
 def _partition_strategy_for_file(file_path: str) -> str:
@@ -75,6 +81,18 @@ def _looks_like_junk_text(text: str) -> bool:
     return bool(re.fullmatch(r"(?:97[89][- ]?)?[0-9][- 0-9]{8,}[0-9x]", normalized))
 
 
+def _looks_like_body_text(text: str) -> bool:
+    """Identify prose-like body text from loosely categorized parser output."""
+    if _looks_like_junk_text(text):
+        return False
+    if _looks_like_heading("UncategorizedText", text):
+        return False
+    words = _normalize_text(text).split()
+    if len(words) >= 5:
+        return True
+    return len(text) > 24 and text.endswith((".", "?", "!", ":"))
+
+
 def _extract_plain_text_from_rows(rows: Sequence[tuple[str, str]]) -> str:
     """Return cleaned text when structural markers are absent or unreliable."""
     blocks: list[str] = []
@@ -88,7 +106,7 @@ def _extract_plain_text_from_rows(rows: Sequence[tuple[str, str]]) -> str:
         if _looks_like_heading(category, text):
             if normalized_title in _TRAILING_SECTION_TITLES and blocks:
                 break
-            if normalized_title in _SKIPPED_SECTION_TITLES:
+            if normalized_title in _SKIPPED_SECTION_TITLES or (not blocks and normalized_title.startswith("praise for ")):
                 skip_section = True
                 continue
             skip_section = False
@@ -141,8 +159,21 @@ def _is_body_start_heading(rows: Sequence[tuple[str, str]], index: int, text: st
         return False
 
     for next_category, next_text in rows[index + 1 :]:
-        if next_text:
-            return next_category == "NarrativeText"
+        if not next_text:
+            continue
+        if next_category == "NarrativeText":
+            return True
+        if next_category == "UncategorizedText" and _looks_like_body_text(next_text):
+            return True
+
+        normalized_next_title = _normalize_title(next_text)
+        if (
+            normalized_next_title in _SKIPPED_SECTION_TITLES | _TRAILING_SECTION_TITLES
+            or _CHAPTER_TITLE_RE.match(next_text)
+            or _NUMBERED_CHAPTER_RE.match(next_text)
+            or next_category not in _BODY_START_BRIDGE_CATEGORIES
+        ):
+            return False
     return False
 
 

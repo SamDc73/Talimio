@@ -459,6 +459,52 @@ Return ONLY a JSON object that matches exactly:
 """
 
 
+QUERY2DOC_EXPANSION_PROMPT = """You expand short educational retrieval queries into compact pseudo-documents.
+
+Write a short textbook-style passage that directly answers or explains the query. Include likely terminology, definitions, examples, and related section language that a course source might use.
+
+Rules:
+- Keep it under 140 words.
+- Do not cite sources.
+- Do not add markdown headings.
+- Return only the passage.
+
+Query:
+{query}"""
+
+
+MULTI_VIEW_QUERY_DECOMPOSITION_PROMPT = """You create three search queries for retrieving source excerpts for a lesson.
+
+Return ONLY JSON with this exact shape:
+{{
+  "conceptual": "query focused on definitions, intuitions, and explanations",
+  "practical": "query focused on examples, applications, and learner tasks",
+  "technical": "query focused on precise terms, formulas, procedures, and edge cases"
+}}
+
+Base query:
+{query}"""
+
+
+DIFFICULTY_AWARE_QUERY_TEMPLATE = """{query}
+
+Learner level hint: {level_hint}"""
+
+
+UTILITY_BATCH_FILTER_PROMPT = """You filter retrieved excerpts for lesson-writing utility.
+
+Keep excerpts that add concrete, source-grounded information for the lesson. Drop excerpts that are redundant, only topically related, or mostly navigation/front matter.
+
+Return ONLY JSON with this exact shape:
+{{"useful_indices": [0, 2, 4]}}
+
+Lesson retrieval query:
+{query}
+
+Retrieved excerpts:
+{chunks}"""
+
+
 LESSON_GENERATION_PROMPT = """
 You are Lesson Writer.
 
@@ -481,6 +527,7 @@ LESSON_CONTEXT:
 - Teach the full lesson objective named in LESSON_CONTEXT.
 - Simplify if needed, but do not shrink the lesson to only the easiest subskill.
 - Stay focused on the lesson topic. Brief supporting detours are fine when they genuinely clarify it.
+- When drawing from Course Context excerpts, cite the source title or source section in the prose, for example “As the section Source Title > Section explains...”.
 
 ## Writing style (dense, intentional)
 - Every sentence must either teach, build intuition, or create useful curiosity. No filler.
@@ -609,7 +656,7 @@ Course-focus workflow:
 - If the learner switches topics, asks broadly, or the packet has weak/no concept matches for an adaptive course, call `search_concepts` before routing when `courseId` is known. On topic-switch turns, `search_concepts` must happen before any `generate_concept_probe` call. Do not keep using the old concept focus after a clear topic switch.
 - If the learner asks about uploaded/reference/course source material, call `search_course_sources` when `courseId` is known. `sourceFocus` metadata only proves matching chunks exist; it is not enough to answer from.
 - If the learner asks about a lesson section, says “this part” inside a lesson, or needs step-by-step help from the lesson, call `get_lesson_windows` when `courseId` and `lessonId` are known. `lessonFocus` metadata only proves lesson content exists; it is not enough to answer from.
-- When using `sourceFocus` or `search_course_sources`, cite the source title briefly and quote or paraphrase only compact excerpts.
+- When using `sourceFocus` or `search_course_sources`, cite the source title or source section briefly and quote or paraphrase only compact excerpts.
 - When lesson/source grounding is available, match the course's terminology, notation, method order, and worked-example style before introducing alternatives.
 - When retrieved windows contain ordered steps, examples, procedures, equations, or code walkthroughs, scaffold from the next relevant step instead of dumping the whole solution.
 - If an adaptive learner is confused, wrong, stuck, asks for help, asks “why?”, or `conceptFocus` shows confusors/prerequisite gaps, call `get_concept_tutor_context` for the focused concept before diagnosing.

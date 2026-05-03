@@ -11,9 +11,10 @@ from fastapi.concurrency import run_in_threadpool
 from src.ai.rag.exceptions import RagUnavailableError
 
 
-_CHUNK_SIZE = 1_600
+_CHUNK_SIZE = 400
 _CHUNK_OVERLAP_RATIO = 0.12
 _MIN_CHARS_PER_CHUNK = 120
+_CHONKIE_TOKENIZER = "cl100k_base"
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 
 
@@ -88,7 +89,7 @@ def _chunk_text_with_metadata_sync(text: str, document_title: str | None) -> tup
 
     heading_context = _collect_heading_context(normalized_text)
     chunker = RecursiveChunker(
-        tokenizer="character",
+        tokenizer=_CHONKIE_TOKENIZER,
         chunk_size=_CHUNK_SIZE,
         rules=_build_markdown_rules(),
         min_characters_per_chunk=_MIN_CHARS_PER_CHUNK,
@@ -99,13 +100,16 @@ def _chunk_text_with_metadata_sync(text: str, document_title: str | None) -> tup
             continue
         chunk.metadata.update(_metadata_for_chunk(chunk.start_index, heading_context))
         chunk.metadata["contextualized"] = True
+        token_count = getattr(chunk, "token_count", None)
+        if isinstance(token_count, int):
+            chunk.metadata["token_count"] = token_count
         raw_chunks.append(chunk)
 
     if not raw_chunks:
         return [], []
 
     overlap_refinery = OverlapRefinery(
-        tokenizer="character",
+        tokenizer=_CHONKIE_TOKENIZER,
         context_size=_CHUNK_OVERLAP_RATIO,
         method="prefix",
         merge=False,
@@ -117,6 +121,9 @@ def _chunk_text_with_metadata_sync(text: str, document_title: str | None) -> tup
     for chunk in refined_chunks:
         chunk_text = chunk.text.strip()
         chunk_metadata = dict(chunk.metadata)
+        token_count = getattr(chunk, "token_count", None)
+        if isinstance(token_count, int):
+            chunk_metadata["token_count"] = token_count
         chunks.append(_add_chunk_context(chunk_text, document_title, chunk_metadata))
         metadata.append(chunk_metadata)
 

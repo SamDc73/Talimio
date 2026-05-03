@@ -18,6 +18,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.exc import StaleDataError
 
+from src.ai.client import LLMClient
+from src.ai.errors import AIRuntimeError
+from src.ai.prompts import (
+    DIFFICULTY_AWARE_QUERY_TEMPLATE,
+    MULTI_VIEW_QUERY_DECOMPOSITION_PROMPT,
+    QUERY2DOC_EXPANSION_PROMPT,
+    UTILITY_BATCH_FILTER_PROMPT,
+)
 from src.ai.rag.chunker import chunk_text_with_metadata_async
 from src.ai.rag.config import get_rag_config
 from src.ai.rag.embeddings import VectorRAG
@@ -28,8 +36,9 @@ from src.ai.rag.exceptions import (
     RagUploadTooLargeError,
     RagValidationError,
 )
+from src.ai.rag.filters import deduplicate_by_similarity
 from src.ai.rag.parser import DocumentProcessor
-from src.ai.rag.schemas import DocumentResponse, SearchResult
+from src.ai.rag.schemas import DocumentResponse, MultiViewQueryExpansion, SearchResult, UtilityBatchFilterResponse
 from src.books.models import Book
 from src.courses.models import Course, CourseDocument
 from src.database.session import async_session_maker
@@ -54,6 +63,15 @@ COURSE_IMAGE_DOCUMENT_TYPE = "image"
 MISSING_FILE_PATH_ERROR_MESSAGE = "No file path to process"
 DEFAULT_SEARCH_TOP_K = 10
 RERANK_CANDIDATE_MULTIPLIER = 4
+LESSON_RETRIEVAL_CANDIDATE_TOP_K = 8
+QUERY2DOC_MAX_WORDS = 20
+MULTI_VIEW_MIN_WORDS = 5
+LESSON_CONTEXT_TOP_K = 5
+LEVEL_HINTS = {
+    "beginner": "prefer introductory explanations, definitions, and worked examples with minimal assumed background.",
+    "intermediate": "prefer applied explanations, comparisons, and common edge cases that deepen existing understanding.",
+    "advanced": "prefer precise technical detail, tradeoffs, formal language, and non-obvious edge cases.",
+}
 
 _RERANK_RUNTIME_ERROR_TYPES = (
     TimeoutError,
@@ -88,6 +106,7 @@ _RAG_RUNTIME_ERROR_TYPES = (
     RagValidationError,
     RagUnavailableError,
 )
+_OPTIONAL_RETRIEVAL_LLM_ERROR_TYPES = (AIRuntimeError, TimeoutError, asyncio.TimeoutError, ConnectionError, OSError)
 
 _COURSE_DOCUMENT_EXTENSIONS_BY_TYPE = {
     "epub": {".epub"},
@@ -586,6 +605,7 @@ class RAGService:
         chunks: list[str] = []
         per_chunk_meta: list[dict] = []
 
+        # Video transcripts stay segment-based so timestamp metadata remains exact.
         segments = None
         if getattr(video, "transcript_data", None) and isinstance(video.transcript_data, dict):
             segments = video.transcript_data.get("segments")
@@ -707,6 +727,223 @@ class RAGService:
             logger.exception("Failed to search documents")
             message = "Failed to search documents"
             raise RagUnavailableError(message) from error
+
+    async def search_lesson_documents(
+        self,
+        session: AsyncSession,
+        course_id: uuid.UUID,
+        query: str,
+        *,
+        learner_level: str | None = None,
+        top_k: int = LESSON_CONTEXT_TOP_K,
+    ) -> list[SearchResult]:
+        """Search course documents with lesson-specific query expansion and context packing."""
+        if not await self._has_searchable_course_document_chunks(session=session, course_id=course_id):
+            return []
+
+        retrieval_query = self._append_level_hint(query, learner_level=learner_level)
+        retrieval_query = await self._expand_short_query(retrieval_query)
+
+        if self._word_count(retrieval_query) < MULTI_VIEW_MIN_WORDS:
+            results = await self.search_course_documents(
+                session=session,
+                course_id=course_id,
+                query=retrieval_query,
+                top_k=LESSON_RETRIEVAL_CANDIDATE_TOP_K,
+            )
+        else:
+            results = await self._search_lesson_multi_view(
+                session=session,
+                course_id=course_id,
+                query=retrieval_query,
+                top_k=LESSON_RETRIEVAL_CANDIDATE_TOP_K,
+            )
+
+        deduped_results = deduplicate_by_similarity(results)
+        filtered_results = await self._filter_results_by_utility(query=retrieval_query, results=deduped_results)
+        return filtered_results[:top_k]
+
+    async def _has_searchable_course_document_chunks(self, *, session: AsyncSession, course_id: uuid.UUID) -> bool:
+        has_chunks = await session.scalar(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM rag_document_chunks chunk
+                    WHERE chunk.doc_type = :doc_type
+                      AND chunk.metadata->>'course_id' = :course_id
+                    LIMIT 1
+                )
+                """,
+            ),
+            {
+                "course_id": str(course_id),
+                "doc_type": CONTENT_TYPE_COURSE,
+            },
+        )
+        return bool(has_chunks)
+
+    def _append_level_hint(self, query: str, *, learner_level: str | None) -> str:
+        if learner_level is None:
+            return query
+
+        level_hint = LEVEL_HINTS.get(learner_level)
+        if level_hint is None:
+            return query
+        return DIFFICULTY_AWARE_QUERY_TEMPLATE.format(query=query, level_hint=level_hint)
+
+    async def _expand_short_query(self, query: str) -> str:
+        if self._word_count(query) >= QUERY2DOC_MAX_WORDS:
+            return query
+
+        llm_client = LLMClient()
+        try:
+            response = await llm_client.get_completion(
+                messages=[
+                    {"role": "user", "content": QUERY2DOC_EXPANSION_PROMPT.format(query=query)},
+                ],
+                temperature=0.2,
+                max_completion_tokens=220,
+                enable_memory=False,
+                enable_tools=False,
+            )
+        except _OPTIONAL_RETRIEVAL_LLM_ERROR_TYPES:
+            logger.warning("rag.query2doc.failed", exc_info=True)
+            return query
+
+        if not isinstance(response, str) or not response.strip():
+            return query
+        return f"{query}\n{response.strip()}"
+
+    async def _search_lesson_multi_view(
+        self,
+        *,
+        session: AsyncSession,
+        course_id: uuid.UUID,
+        query: str,
+        top_k: int,
+    ) -> list[SearchResult]:
+        perspective_queries = await self._build_multi_view_queries(query)
+        if not perspective_queries:
+            return await self.search_course_documents(session=session, course_id=course_id, query=query, top_k=top_k)
+
+        result_sets = await asyncio.gather(
+            *(
+                self._search_course_documents_in_new_session(
+                    course_id=course_id,
+                    query=perspective_query,
+                    top_k=top_k,
+                )
+                for perspective_query in perspective_queries
+            ),
+            return_exceptions=True,
+        )
+        valid_result_sets: list[list[SearchResult]] = []
+        for result_set in result_sets:
+            if isinstance(result_set, _RAG_RUNTIME_ERROR_TYPES):
+                logger.warning(
+                    "rag.multi_view.search_failed",
+                    exc_info=(type(result_set), result_set, result_set.__traceback__),
+                )
+                continue
+            if isinstance(result_set, BaseException):
+                raise result_set
+            valid_result_sets.append(result_set)
+
+        if not valid_result_sets:
+            return await self.search_course_documents(session=session, course_id=course_id, query=query, top_k=top_k)
+        return self._merge_results_with_rrf(valid_result_sets, top_k=top_k)
+
+    async def _search_course_documents_in_new_session(
+        self,
+        *,
+        course_id: uuid.UUID,
+        query: str,
+        top_k: int,
+    ) -> list[SearchResult]:
+        async with async_session_maker() as search_session:
+            return await self.search_course_documents(search_session, course_id=course_id, query=query, top_k=top_k)
+
+    async def _build_multi_view_queries(self, query: str) -> list[str]:
+        llm_client = LLMClient()
+        try:
+            response = await llm_client.get_completion(
+                messages=[
+                    {"role": "user", "content": MULTI_VIEW_QUERY_DECOMPOSITION_PROMPT.format(query=query)},
+                ],
+                response_model=MultiViewQueryExpansion,
+                temperature=0.1,
+                max_completion_tokens=240,
+                enable_memory=False,
+                enable_tools=False,
+            )
+        except _OPTIONAL_RETRIEVAL_LLM_ERROR_TYPES:
+            logger.warning("rag.multi_view.failed", exc_info=True)
+            return []
+
+        if not isinstance(response, MultiViewQueryExpansion):
+            return []
+        return [response.conceptual, response.practical, response.technical]
+
+    def _merge_results_with_rrf(self, result_sets: list[list[SearchResult]], *, top_k: int) -> list[SearchResult]:
+        by_chunk_id: dict[str, SearchResult] = {}
+        scores: dict[str, float] = {}
+
+        for results in result_sets:
+            for rank, result in enumerate(results, start=1):
+                by_chunk_id.setdefault(result.chunk_id, result)
+                scores[result.chunk_id] = scores.get(result.chunk_id, 0.0) + self._rrf_score(rank)
+
+        ranked_chunk_ids = sorted(scores, key=lambda chunk_id: scores[chunk_id], reverse=True)
+        merged: list[SearchResult] = []
+        for chunk_id in ranked_chunk_ids[:top_k]:
+            result = by_chunk_id[chunk_id]
+            merged.append(
+                result.model_copy(
+                    update={
+                        "similarity_score": scores[chunk_id],
+                        "metadata": {**result.metadata, "multi_view_rrf_score": scores[chunk_id]},
+                    }
+                )
+            )
+        return merged
+
+    @staticmethod
+    def _rrf_score(rank: int) -> float:
+        return 1.0 / (60 + rank)
+
+    async def _filter_results_by_utility(self, *, query: str, results: list[SearchResult]) -> list[SearchResult]:
+        if len(results) <= LESSON_CONTEXT_TOP_K:
+            return results
+
+        chunks = "\n\n".join(f"[{index}]\n{result.content}" for index, result in enumerate(results))
+        llm_client = LLMClient()
+        try:
+            response = await llm_client.get_completion(
+                messages=[
+                    {"role": "user", "content": UTILITY_BATCH_FILTER_PROMPT.format(query=query, chunks=chunks)},
+                ],
+                response_model=UtilityBatchFilterResponse,
+                temperature=0.0,
+                max_completion_tokens=160,
+                enable_memory=False,
+                enable_tools=False,
+            )
+        except _OPTIONAL_RETRIEVAL_LLM_ERROR_TYPES:
+            logger.warning("rag.utility_filter.failed", exc_info=True)
+            return results
+
+        if not isinstance(response, UtilityBatchFilterResponse):
+            return results
+
+        useful_indices = [index for index in response.useful_indices if 0 <= index < len(results)]
+        if not useful_indices:
+            return results
+        return [results[index] for index in useful_indices]
+
+    @staticmethod
+    def _word_count(text_value: str) -> int:
+        return len(text_value.split())
 
     async def _rerank_candidates(
         self, *, query: str, candidates: list[SearchResult], top_k: int, rerank_model: str

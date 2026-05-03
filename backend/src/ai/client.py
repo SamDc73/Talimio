@@ -240,6 +240,7 @@ class _LLMRequest:
     has_hosted_tools: bool = False
     tool_plan: RequestToolPlan | None = None
     enable_memory: bool = True
+    enable_tools: bool = True
 
 
 def _iter_exception_chain(error: Exception, max_depth: int = 6) -> list[Exception]:
@@ -366,6 +367,7 @@ class LLMClient:
         stream: bool,
         metadata: JsonDict | None,
         enable_memory: bool,
+        enable_tools: bool,
     ) -> _LLMRequest:
         settings = get_settings()
         return _LLMRequest(
@@ -383,6 +385,7 @@ class LLMClient:
             stream=stream,
             metadata=metadata,
             enable_memory=enable_memory,
+            enable_tools=enable_tools,
         )
 
     def _map_runtime_error(self, error: Exception, *, default_message: str) -> AIRuntimeError:
@@ -504,6 +507,23 @@ class LLMClient:
         """Ordered context assembly: normalize -> memory -> tools."""
         if request.enable_memory and request.user_id is not None:
             request.messages = await self._inject_memory_into_messages(request.messages, request.user_id)
+
+        if not request.enable_tools:
+            request.tool_plan = build_request_tool_plan(
+                model=request.model,
+                explicit_tool_schemas=[],
+                function_tools=[],
+                allowed_tools=set(),
+                blocked_tools=set(),
+                include_hosted_web_search=False,
+            )
+            request.tool_schemas = request.tool_plan.tool_schemas
+            request.responses_tools = request.tool_plan.responses_tools
+            request.tool_targets = request.tool_plan.tool_targets
+            request.use_responses_transport = request.tool_plan.use_responses_transport
+            request.has_hosted_tools = request.tool_plan.has_hosted_tools
+            request.tool_choice = request.tool_plan.default_tool_choice
+            return
 
         request.tool_plan = await self._build_request_tool_plan(request)
         request.tool_schemas = request.tool_plan.tool_schemas
@@ -864,6 +884,7 @@ class LLMClient:
         stream: bool = False,
         metadata: JsonDict | None = None,
         enable_memory: bool = True,
+        enable_tools: bool = True,
     ) -> object:
         """Shared execution engine for free-form and structured generation."""
         request = self._build_request(
@@ -881,6 +902,7 @@ class LLMClient:
             stream=stream,
             metadata=metadata,
             enable_memory=enable_memory,
+            enable_tools=enable_tools,
         )
 
         if request.response_model and request.stream:

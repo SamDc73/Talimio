@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, JsonValue, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 from src.config.schema_casing import build_camel_config
 
@@ -66,6 +66,24 @@ class SearchResult(BaseModel):
     metadata: dict[str, JsonValue] = Field(default_factory=dict, description="Chunk metadata")
 
     model_config = build_camel_config()
+
+
+class MultiViewQueryExpansion(BaseModel):
+    """Structured retrieval query perspectives for lesson RAG."""
+
+    conceptual: str = Field(min_length=1)
+    practical: str = Field(min_length=1)
+    technical: str = Field(min_length=1)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class UtilityBatchFilterResponse(BaseModel):
+    """Structured utility filter result for retrieved chunks."""
+
+    useful_indices: list[int] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class SearchResponse(BaseModel):
