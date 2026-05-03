@@ -563,8 +563,8 @@ class VectorRAG:
         try:
             normalized_embeddings: list[list[float]] = []
             for item in response.data:
-                embedding = item.embedding
-                if isinstance(embedding, (str, bytes)):
+                embedding = item.get("embedding") if isinstance(item, dict) else item.embedding
+                if not isinstance(embedding, Sequence) or isinstance(embedding, (str, bytes)):
                     message = "Embedding provider returned a malformed response"
                     raise RagUnavailableError(message)
                 normalized_embedding = [float(value) for value in embedding]
