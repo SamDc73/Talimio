@@ -62,7 +62,7 @@ class SearchResult(BaseModel):
 
     chunk_id: str = Field(description="Unique chunk identifier")
     content: str = Field(description="Chunk text content")
-    similarity_score: float = Field(description="Raw pgvector similarity score")
+    similarity_score: float = Field(description="Hybrid retrieval score used for result ordering")
     metadata: dict[str, JsonValue] = Field(default_factory=dict, description="Chunk metadata")
 
     model_config = build_camel_config()

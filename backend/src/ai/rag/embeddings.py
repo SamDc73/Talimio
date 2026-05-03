@@ -6,12 +6,14 @@ import logging
 import math
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from itertools import batched
 from typing import cast
 
 import litellm
 from pydantic import JsonValue
 from sqlalchemy import text
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,6 +59,34 @@ _VECTOR_SEARCH_FALLBACK_ERROR_TYPES = (
 )
 _NEIGHBOR_CONTEXT_WINDOW = 1
 _NEIGHBOR_CONTEXT_MAX_CHARS = 5_500
+_HYBRID_CANDIDATE_MULTIPLIER = 4
+_RRF_K = 60
+
+
+@dataclass
+class _FusedSearchItem:
+    doc_id: str
+    doc_type: str
+    chunk_index: int
+    content: str
+    metadata: dict[str, object]
+    fused_score: float = 0.0
+    dense_score: float | None = None
+    lexical_score: float | None = None
+    dense_rank: int | None = None
+    lexical_rank: int | None = None
+
+    def score_metadata(self) -> dict[str, object]:
+        metadata: dict[str, object] = {"fused_score": self.fused_score}
+        if self.dense_score is not None:
+            metadata["dense_score"] = self.dense_score
+        if self.lexical_score is not None:
+            metadata["lexical_score"] = self.lexical_score
+        if self.dense_rank is not None:
+            metadata["dense_rank"] = self.dense_rank
+        if self.lexical_rank is not None:
+            metadata["lexical_rank"] = self.lexical_rank
+        return metadata
 
 
 def _is_json_value(value: object) -> bool:
@@ -214,22 +244,21 @@ class VectorRAG:
         doc_id: uuid.UUID | None = None,
         course_id: uuid.UUID | None = None,
     ) -> list[SearchResult]:
-        """Perform a similarity search scoped to optional identifiers."""
+        """Perform hybrid dense and lexical search scoped to optional identifiers."""
         try:
             await self._ensure_dimensions(session)
             query_embedding = await self.generate_embedding(query)
             embedding_str = self._format_vector(query_embedding)
+            candidate_limit = limit * _HYBRID_CANDIDATE_MULTIPLIER
+
+            where_sql, scope_params = self._build_search_scope(doc_type=doc_type, doc_id=doc_id, course_id=course_id)
 
             params: dict[str, object] = {
-                "doc_type": doc_type,
+                **scope_params,
+                "query": query,
                 "query_embedding": embedding_str,
-                "limit": limit,
+                "candidate_limit": candidate_limit,
             }
-
-            if doc_id:
-                params["doc_id"] = str(doc_id)
-            if course_id:
-                params["course_id"] = str(course_id)
 
             # Ensure HNSW search quality is configurable per-query
             # Requires a transaction; SQLAlchemy manages one per session usage
@@ -239,94 +268,26 @@ class VectorRAG:
             ef_val = get_rag_config().hnsw_ef_search
             await session.execute(text(f"SET LOCAL hnsw.ef_search = {ef_val}"))
 
-            if doc_id and course_id:
-                query_sql = """
-                    SELECT
-                        doc_id,
-                        doc_type,
-                        chunk_index,
-                        content,
-                        metadata,
-                        1 - (embedding <=> CAST(:query_embedding AS vector)) AS similarity
-                    FROM rag_document_chunks
-                    WHERE doc_type = :doc_type
-                      AND embedding IS NOT NULL
-                      AND doc_id = :doc_id
-                      AND metadata->>'course_id' = :course_id
-                    ORDER BY embedding <=> CAST(:query_embedding AS vector)
-                    LIMIT :limit
-                """
-            elif doc_id:
-                query_sql = """
-                    SELECT
-                        doc_id,
-                        doc_type,
-                        chunk_index,
-                        content,
-                        metadata,
-                        1 - (embedding <=> CAST(:query_embedding AS vector)) AS similarity
-                    FROM rag_document_chunks
-                    WHERE doc_type = :doc_type
-                      AND embedding IS NOT NULL
-                      AND doc_id = :doc_id
-                    ORDER BY embedding <=> CAST(:query_embedding AS vector)
-                    LIMIT :limit
-                """
-            elif course_id:
-                query_sql = """
-                    SELECT
-                        doc_id,
-                        doc_type,
-                        chunk_index,
-                        content,
-                        metadata,
-                        1 - (embedding <=> CAST(:query_embedding AS vector)) AS similarity
-                    FROM rag_document_chunks
-                    WHERE doc_type = :doc_type
-                      AND embedding IS NOT NULL
-                      AND metadata->>'course_id' = :course_id
-                    ORDER BY embedding <=> CAST(:query_embedding AS vector)
-                    LIMIT :limit
-                """
-            else:
-                query_sql = """
-                    SELECT
-                        doc_id,
-                        doc_type,
-                        chunk_index,
-                        content,
-                        metadata,
-                        1 - (embedding <=> CAST(:query_embedding AS vector)) AS similarity
-                    FROM rag_document_chunks
-                    WHERE doc_type = :doc_type
-                      AND embedding IS NOT NULL
-                    ORDER BY embedding <=> CAST(:query_embedding AS vector)
-                    LIMIT :limit
-                """
-            result = await session.execute(
-                text(query_sql),
-                params,
-            )
+            dense_result = await session.execute(text(self._build_dense_search_sql(where_sql)), params)
+            lexical_result = await session.execute(text(self._build_lexical_search_sql(where_sql)), params)
+            rows = self._fuse_search_rows(dense_result.mappings().all(), lexical_result.mappings().all(), limit)
 
-            rows = result.fetchall()
             search_results: list[SearchResult] = []
             for row in rows:
-                row_metadata = dict(row.metadata) if isinstance(row.metadata, dict) else {}
-                metadata = self._normalize_metadata(row_metadata)
-                similarity = float(row.similarity)
+                metadata = self._normalize_metadata({**row.metadata, **row.score_metadata()})
                 content = await self._expand_search_result_content(
                     session=session,
                     doc_type=doc_type,
-                    doc_id=str(row.doc_id),
-                    chunk_index=int(row.chunk_index),
-                    content=str(row.content),
+                    doc_id=row.doc_id,
+                    chunk_index=row.chunk_index,
+                    content=row.content,
                     metadata=metadata,
                 )
                 search_results.append(
                     SearchResult(
                         chunk_id=f"{row.doc_id}_{row.chunk_index}",
                         content=content,
-                        similarity_score=similarity,
+                        similarity_score=row.fused_score,
                         metadata=metadata,
                     )
                 )
@@ -344,6 +305,101 @@ class VectorRAG:
             logger.exception("Vector search failed for doc_type=%s doc_id=%s", doc_type, doc_id)
             message = "RAG vector search is unavailable"
             raise RagUnavailableError(message) from error
+
+    @staticmethod
+    def _build_search_scope(
+        *, doc_type: str, doc_id: uuid.UUID | None, course_id: uuid.UUID | None
+    ) -> tuple[str, dict[str, object]]:
+        predicates = ["doc_type = :doc_type"]
+        params: dict[str, object] = {"doc_type": doc_type}
+
+        if doc_id:
+            predicates.append("doc_id = :doc_id")
+            params["doc_id"] = str(doc_id)
+        if course_id:
+            predicates.append("metadata->>'course_id' = :course_id")
+            params["course_id"] = str(course_id)
+
+        return " AND ".join(predicates), params
+
+    @staticmethod
+    def _build_dense_search_sql(where_sql: str) -> str:
+        return """
+            SELECT
+                doc_id,
+                doc_type,
+                chunk_index,
+                content,
+                metadata,
+                1 - (embedding <=> CAST(:query_embedding AS vector)) AS dense_score
+            FROM rag_document_chunks
+            WHERE __SEARCH_SCOPE__
+              AND embedding IS NOT NULL
+            ORDER BY embedding <=> CAST(:query_embedding AS vector)
+            LIMIT :candidate_limit
+        """.replace("__SEARCH_SCOPE__", where_sql)
+
+    @staticmethod
+    def _build_lexical_search_sql(where_sql: str) -> str:
+        return """
+            WITH lexical_query AS (
+                SELECT websearch_to_tsquery('english', :query) AS query
+            )
+            SELECT
+                doc_id,
+                doc_type,
+                chunk_index,
+                content,
+                metadata,
+                ts_rank_cd(to_tsvector('english', content), lexical_query.query) AS lexical_score
+            FROM rag_document_chunks, lexical_query
+            WHERE __SEARCH_SCOPE__
+              AND to_tsvector('english', content) @@ lexical_query.query
+            ORDER BY lexical_score DESC, chunk_index
+            LIMIT :candidate_limit
+        """.replace("__SEARCH_SCOPE__", where_sql)
+
+    def _fuse_search_rows(
+        self, dense_rows: Sequence[RowMapping], lexical_rows: Sequence[RowMapping], limit: int
+    ) -> list[_FusedSearchItem]:
+        fused: dict[tuple[str, int], _FusedSearchItem] = {}
+
+        for rank, row in enumerate(dense_rows, start=1):
+            item = self._get_fused_item(fused, row)
+            item.dense_rank = rank
+            item.dense_score = float(row["dense_score"])
+            item.fused_score += self._rrf_score(rank)
+
+        for rank, row in enumerate(lexical_rows, start=1):
+            item = self._get_fused_item(fused, row)
+            item.lexical_rank = rank
+            item.lexical_score = float(row["lexical_score"])
+            item.fused_score += self._rrf_score(rank)
+
+        ranked_rows = sorted(
+            fused.values(),
+            key=lambda item: (item.fused_score, item.lexical_score or 0.0),
+            reverse=True,
+        )
+        return ranked_rows[:limit]
+
+    @staticmethod
+    def _get_fused_item(fused: dict[tuple[str, int], _FusedSearchItem], row: RowMapping) -> _FusedSearchItem:
+        key = (str(row["doc_id"]), int(row["chunk_index"]))
+        if key not in fused:
+            metadata = dict(row["metadata"]) if isinstance(row["metadata"], dict) else {}
+            fused[key] = _FusedSearchItem(
+                doc_id=key[0],
+                doc_type=str(row["doc_type"]),
+                chunk_index=key[1],
+                content=str(row["content"]),
+                metadata=metadata,
+            )
+        return fused[key]
+
+    @staticmethod
+    def _rrf_score(rank: int) -> float:
+        return 1.0 / (_RRF_K + rank)
 
     async def _expand_search_result_content(
         self,
