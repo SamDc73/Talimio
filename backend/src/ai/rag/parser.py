@@ -7,6 +7,8 @@ from collections.abc import Sequence
 
 from fastapi.concurrency import run_in_threadpool
 
+from src.ai.rag.exceptions import RagUnavailableError
+
 
 _DEFAULT_LANGUAGES = ["eng"]
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -184,13 +186,21 @@ def _extract_structured_text_from_elements(elements: Sequence[object]) -> str:
 
 def _extract_text_with_unstructured(file_path: str) -> str:
     """Extract structured text through Unstructured partitioning."""
-    from unstructured.partition.auto import partition
+    try:
+        from unstructured.partition.auto import partition
+    except ImportError as error:
+        message = "RAG document parser is unavailable"
+        raise RagUnavailableError(message) from error
 
-    elements = partition(
-        filename=file_path,
-        strategy="auto",
-        languages=_DEFAULT_LANGUAGES,
-    )
+    try:
+        elements = partition(
+            filename=file_path,
+            strategy="auto",
+            languages=_DEFAULT_LANGUAGES,
+        )
+    except OSError as error:
+        message = "RAG document parser failed to read the source file"
+        raise RagUnavailableError(message) from error
     return _extract_structured_text_from_elements(elements)
 
 

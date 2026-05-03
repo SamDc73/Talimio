@@ -8,6 +8,8 @@ from chonkie import Chunk, RecursiveChunker, RecursiveLevel, RecursiveRules
 from chonkie.refinery import OverlapRefinery
 from fastapi.concurrency import run_in_threadpool
 
+from src.ai.rag.exceptions import RagUnavailableError
+
 
 _CHUNK_SIZE = 1_600
 _CHUNK_OVERLAP_RATIO = 0.12
@@ -138,4 +140,8 @@ async def chunk_text_with_metadata_async(
     document_title: str | None = None,
 ) -> tuple[list[str], list[dict[str, object]]]:
     """Chunk text and return metadata aligned by chunk index."""
-    return await run_in_threadpool(_chunk_text_with_metadata_sync, text, document_title)
+    try:
+        return await run_in_threadpool(_chunk_text_with_metadata_sync, text, document_title)
+    except OSError as error:
+        message = "RAG text chunking failed"
+        raise RagUnavailableError(message) from error

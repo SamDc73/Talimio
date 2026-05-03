@@ -52,14 +52,20 @@ MISSING_FILE_PATH_ERROR_MESSAGE = "No file path to process"
 _RAG_RUNTIME_ERROR_TYPES = (
     SQLAlchemyError,
     OSError,
-    RuntimeError,
-    TypeError,
-    ValueError,
     TimeoutError,
     asyncio.TimeoutError,
     ConnectionError,
-    ImportError,
+    RagValidationError,
+    RagUnavailableError,
 )
+
+_COURSE_DOCUMENT_EXTENSIONS_BY_TYPE = {
+    "epub": {".epub"},
+    "image": {".jpeg", ".jpg", ".png"},
+    "md": {".md"},
+    "pdf": {".pdf"},
+    "txt": {".txt"},
+}
 
 
 class RAGService:
@@ -110,14 +116,27 @@ class RAGService:
 
         return document_type_text, title_text
 
-    async def _store_course_document_file(
-        self,
-        *,
-        file_content: bytes,
-        filename: str,
-        course_id: uuid.UUID,
-        document_id: int,
-    ) -> str:
+    def _validate_course_document_upload(
+        self, *, document_type: str, file_content: bytes | None, filename: str | None
+    ) -> tuple[bytes, str]:
+        if document_type not in _COURSE_DOCUMENT_EXTENSIONS_BY_TYPE:
+            message = "Unsupported document type"
+            raise RagValidationError(message)
+
+        filename_text = filename.strip() if filename else ""
+        if not filename_text:
+            message = "Uploaded file must include a filename"
+            raise RagValidationError(message)
+
+        if not file_content:
+            message = "Uploaded file must not be empty"
+            raise RagValidationError(message)
+
+        ext = Path(filename_text).suffix.lower()
+        if ext not in _COURSE_DOCUMENT_EXTENSIONS_BY_TYPE[document_type]:
+            message = "Unsupported file extension for document type"
+            raise RagValidationError(message)
+
         file_size_mb = len(file_content) / (1024 * 1024)
         if file_size_mb > self.config.max_file_size_mb:
             logger.warning(
@@ -130,6 +149,16 @@ class RAGService:
             message = f"File too large: {file_size_mb:.1f}MB exceeds {self.config.max_file_size_mb}MB limit"
             raise RagUploadTooLargeError(message)
 
+        return file_content, filename_text
+
+    async def _store_course_document_file(
+        self,
+        *,
+        file_content: bytes,
+        filename: str,
+        course_id: uuid.UUID,
+        document_id: int,
+    ) -> str:
         from src.config.settings import get_settings
 
         rag_document_dir = Path(get_settings().LOCAL_STORAGE_PATH) / "rag_documents" / str(course_id)
@@ -138,10 +167,7 @@ class RAGService:
         # Security fix: Use only UUID + validated extension, no user-provided filename in path
         # This prevents path traversal attacks while preserving file type handling
         ext = Path(filename).suffix.lower()
-        allowed_extensions = {".pdf", ".txt", ".md", ".epub", ".png", ".jpg", ".jpeg"}
-        safe_ext = ext if ext in allowed_extensions else ""
-
-        file_path = rag_document_dir / f"{document_id}{safe_ext}"
+        file_path = rag_document_dir / f"{document_id}{ext}"
         await run_in_threadpool(file_path.write_bytes, file_content)
         return str(file_path)
 
@@ -163,6 +189,11 @@ class RAGService:
             document_type=document_type,
             title=title,
         )
+        validated_file_content, filename_text = self._validate_course_document_upload(
+            document_type=document_type_text,
+            file_content=file_content,
+            filename=filename,
+        )
 
         try:
             is_image = document_type_text == COURSE_IMAGE_DOCUMENT_TYPE
@@ -178,13 +209,12 @@ class RAGService:
             session.add(doc)
             await session.flush()
 
-            if file_content and filename:
-                doc.file_path = await self._store_course_document_file(
-                    file_content=file_content,
-                    filename=filename,
-                    course_id=course_id,
-                    document_id=doc.id,
-                )
+            doc.file_path = await self._store_course_document_file(
+                file_content=validated_file_content,
+                filename=filename_text,
+                course_id=course_id,
+                document_id=doc.id,
+            )
 
             await session.flush()
 
@@ -212,12 +242,6 @@ class RAGService:
     async def process_document(self, session: AsyncSession, document_id: int) -> None:
         """Process a document (parse, chunk, embed, index)."""
         try:
-            await session.execute(
-                text("UPDATE course_documents SET status = :status WHERE id = :doc_id"),
-                {"doc_id": document_id, "status": COURSE_DOCUMENT_STATUS_PROCESSING},
-            )
-            await session.flush()
-
             result = await session.execute(
                 text("SELECT * FROM course_documents WHERE id = :doc_id"), {"doc_id": document_id}
             )
@@ -226,6 +250,15 @@ class RAGService:
                 raise RagDocumentNotFoundError(document_id)
 
             doc_dict = dict(row_map)
+            if doc_dict.get("status") == COURSE_DOCUMENT_STATUS_EMBEDDED:
+                logger.info("Document %s is already embedded; skipping processing", document_id)
+                return
+
+            await session.execute(
+                text("UPDATE course_documents SET status = :status WHERE id = :doc_id"),
+                {"doc_id": document_id, "status": COURSE_DOCUMENT_STATUS_PROCESSING},
+            )
+            await session.flush()
 
             text_content = ""
             if doc_dict["file_path"]:
@@ -246,8 +279,7 @@ class RAGService:
                     try:
                         await run_in_threadpool(cleanup_path.unlink)
                     except OSError:
-                        logger.exception("rag.document.temp_cleanup_failed", extra={"document_id": document_id})
-                        raise
+                        logger.warning("rag.document.temp_cleanup_failed", extra={"document_id": document_id}, exc_info=True)
             else:
                 raise RagValidationError(MISSING_FILE_PATH_ERROR_MESSAGE)
 
@@ -256,6 +288,10 @@ class RAGService:
                 document_title=str(doc_dict.get("title") or ""),
             )
             logger.info("Document %s chunked into %s pieces", document_id, len(chunks))
+            if not self._has_valid_chunks(chunks):
+                message = "Document parsing produced no searchable text chunks"
+                raise RagValidationError(message)
+
             await self._store_document_chunks(session, document_id, chunks, per_chunk_metadata)
 
             await session.execute(
@@ -274,14 +310,7 @@ class RAGService:
 
             logger.info("Successfully processed document %s", document_id)
 
-            if doc_dict.get("file_path"):
-                file_path = Path(doc_dict["file_path"])
-                if await run_in_threadpool(file_path.exists):
-                    try:
-                        await run_in_threadpool(file_path.unlink)
-                    except OSError:
-                        logger.exception("rag.document.source_cleanup_failed", extra={"document_id": document_id})
-                        raise
+            await self._cleanup_course_source_file(session, document_id, doc_dict.get("file_path"))
 
         except _RAG_RUNTIME_ERROR_TYPES:
             logger.exception("Failed to process document %s", document_id)
@@ -318,8 +347,8 @@ class RAGService:
             try:
                 await run_in_threadpool(fp.unlink)
             except OSError:
-                logger.exception("rag.document.source_cleanup_failed", extra={"document_id": document_id})
-                raise
+                logger.warning("rag.document.source_cleanup_failed", extra={"document_id": document_id}, exc_info=True)
+                return
         await session.execute(
             text("UPDATE course_documents SET file_path = NULL WHERE id = :doc_id"),
             {"doc_id": document_id},
@@ -334,10 +363,15 @@ class RAGService:
         storage = get_storage_provider()
         try:
             await storage.delete(book.file_path)
-        except (StorageError, OSError, RuntimeError, ValueError, TypeError):
-            logger.exception("rag.book.source_cleanup_failed", extra={"book_id": str(book_id)})
-            raise
+        except (StorageError, OSError):
+            logger.warning("rag.book.source_cleanup_failed", extra={"book_id": str(book_id)}, exc_info=True)
+            return
         book.file_path = ""
+        await session.flush()
+
+    async def _mark_book_failed_without_chunks(self, session: AsyncSession, book: Book, book_id: uuid.UUID) -> None:
+        logger.warning("rag.book.no_text_chunks", extra={"book_id": str(book_id)})
+        book.rag_status = RAG_STATUS_FAILED
         await session.flush()
 
     async def process_book(self, session: AsyncSession, book_id: uuid.UUID) -> None:
@@ -377,14 +411,16 @@ class RAGService:
                 try:
                     await run_in_threadpool(temp_file_path.unlink)
                 except OSError:
-                    logger.exception("rag.book.temp_cleanup_failed", extra={"book_id": str(book_id)})
-                    raise
+                    logger.warning("rag.book.temp_cleanup_failed", extra={"book_id": str(book_id)}, exc_info=True)
 
             # Chunk
             chunks, per_chunk_metadata = await chunk_text_with_metadata_async(
                 text_content,
                 document_title=book.title or "",
             )
+            if not self._has_valid_chunks(chunks):
+                await self._mark_book_failed_without_chunks(session, book, book_id)
+                return
 
             # Store chunks
             if not hasattr(self, "_vector_rag"):
@@ -511,6 +547,10 @@ class RAGService:
 
         return chunks, per_chunk_meta
 
+    @staticmethod
+    def _has_valid_chunks(chunks: list[str]) -> bool:
+        return any(chunk.strip() for chunk in chunks)
+
     async def _store_document_chunks(
         self,
         session: AsyncSession,
@@ -541,7 +581,8 @@ class RAGService:
             valid_chunk_count = sum(1 for chunk in chunks if chunk.strip())
             if not valid_chunk_count:
                 logger.warning("No valid chunks to index for document %s", document_id)
-                return
+                message = "No valid chunks to index"
+                raise RagValidationError(message)
 
             logger.info("Storing %s chunks for document %s using LiteLLM + pgvector", valid_chunk_count, document_id)
 

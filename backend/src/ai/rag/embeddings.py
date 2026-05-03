@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.litellm_config import configure_litellm
 from src.ai.rag.config import get_rag_config
+from src.ai.rag.exceptions import RagUnavailableError, RagValidationError
 from src.ai.rag.schemas import SearchResult
 
 
@@ -45,9 +46,6 @@ _EMBEDDING_RUNTIME_ERROR_TYPES = (
     asyncio.TimeoutError,
     ConnectionError,
     OSError,
-    RuntimeError,
-    TypeError,
-    ValueError,
     litellm.Timeout,
     *_LITELLM_PROVIDER_ERROR_TYPES,
 )
@@ -61,6 +59,8 @@ _NEIGHBOR_CONTEXT_MAX_CHARS = 5_500
 
 
 def _is_json_value(value: object) -> bool:
+    if isinstance(value, float) and not math.isfinite(value):
+        return False
     if value is None or isinstance(value, str | int | float | bool):
         return True
     if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
@@ -78,8 +78,8 @@ class VectorRAG:
         config = get_rag_config()
         self.embedding_model = config.embedding_model
         if not self.embedding_model:
-            error_msg = "RAG embedding model not configured (set RAG_EMBEDDING_MODEL)"
-            raise ValueError(error_msg)
+            message = "RAG embedding model not configured (set RAG_EMBEDDING_MODEL)"
+            raise RagUnavailableError(message)
 
         self.configured_embedding_dim = config.embedding_output_dim
         self.embedding_context_size = config.embedding_context_size
@@ -150,7 +150,8 @@ class VectorRAG:
 
             if not chunk_payloads:
                 logger.warning("No valid chunks to store for doc_id=%s doc_type=%s", doc_id, doc_type)
-                return
+                message = "No valid chunks to store"
+                raise RagValidationError(message)
 
             logger.info(
                 "Storing %s chunks for doc_id=%s doc_type=%s (batch_size=%s)",
@@ -198,7 +199,7 @@ class VectorRAG:
                 doc_type,
             )
 
-        except (SQLAlchemyError, *_EMBEDDING_RUNTIME_ERROR_TYPES):
+        except (SQLAlchemyError, RagUnavailableError, RagValidationError, *_EMBEDDING_RUNTIME_ERROR_TYPES):
             logger.exception("Failed to store chunks with embeddings for doc_id=%s", doc_id)
             raise
 
@@ -311,7 +312,7 @@ class VectorRAG:
             for row in rows:
                 row_metadata = dict(row.metadata) if isinstance(row.metadata, dict) else {}
                 metadata = self._normalize_metadata(row_metadata)
-                similarity = row.similarity if row.similarity and row.similarity > 0 else 0.1
+                similarity = float(row.similarity)
                 content = await self._expand_search_result_content(
                     session=session,
                     doc_type=doc_type,
@@ -338,9 +339,10 @@ class VectorRAG:
             )
             return search_results
 
-        except _VECTOR_SEARCH_FALLBACK_ERROR_TYPES:
+        except _VECTOR_SEARCH_FALLBACK_ERROR_TYPES as error:
             logger.exception("Vector search failed for doc_type=%s doc_id=%s", doc_type, doc_id)
-            return []
+            message = "RAG vector search is unavailable"
+            raise RagUnavailableError(message) from error
 
     # Removed legacy helpers that are now handled by RAG service + chonkie
 
@@ -405,7 +407,7 @@ class VectorRAG:
         db_dim = await self._fetch_db_embedding_dimension(session)
 
         if db_dim is not None and self.configured_embedding_dim is not None and db_dim != self.configured_embedding_dim:
-            error_msg = (
+            message = (
                 f"Embedding dimension mismatch detected: model={self.configured_embedding_dim} database={db_dim}. "
                 "Run scripts/verify_rag_schema.py or align RAG_EMBEDDING_OUTPUT_DIM."
             )
@@ -413,7 +415,7 @@ class VectorRAG:
                 "rag.embeddings.dimension_mismatch",
                 extra={"configured_dimension": self.configured_embedding_dim, "database_dimension": db_dim},
             )
-            raise ValueError(error_msg)
+            raise RagUnavailableError(message)
 
         if db_dim is not None:
             self._db_embedding_dim = db_dim
@@ -461,6 +463,9 @@ class VectorRAG:
             try:
                 response = await self._invoke_embedding(embed_kwargs)
                 embeddings = self._normalize_embedding_response(response)
+                if len(embeddings) != len(texts):
+                    message = "Embedding provider returned an unexpected number of embeddings"
+                    raise RagUnavailableError(message)
                 logger.debug("Generated %s embeddings (attempt %s)", len(embeddings), attempt)
                 return embeddings
             except _EMBEDDING_RUNTIME_ERROR_TYPES as exc:
@@ -479,8 +484,8 @@ class VectorRAG:
                 )
                 await asyncio.sleep(delay_seconds)
 
-        msg = "Exhausted embedding retries unexpectedly"
-        raise RuntimeError(msg)
+        message = "Exhausted embedding retries unexpectedly"
+        raise RagUnavailableError(message)
 
     def _build_embedding_kwargs(self, texts: Sequence[str]) -> dict[str, object]:
         """Construct kwargs for LiteLLM embedding call."""
@@ -510,19 +515,19 @@ class VectorRAG:
         embeddings = [item.get("embedding", item) for item in data] if data else response
 
         if not isinstance(embeddings, Sequence):
-            msg = f"Unexpected embedding response type: {type(embeddings)}"
-            raise TypeError(msg)
+            message = f"Unexpected embedding response type: {type(embeddings)}"
+            raise RagUnavailableError(message)
 
         normalized_embeddings: list[list[float]] = []
         for embedding in embeddings:
             if not embedding or not isinstance(embedding, Sequence):
-                msg = f"Invalid embedding payload of type {type(embedding)}"
-                raise ValueError(msg)
+                message = f"Invalid embedding payload of type {type(embedding)}"
+                raise RagUnavailableError(message)
             normalized_embedding: list[float] = []
             for value in embedding:
                 if not isinstance(value, (str, int, float)):
-                    msg = f"Invalid embedding value of type {type(value)}"
-                    raise TypeError(msg)
+                    message = f"Invalid embedding value of type {type(value)}"
+                    raise RagUnavailableError(message)
                 normalized_embedding.append(float(value))
             normalized_embeddings.append(normalized_embedding)
 
@@ -540,8 +545,14 @@ class VectorRAG:
         for key, value in metadata.items():
             if isinstance(value, uuid.UUID):
                 normalized[key] = str(value)
+            elif isinstance(value, float) and not math.isfinite(value):
+                message = f"Metadata field '{key}' must be a finite number"
+                raise RagValidationError(message)
+            elif _is_json_value(value):
+                normalized[key] = cast("JsonValue", value)
             else:
-                normalized[key] = cast("JsonValue", value) if _is_json_value(value) else str(value)
+                message = f"Metadata field '{key}' contains an unsupported value"
+                raise RagValidationError(message)
         return normalized
 
     @staticmethod

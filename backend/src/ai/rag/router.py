@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 
 from src.ai.rag.schemas import DefaultResponse, DocumentList, DocumentResponse, SearchRequest, SearchResponse
 from src.ai.rag.service import RAGService
@@ -27,12 +27,9 @@ async def upload_document(
     background_tasks: BackgroundTasks,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
-    file: Annotated[UploadFile | None, File()] = None,
+    file: Annotated[UploadFile, File()],
 ) -> DocumentResponse:
     """Upload a document to a course."""
-    if not file:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File upload required")
-
     file_content = await file.read()
     return await rag_service.upload_document(
         session=auth.session,
@@ -51,8 +48,8 @@ async def list_documents(
     course_id: uuid.UUID,
     auth: CurrentAuth,
     rag_service: Annotated[RAGService, Depends(get_rag_service)],
-    skip: int = 0,
-    limit: int = 20,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> DocumentList:
     """List documents for a course."""
     documents, total = await rag_service.list_documents_with_count(

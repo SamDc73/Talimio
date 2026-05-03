@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue, field_validator
 
 from src.config.schema_casing import build_camel_config
 
@@ -56,10 +56,18 @@ class DocumentList(BaseModel):
 class SearchRequest(BaseModel):
     """Schema for RAG search request."""
 
-    query: str = Field(description="Search query")
-    top_k: int = Field(default=5, description="Number of results to return")
+    query: str = Field(min_length=1, description="Search query")
+    top_k: int = Field(default=5, ge=1, le=20, description="Number of results to return")
 
     model_config = build_camel_config()
+
+    @field_validator("query")
+    @classmethod
+    def _query_must_contain_text(cls, value: str) -> str:
+        if value.strip():
+            return value
+        message = "Search query must not be empty"
+        raise ValueError(message)
 
 
 class SearchResult(BaseModel):
@@ -67,7 +75,7 @@ class SearchResult(BaseModel):
 
     chunk_id: str = Field(description="Unique chunk identifier")
     content: str = Field(description="Chunk text content")
-    similarity_score: float = Field(description="Similarity score (0-1)")
+    similarity_score: float = Field(description="Raw pgvector similarity score")
     metadata: dict[str, JsonValue] = Field(default_factory=dict, description="Chunk metadata")
 
     model_config = build_camel_config()
