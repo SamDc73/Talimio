@@ -4,10 +4,13 @@
 import asyncio
 import logging
 import tempfile
+import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
+import litellm
 from fastapi import BackgroundTasks
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select, text
@@ -49,6 +52,32 @@ COURSE_DOCUMENT_STATUS_EMBEDDED = "embedded"
 COURSE_DOCUMENT_STATUS_FAILED = "failed"
 COURSE_IMAGE_DOCUMENT_TYPE = "image"
 MISSING_FILE_PATH_ERROR_MESSAGE = "No file path to process"
+DEFAULT_SEARCH_TOP_K = 10
+RERANK_CANDIDATE_MULTIPLIER = 4
+
+_RERANK_RUNTIME_ERROR_TYPES = (
+    TimeoutError,
+    asyncio.TimeoutError,
+    ConnectionError,
+    OSError,
+    litellm.APIError,
+    litellm.APIConnectionError,
+    litellm.AuthenticationError,
+    litellm.BadGatewayError,
+    litellm.BadRequestError,
+    litellm.BudgetExceededError,
+    litellm.ContentPolicyViolationError,
+    litellm.ContextWindowExceededError,
+    litellm.InternalServerError,
+    litellm.InvalidRequestError,
+    litellm.NotFoundError,
+    litellm.RateLimitError,
+    litellm.RouterRateLimitError,
+    litellm.ServiceUnavailableError,
+    litellm.Timeout,
+    litellm.UnprocessableEntityError,
+    litellm.UnsupportedParamsError,
+)
 
 _RAG_RUNTIME_ERROR_TYPES = (
     SQLAlchemyError,
@@ -67,6 +96,50 @@ _COURSE_DOCUMENT_EXTENSIONS_BY_TYPE = {
     "pdf": {".pdf"},
     "txt": {".txt"},
 }
+
+
+def _get_rerank_response_results(response: object) -> list[object]:
+    raw_results = cast("dict[str, object]", response).get("results") if isinstance(response, dict) else getattr(response, "results", None)
+    return cast("list[object]", raw_results) if isinstance(raw_results, list) else []
+
+
+def _get_rerank_result_value(result: object, key: str) -> object:
+    return cast("dict[str, object]", result).get(key) if isinstance(result, dict) else getattr(result, key, None)
+
+
+def _log_rerank_fallback(
+    *,
+    rerank_model: str,
+    candidates: list[SearchResult],
+    top_k: int,
+    latency_ms: float,
+    reason: str,
+    error_type: str | None = None,
+) -> list[SearchResult]:
+    fallback_results = candidates[:top_k]
+    log_extra: dict[str, object] = {
+        "rerank_model": rerank_model,
+        "candidates_in": len(candidates),
+        "results_out": len(fallback_results),
+        "latency_ms": latency_ms,
+        "reason": reason,
+    }
+    if error_type:
+        log_extra["error_type"] = error_type
+
+    logger.warning("rag.rerank.failed", extra=log_extra)
+    logger.info(
+        "rag.rerank",
+        extra={
+            "rerank_ran": True,
+            "rerank_model": rerank_model,
+            "candidates_in": len(candidates),
+            "results_out": len(fallback_results),
+            "latency_ms": latency_ms,
+            "fallback_used": True,
+        },
+    )
+    return fallback_results
 
 
 class RAGService:
@@ -599,20 +672,110 @@ class RAGService:
         """Search course documents via unified VectorRAG.search with course_id filter."""
         try:
             if top_k is None:
-                top_k = self.config.rerank_k
+                top_k = DEFAULT_SEARCH_TOP_K
 
-            return await self.vector_rag.search(
+            rerank_model = self.config.rerank_model.strip()
+            should_rerank = bool(rerank_model)
+            search_limit = top_k * RERANK_CANDIDATE_MULTIPLIER if should_rerank else top_k
+
+            candidates = await self.vector_rag.search(
                 session=session,
                 doc_type=CONTENT_TYPE_COURSE,
                 query=query,
-                limit=top_k,
+                limit=search_limit,
                 course_id=course_id,
+            )
+
+            if not should_rerank:
+                logger.info(
+                    "rag.rerank",
+                    extra={
+                        "rerank_ran": False,
+                        "rerank_model": "",
+                        "candidates_in": len(candidates),
+                        "results_out": len(candidates),
+                        "latency_ms": 0,
+                    },
+                )
+                return candidates
+
+            return await self._rerank_candidates(
+                query=query, candidates=candidates, top_k=top_k, rerank_model=rerank_model
             )
 
         except _RAG_RUNTIME_ERROR_TYPES as error:
             logger.exception("Failed to search documents")
             message = "Failed to search documents"
             raise RagUnavailableError(message) from error
+
+    async def _rerank_candidates(
+        self, *, query: str, candidates: list[SearchResult], top_k: int, rerank_model: str
+    ) -> list[SearchResult]:
+        """Rerank retrieved candidates with LiteLLM, falling back to retrieval order if unavailable."""
+        started_at = time.perf_counter()
+        try:
+            response = await litellm.arerank(
+                model=rerank_model,
+                query=query,
+                documents=[candidate.content for candidate in candidates],
+                top_n=top_k,
+            )
+        except _RERANK_RUNTIME_ERROR_TYPES as error:
+            latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            return _log_rerank_fallback(
+                rerank_model=rerank_model,
+                candidates=candidates,
+                top_k=top_k,
+                latency_ms=latency_ms,
+                reason="provider_error",
+                error_type=type(error).__name__,
+            )
+
+        reranked: list[SearchResult] = []
+        for result in _get_rerank_response_results(response):
+            index = _get_rerank_result_value(result, "index")
+            relevance_score = _get_rerank_result_value(result, "relevance_score")
+            if not isinstance(index, int) or not isinstance(relevance_score, int | float):
+                continue
+            if index < 0 or index >= len(candidates):
+                continue
+
+            candidate = candidates[index]
+            reranked.append(
+                candidate.model_copy(
+                    update={
+                        "similarity_score": float(relevance_score),
+                        "metadata": {
+                            **candidate.metadata,
+                            "retrieval_score": candidate.similarity_score,
+                            "rerank_score": float(relevance_score),
+                        },
+                    }
+                )
+            )
+
+        latency_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        if not reranked and candidates:
+            return _log_rerank_fallback(
+                rerank_model=rerank_model,
+                candidates=candidates,
+                top_k=top_k,
+                latency_ms=latency_ms,
+                reason="malformed_response",
+            )
+
+        logger.info(
+            "rag.rerank",
+            extra={
+                "rerank_ran": True,
+                "rerank_model": rerank_model,
+                "candidates_in": len(candidates),
+                "results_out": len(reranked),
+                "latency_ms": latency_ms,
+                "fallback_used": False,
+            },
+        )
+        return reranked
 
     async def _query_documents_for_course(
         self,

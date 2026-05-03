@@ -118,13 +118,13 @@ class Settings(BaseSettings):
     RAG_EMBEDDING_RETRY_DELAY_SECONDS: float = 1.0
     RAG_EMBEDDING_BATCH_SIZE: int = 1
     RAG_EMBEDDING_OUTPUT_DIM: int | None = None
+    RAG_RERANK_MODEL: str = ""
     MEMORY_LLM_MODEL: str = ""
     MEMORY_EMBEDDING_MODEL: str = ""
     MEMORY_EMBEDDING_OUTPUT_DIM: int | None = None
 
     # RAG Configuration
     RAG_HNSW_EF_SEARCH: int = 80
-    RAG_RERANK_K: int = 10
     RAG_MAX_FILE_SIZE_MB: int = 10
 
     # AI Tooling Configuration
@@ -236,7 +236,6 @@ class Settings(BaseSettings):
     @field_validator(
         "RAG_EMBEDDING_BATCH_SIZE",
         "RAG_HNSW_EF_SEARCH",
-        "RAG_RERANK_K",
         "RAG_MAX_FILE_SIZE_MB",
     )
     @classmethod

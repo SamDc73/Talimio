@@ -16,7 +16,7 @@ class RAGConfig:
     embedding_batch_size: int
     embedding_output_dim: int | None
     hnsw_ef_search: int
-    rerank_k: int
+    rerank_model: str
     max_file_size_mb: int
 
 
@@ -31,6 +31,6 @@ def get_rag_config(settings: Settings | None = None) -> RAGConfig:
         embedding_batch_size=resolved_settings.RAG_EMBEDDING_BATCH_SIZE,
         embedding_output_dim=resolved_settings.RAG_EMBEDDING_OUTPUT_DIM,
         hnsw_ef_search=resolved_settings.RAG_HNSW_EF_SEARCH,
-        rerank_k=resolved_settings.RAG_RERANK_K,
+        rerank_model=resolved_settings.RAG_RERANK_MODEL,
         max_file_size_mb=resolved_settings.RAG_MAX_FILE_SIZE_MB,
     )
