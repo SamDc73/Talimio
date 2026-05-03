@@ -18,7 +18,6 @@ import {
 	Eye,
 	FileText,
 	Filter,
-	Link2,
 	MoreVertical,
 	Search,
 	Trash2,
@@ -28,8 +27,8 @@ import { Button } from "@/components/Button"
 import { Card } from "@/components/Card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/DropdownMenu"
 import { Input } from "@/components/Input"
-import { isDocumentFailed, isDocumentProcessing, isDocumentReady } from "../utils/documentUtils"
-import DocumentStatusBadge, { DocumentStatusSummary } from "./DocumentStatusBadge"
+import DocumentStatusBadge, { DocumentStatusSummary } from "@/features/course/components/DocumentStatusBadge"
+import { isDocumentFailed, isDocumentProcessing, isDocumentReady } from "@/features/course/utils/documentUtils"
 
 function DocumentList({
 	documents = [],
@@ -46,21 +45,18 @@ function DocumentList({
 }) {
 	const [searchTerm, setSearchTerm] = useState("")
 	const [statusFilter, setStatusFilter] = useState("all")
-	const [sortBy, setSortBy] = useState("created_at")
+	const [sortBy, setSortBy] = useState("createdAt")
 	const [sortOrder, setSortOrder] = useState("desc")
 
 	// Filter and sort documents
 	const filteredDocuments = useMemo(() => {
-		let filtered = documents
+		let filtered = [...documents]
 
 		// Apply search filter
 		if (searchTerm.trim()) {
 			const search = searchTerm.toLowerCase()
 			filtered = filtered.filter(
-				(doc) =>
-					doc.title?.toLowerCase().includes(search) ||
-					doc.document_type?.toLowerCase().includes(search) ||
-					doc.url?.toLowerCase().includes(search)
+				(doc) => doc.title?.toLowerCase().includes(search) || doc.documentType?.toLowerCase().includes(search)
 			)
 		}
 
@@ -90,7 +86,7 @@ function DocumentList({
 			let bValue = b[sortBy]
 
 			// Handle date sorting
-			if (sortBy.includes("_at")) {
+			if (sortBy.endsWith("At")) {
 				aValue = new Date(aValue)
 				bValue = new Date(bValue)
 			}
@@ -110,11 +106,7 @@ function DocumentList({
 		return filtered
 	}, [documents, searchTerm, statusFilter, sortBy, sortOrder])
 
-	// Get file type icon
-	const getFileTypeIcon = (doc) => {
-		if (doc.document_type === "url") {
-			return <Link2 className="size-5 text-primary" />
-		}
+	const getFileTypeIcon = () => {
 		return <FileText className="size-5 text-primary" />
 	}
 
@@ -260,11 +252,11 @@ function DocumentList({
 									<div className="col-span-2">
 										<button
 											type="button"
-											onClick={() => handleSort("document_type")}
+											onClick={() => handleSort("documentType")}
 											className="flex items-center space-x-1 hover:text-foreground"
 										>
 											<span>Type</span>
-											{getSortIcon("document_type")}
+											{getSortIcon("documentType")}
 										</button>
 									</div>
 									<div className="col-span-2">
@@ -280,11 +272,11 @@ function DocumentList({
 									<div className="col-span-2">
 										<button
 											type="button"
-											onClick={() => handleSort("created_at")}
+											onClick={() => handleSort("createdAt")}
 											className="flex items-center space-x-1 hover:text-foreground"
 										>
 											<span>Date</span>
-											{getSortIcon("created_at")}
+											{getSortIcon("createdAt")}
 										</button>
 									</div>
 									{showActions && <div className="col-span-1 text-right">Actions</div>}
@@ -305,10 +297,7 @@ function DocumentList({
 													<p className="text-sm font-medium text-foreground truncate">
 														{doc.title || "Untitled Document"}
 													</p>
-													{doc.document_type === "url" && doc.url && (
-														<p className="text-xs text-muted-foreground/80 truncate">{doc.url}</p>
-													)}
-													{doc.file_path && doc.size > 0 && (
+													{doc.filePath && doc.size > 0 && (
 														<p className="text-xs text-muted-foreground/80">{formatFileSize(doc.size)}</p>
 													)}
 												</div>
@@ -317,7 +306,7 @@ function DocumentList({
 
 										{/* Type */}
 										<div className="col-span-2">
-											<span className="text-sm text-muted-foreground capitalize">{doc.document_type || "Unknown"}</span>
+											<span className="text-sm text-muted-foreground capitalize">{doc.documentType || "Unknown"}</span>
 										</div>
 
 										{/* Status */}
@@ -329,7 +318,7 @@ function DocumentList({
 										<div className="col-span-2">
 											<div className="flex items-center text-sm text-muted-foreground/80">
 												<Calendar className="size-4  mr-1" />
-												{formatDate(doc.created_at)}
+												{formatDate(doc.createdAt)}
 											</div>
 										</div>
 
@@ -349,7 +338,7 @@ function DocumentList({
 																View
 															</DropdownMenuItem>
 														)}
-														{doc.file_path && onDownloadDocument && (
+														{doc.filePath && onDownloadDocument && (
 															<DropdownMenuItem onClick={() => onDownloadDocument(doc)}>
 																<Download className="size-4  mr-2" />
 																Download

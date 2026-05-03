@@ -2,7 +2,7 @@
  * Documents API Service - RAG Document Management
  *
  * This service provides access to the RAG document endpoints for:
- * - Uploading documents (PDF files and URLs) to courses
+ * - Uploading PDF documents to courses
  * - Managing document lists and status
  * - Searching documents with RAG
  * - Document deletion and metadata retrieval
@@ -42,23 +42,7 @@ export function useDocumentsService(courseId = null) {
 				if (!courseId) throw new Error("Course ID required")
 				const formData = new FormData()
 				formData.append("file", file)
-				formData.append("document_type", "pdf")
-				formData.append("title", title)
-
-				return api.post(`/courses/${courseId}/documents`, formData)
-			},
-
-			/**
-			 * Upload a URL as a document to a course
-			 * @param {string} url - URL to process as document
-			 * @param {string} title - Document title
-			 * @returns {Promise<Object>} The uploaded document data
-			 */
-			async uploadURLDocument(url, title) {
-				if (!courseId) throw new Error("Course ID required")
-				const formData = new FormData()
-				formData.append("url", url)
-				formData.append("document_type", "url")
+				formData.append("documentType", "pdf")
 				formData.append("title", title)
 
 				return api.post(`/courses/${courseId}/documents`, formData)
@@ -66,7 +50,7 @@ export function useDocumentsService(courseId = null) {
 
 			/**
 			 * Upload multiple documents at once
-			 * @param {Array} documents - Array of document objects with {file?, url?, title, type}
+			 * @param {Array} documents - Array of document objects with {file, title, type}
 			 * @returns {Promise<Array>} Array of upload results
 			 */
 			async uploadMultipleDocuments(documents) {
@@ -80,8 +64,6 @@ export function useDocumentsService(courseId = null) {
 						let result
 						if (doc.type === "pdf" && doc.file) {
 							result = await this.uploadPDFDocument(doc.file, doc.title)
-						} else if (doc.type === "url" && doc.url) {
-							result = await this.uploadURLDocument(doc.url, doc.title)
 						} else {
 							throw new Error("Invalid document format")
 						}

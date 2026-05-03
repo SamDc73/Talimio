@@ -27,22 +27,32 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 		setUploadResults(null)
 
 		try {
-			const processingDocs = documents.map((doc) => ({
-				...doc,
-				status: "processing",
-			}))
+			const uploadableDocuments = documents.map((doc, index) => ({ ...doc, index })).filter((doc) => doc.file)
+
+			if (uploadableDocuments.length === 0) {
+				return
+			}
+
+			const processingDocs = documents.map((doc) =>
+				doc.file
+					? {
+							...doc,
+							status: "processing",
+						}
+					: doc
+			)
 			setDocuments(processingDocs)
 
-			const results = await documentsService.uploadMultipleDocuments(documents.map((doc, index) => ({ ...doc, index })))
+			const results = await documentsService.uploadMultipleDocuments(uploadableDocuments)
 
 			setUploadResults(results)
 
-			const updatedDocs = documents.map((doc) => {
-				const result = results.results.find((r) => r.originalIndex === doc.index)
-				const error = results.errors.find((e) => e.originalIndex === doc.index)
+			const updatedDocs = documents.map((doc, index) => {
+				const result = results.results.find((r) => r.originalIndex === index)
+				const error = results.errors.find((e) => e.originalIndex === index)
 
 				if (result) {
-					return { ...doc, status: "embedded", id: result.id }
+					return { ...doc, ...result, file: undefined }
 				}
 				if (error) {
 					return { ...doc, status: "failed", error: error.error }
@@ -99,10 +109,13 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 	}
 
 	const hasDocuments = documents.length > 0
+	const uploadableDocumentCount = documents.filter((doc) => doc.file).length
 	const hasFailedDocuments = documents.some((doc) => doc.status === "failed")
-	const hasSuccessfulDocuments = documents.some((doc) => doc.status === "embedded")
+	const uploadAttemptFinished = Boolean(uploadResults)
+	const hasSuccessfulUploads = Array.isArray(uploadResults?.results) && uploadResults.results.length > 0
 	const allCompleted =
-		documents.length > 0 && documents.every((doc) => doc.status === "embedded" || doc.status === "failed")
+		uploadAttemptFinished ||
+		(documents.length > 0 && documents.every((doc) => doc.status === "embedded" || doc.status === "failed"))
 	const uploadErrors = Array.isArray(uploadResults?.errors) ? uploadResults.errors : []
 
 	return (
@@ -138,7 +151,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 						</div>
 					)}
 
-					{uploadResults && allCompleted && (
+					{uploadResults && (
 						<div className="mb-6">
 							{uploadResults.results.length > 0 && (
 								<div className="mb-3 rounded-lg border border-completed/30 bg-completed/10 p-4">
@@ -186,7 +199,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 
 				<div className="flex justify-end space-x-3 p-6 border-t border-border">
 					<Button type="button" variant="outline" onClick={handleClose} disabled={isUploading}>
-						{allCompleted && hasSuccessfulDocuments ? "Close" : "Cancel"}
+						{allCompleted && hasSuccessfulUploads ? "Close" : "Cancel"}
 					</Button>
 
 					{hasFailedDocuments && !isUploading && (
@@ -204,7 +217,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 						<Button
 							type="button"
 							onClick={handleUpload}
-							disabled={!hasDocuments || isUploading}
+							disabled={!hasDocuments || uploadableDocumentCount === 0 || isUploading}
 							className="min-w-[120px]"
 						>
 							{isUploading ? (
@@ -213,7 +226,7 @@ function DocumentUploadModal({ isOpen, onClose, courseId, onDocumentsUploaded = 
 									<span>Uploading...</span>
 								</div>
 							) : (
-								`Upload ${documents.length} Document${documents.length === 1 ? "" : "s"}`
+								`Upload ${uploadableDocumentCount} Document${uploadableDocumentCount === 1 ? "" : "s"}`
 							)}
 						</Button>
 					)}

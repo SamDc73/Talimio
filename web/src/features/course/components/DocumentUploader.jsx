@@ -1,27 +1,27 @@
-import { AlertCircle, CheckCircle2, FileText, Link2, Upload, X } from "lucide-react"
+import { AlertCircle, CheckCircle2, FileText, Upload, X } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/Button"
 import { Card } from "@/components/Card"
 import { Input } from "@/components/Input"
-import { Label } from "@/components/Label"
-import { api } from "@/lib/apiClient"
-import logger from "@/lib/logger"
+
+const EMPTY_DOCUMENTS = []
 
 function DocumentUploader({
 	onDocumentsChange,
-	initialDocuments = [],
+	initialDocuments = EMPTY_DOCUMENTS,
 	maxFiles = 10,
 	disabled = false,
 	showPreview = true,
 }) {
 	const [documents, setDocuments] = useState(initialDocuments)
 	const [dragActive, setDragActive] = useState(false)
-	const [urlInput, setUrlInput] = useState("")
-	const [urlTitle, setUrlTitle] = useState("")
-	const [isExtractingTitle, setIsExtractingTitle] = useState(false)
 	const [justAdded, setJustAdded] = useState(false)
 	const fileInputRef = useRef(null)
 	const documentsRef = useRef(null)
+
+	useEffect(() => {
+		setDocuments(initialDocuments)
+	}, [initialDocuments])
 
 	useEffect(() => {
 		if (justAdded && documentsRef.current) {
@@ -115,69 +115,6 @@ function DocumentUploader({
 		}
 	}
 
-	const extractTitle = async (url) => {
-		setIsExtractingTitle(true)
-		try {
-			const formData = new FormData()
-			formData.append("url", url)
-
-			const data = await api.post("/extract-title", formData)
-			const title = data.title || "Untitled Document"
-			setUrlTitle(title)
-			return title
-		} catch (error) {
-			logger.error("Failed to extract document title", error, { url })
-			const title = "Untitled Document"
-			setUrlTitle(title)
-			return title
-		} finally {
-			setIsExtractingTitle(false)
-		}
-	}
-
-	const handleUrlInputChange = (e) => {
-		const url = e.target.value
-		setUrlInput(url)
-
-		if (!url.trim()) {
-			setUrlTitle("")
-		}
-	}
-
-	const handleAddUrl = async () => {
-		if (!urlInput.trim() || disabled || isExtractingTitle) return
-
-		try {
-			new URL(urlInput)
-		} catch (error) {
-			logger.warn("Invalid document URL entered", { error, url: urlInput })
-			alert("Please enter a valid URL.")
-			return
-		}
-
-		if (documents.length >= maxFiles) {
-			alert(`Maximum ${maxFiles} documents allowed.`)
-			return
-		}
-
-		let finalTitle = urlTitle
-		if (!finalTitle) {
-			finalTitle = await extractTitle(urlInput.trim())
-		}
-
-		const newDocument = {
-			id: `url-${Date.now()}`,
-			type: "url",
-			url: urlInput.trim(),
-			title: finalTitle,
-			status: "pending",
-		}
-
-		updateDocuments([...documents, newDocument])
-		setUrlInput("")
-		setUrlTitle("")
-	}
-
 	const removeDocument = (documentId) => {
 		if (disabled) return
 		updateDocuments(documents.filter((doc) => doc.id !== documentId))
@@ -265,12 +202,6 @@ function DocumentUploader({
 													{formatFileSize(doc.size)}
 												</span>
 											)}
-
-											{doc.type === "url" && (
-												<span className="text-xs text-muted-foreground dark:text-muted-foreground/70 truncate max-w-48">
-													{doc.url}
-												</span>
-											)}
 										</div>
 									</div>
 
@@ -340,59 +271,6 @@ function DocumentUploader({
 						disabled={disabled}
 					/>
 				</section>
-			</Card>
-
-			<Card className={documents.length > 0 ? "border-border" : ""}>
-				<div className={documents.length > 0 ? "p-3" : "p-4"}>
-					<Label className={`${documents.length > 0 ? "text-xs" : "text-sm"} font-medium text-foreground mb-3 block`}>
-						Add Article from URL
-					</Label>
-					<div className="space-y-3">
-						<div className="space-y-2">
-							<Input
-								type="url"
-								placeholder="https://example.com/article"
-								value={urlInput}
-								onChange={handleUrlInputChange}
-								disabled={disabled}
-								className="w-full"
-								onBlur={() => {
-									if (urlInput.trim() && !urlTitle) {
-										extractTitle(urlInput.trim())
-									}
-								}}
-							/>
-							{urlTitle && (
-								<div className="flex items-center space-x-2 p-2 bg-muted/40 dark:bg-background rounded-sm">
-									<FileText className="size-4  text-muted-foreground" />
-									<span className="text-sm text-foreground dark:text-muted-foreground flex-1 truncate">{urlTitle}</span>
-								</div>
-							)}
-						</div>
-						<Button
-							type="button"
-							onClick={handleAddUrl}
-							disabled={disabled || !urlInput.trim() || isExtractingTitle}
-							size="sm"
-							className="w-full"
-						>
-							{isExtractingTitle ? (
-								<>
-									<div className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-									Extracting Title...
-								</>
-							) : (
-								<>
-									<Link2 className="size-4  mr-2" />
-									Add Article
-								</>
-							)}
-						</Button>
-						<p className="text-xs text-muted-foreground dark:text-muted-foreground/70 text-center">
-							Title will be automatically extracted from the webpage
-						</p>
-					</div>
-				</div>
 			</Card>
 		</div>
 	)

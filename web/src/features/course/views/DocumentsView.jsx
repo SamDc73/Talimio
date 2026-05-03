@@ -283,7 +283,6 @@ function DocumentsView() {
 										<h4 className="font-medium text-foreground mb-2">What you can upload:</h4>
 										<ul className="text-sm text-muted-foreground space-y-1">
 											<li>• PDF documents and research papers</li>
-											<li>• Web articles and documentation URLs</li>
 											<li>• Course materials and textbooks</li>
 											<li>• Reference guides and manuals</li>
 										</ul>
