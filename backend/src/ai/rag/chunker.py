@@ -93,16 +93,16 @@ def _chunk_text_with_metadata_sync(text: str, document_title: str | None) -> tup
         rules=_build_markdown_rules(),
         min_characters_per_chunk=_MIN_CHARS_PER_CHUNK,
     )
-    raw_pairs = [
-        (chunk, _metadata_for_chunk(chunk.start_index, heading_context))
-        for chunk in chunker.chunk(normalized_text)
-        if _is_useful_chunk(chunk.text)
-    ]
-    if not raw_pairs:
-        return [], []
+    raw_chunks = []
+    for chunk in chunker.chunk(normalized_text):
+        if not _is_useful_chunk(chunk.text):
+            continue
+        chunk.metadata.update(_metadata_for_chunk(chunk.start_index, heading_context))
+        chunk.metadata["contextualized"] = True
+        raw_chunks.append(chunk)
 
-    raw_chunks = [chunk for chunk, _metadata in raw_pairs]
-    chunk_metadata = [metadata for _chunk, metadata in raw_pairs]
+    if not raw_chunks:
+        return [], []
 
     overlap_refinery = OverlapRefinery(
         tokenizer="character",
@@ -114,24 +114,13 @@ def _chunk_text_with_metadata_sync(text: str, document_title: str | None) -> tup
 
     chunks: list[str] = []
     metadata: list[dict[str, object]] = []
-    for chunk, chunk_meta in zip(refined_chunks, chunk_metadata, strict=True):
+    for chunk in refined_chunks:
         chunk_text = chunk.text.strip()
-        enriched_metadata = {
-            **chunk_meta,
-            "contextualized": True,
-            "start_index": chunk.start_index,
-            "end_index": chunk.end_index,
-        }
-        chunks.append(_add_chunk_context(chunk_text, document_title, enriched_metadata))
-        metadata.append(enriched_metadata)
+        chunk_metadata = dict(chunk.metadata)
+        chunks.append(_add_chunk_context(chunk_text, document_title, chunk_metadata))
+        metadata.append(chunk_metadata)
 
     return chunks, metadata
-
-
-async def chunk_text_async(text: str) -> list[str]:
-    """Chunk text using the default RAG chunking path."""
-    chunks, _ = await chunk_text_with_metadata_async(text)
-    return chunks
 
 
 async def chunk_text_with_metadata_async(

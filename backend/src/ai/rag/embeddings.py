@@ -5,7 +5,8 @@ import json
 import logging
 import math
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
+from itertools import batched
 from typing import cast
 
 import litellm
@@ -161,7 +162,7 @@ class VectorRAG:
                 self.batch_size,
             )
 
-            for batch in self._batched(chunk_payloads, self.batch_size):
+            for batch in batched(chunk_payloads, self.batch_size, strict=False):
                 texts = [payload[1] for payload in batch]
                 embeddings = await self._embed_texts(texts)
 
@@ -344,8 +345,6 @@ class VectorRAG:
             message = "RAG vector search is unavailable"
             raise RagUnavailableError(message) from error
 
-    # Removed legacy helpers that are now handled by RAG service + chonkie
-
     async def _expand_search_result_content(
         self,
         *,
@@ -395,12 +394,6 @@ class VectorRAG:
 
     async def _ensure_dimensions(self, session: AsyncSession) -> None:
         """Validate embedding dimensions against database schema."""
-        if not hasattr(self, "_dimensions_validated"):
-            self._dimensions_validated = False
-        if not hasattr(self, "_effective_embedding_dim"):
-            self._effective_embedding_dim = getattr(self, "configured_embedding_dim", None)
-        if not hasattr(self, "_db_embedding_dim"):
-            self._db_embedding_dim = None
         if self._dimensions_validated:
             return
 
@@ -504,34 +497,29 @@ class VectorRAG:
 
         return embed_kwargs
 
-    async def _invoke_embedding(self, embed_kwargs: dict[str, object]) -> object:
+    async def _invoke_embedding(self, embed_kwargs: dict[str, object]) -> litellm.EmbeddingResponse:
         """Call LiteLLM embedding endpoint."""
         return await litellm.aembedding(**embed_kwargs)
 
     @staticmethod
-    def _normalize_embedding_response(response: object) -> list[list[float]]:
+    def _normalize_embedding_response(response: litellm.EmbeddingResponse) -> list[list[float]]:
         """Normalize LiteLLM embedding response to list of float vectors."""
-        data = getattr(response, "data", None)
-        embeddings = [item.get("embedding", item) for item in data] if data else response
-
-        if not isinstance(embeddings, Sequence):
-            message = f"Unexpected embedding response type: {type(embeddings)}"
-            raise RagUnavailableError(message)
-
-        normalized_embeddings: list[list[float]] = []
-        for embedding in embeddings:
-            if not embedding or not isinstance(embedding, Sequence):
-                message = f"Invalid embedding payload of type {type(embedding)}"
-                raise RagUnavailableError(message)
-            normalized_embedding: list[float] = []
-            for value in embedding:
-                if not isinstance(value, (str, int, float)):
-                    message = f"Invalid embedding value of type {type(value)}"
+        try:
+            normalized_embeddings: list[list[float]] = []
+            for item in response.data:
+                embedding = item.embedding
+                if isinstance(embedding, (str, bytes)):
+                    message = "Embedding provider returned a malformed response"
                     raise RagUnavailableError(message)
-                normalized_embedding.append(float(value))
-            normalized_embeddings.append(normalized_embedding)
-
-        return normalized_embeddings
+                normalized_embedding = [float(value) for value in embedding]
+                if not normalized_embedding or any(not math.isfinite(value) for value in normalized_embedding):
+                    message = "Embedding provider returned a malformed response"
+                    raise RagUnavailableError(message)
+                normalized_embeddings.append(normalized_embedding)
+            return normalized_embeddings
+        except (AttributeError, TypeError, ValueError) as error:
+            message = "Embedding provider returned a malformed response"
+            raise RagUnavailableError(message) from error
 
     @staticmethod
     def _format_vector(values: Sequence[float]) -> str:
@@ -554,16 +542,3 @@ class VectorRAG:
                 message = f"Metadata field '{key}' contains an unsupported value"
                 raise RagValidationError(message)
         return normalized
-
-    @staticmethod
-    def _batched(
-        sequence: Sequence[tuple[int, str, dict[str, JsonValue]]], batch_size: int
-    ) -> Iterator[list[tuple[int, str, dict[str, JsonValue]]]]:
-        """Yield fixed-size batches from sequence."""
-        if batch_size <= 1:
-            for item in sequence:
-                yield [item]
-            return
-
-        for start in range(0, len(sequence), batch_size):
-            yield list(sequence[start : start + batch_size])

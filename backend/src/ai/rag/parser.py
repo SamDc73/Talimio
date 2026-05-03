@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from pathlib import Path
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -41,6 +42,17 @@ _JUNK_TEXT_PREFIXES = (
     "the o'reilly logo is a registered trademark",
     "the views expressed in this work",
 )
+_FAST_STRATEGY_EXTENSIONS = {".epub", ".md", ".txt"}
+
+
+def _partition_strategy_for_file(file_path: str) -> str:
+    """Choose the Unstructured partition strategy by file type."""
+    suffix = Path(file_path).suffix.lower()
+    if suffix in _FAST_STRATEGY_EXTENSIONS:
+        return "fast"
+    if suffix == ".pdf":
+        return "hi_res"
+    return "auto"
 
 
 def _normalize_text(text: str) -> str:
@@ -195,9 +207,12 @@ def _extract_text_with_unstructured(file_path: str) -> str:
     try:
         elements = partition(
             filename=file_path,
-            strategy="auto",
+            strategy=_partition_strategy_for_file(file_path),
             languages=_DEFAULT_LANGUAGES,
         )
+    except ImportError as error:
+        message = "RAG document parser dependencies are unavailable"
+        raise RagUnavailableError(message) from error
     except OSError as error:
         message = "RAG document parser failed to read the source file"
         raise RagUnavailableError(message) from error
@@ -207,7 +222,6 @@ def _extract_text_with_unstructured(file_path: str) -> str:
 class DocumentProcessor:
     """Document processing using Unstructured partitioning."""
 
-    async def process_document(self, file_path: str, document_type: str) -> str:
+    async def process_document(self, file_path: str) -> str:
         """Extract text from a document on disk."""
-        del document_type
         return await run_in_threadpool(_extract_text_with_unstructured, file_path)

@@ -124,12 +124,6 @@ class Settings(BaseSettings):
 
     # RAG Configuration
     RAG_HNSW_EF_SEARCH: int = 80
-    RAG_HNSW_M: int = 16
-    RAG_HNSW_EF_CONSTRUCTION: int = 200
-    RAG_ENABLE_OCR: bool = False
-    RAG_EXTRACT_TABLES: bool = True
-    RAG_EXTRACT_IMAGES: bool = False
-    RAG_TOP_K: int = 50
     RAG_RERANK_K: int = 10
     RAG_MAX_FILE_SIZE_MB: int = 10
 
@@ -242,9 +236,6 @@ class Settings(BaseSettings):
     @field_validator(
         "RAG_EMBEDDING_BATCH_SIZE",
         "RAG_HNSW_EF_SEARCH",
-        "RAG_HNSW_M",
-        "RAG_HNSW_EF_CONSTRUCTION",
-        "RAG_TOP_K",
         "RAG_RERANK_K",
         "RAG_MAX_FILE_SIZE_MB",
     )

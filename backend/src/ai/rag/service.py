@@ -17,6 +17,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from src.ai.rag.chunker import chunk_text_with_metadata_async
 from src.ai.rag.config import get_rag_config
+from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.exceptions import (
     RagCourseNotFoundError,
     RagDocumentNotFoundError,
@@ -75,8 +76,8 @@ class RAGService:
         """Initialize RAG service components for LiteLLM + pgvector pipeline."""
         self.config = get_rag_config()
 
-        # Components will be lazily initialized
-        self._document_processor = None  # Unstructured parser
+        self._document_processor: DocumentProcessor | None = None
+        self._vector_rag: VectorRAG | None = None
 
     @property
     def document_processor(self) -> DocumentProcessor:
@@ -84,6 +85,13 @@ class RAGService:
         if self._document_processor is None:
             self._document_processor = DocumentProcessor()
         return self._document_processor
+
+    @property
+    def vector_rag(self) -> VectorRAG:
+        """Lazy load vector RAG."""
+        if self._vector_rag is None:
+            self._vector_rag = VectorRAG()
+        return self._vector_rag
 
     async def _ensure_course_owned(
         self,
@@ -271,9 +279,7 @@ class RAGService:
                     temp_file_path = temp_file.name
 
                 try:
-                    text_content = await self.document_processor.process_document(
-                        temp_file_path, doc_dict["document_type"]
-                    )
+                    text_content = await self.document_processor.process_document(temp_file_path)
                 finally:
                     cleanup_path = Path(temp_file_path)
                     try:
@@ -355,20 +361,6 @@ class RAGService:
         )
         await session.flush()
 
-    async def _cleanup_book_source_file(self, session: AsyncSession, book_id: uuid.UUID) -> None:
-        """Delete a stored book file via storage provider and clear file_path in DB."""
-        book = await session.get(Book, book_id)
-        if not book or not getattr(book, "file_path", None):
-            return
-        storage = get_storage_provider()
-        try:
-            await storage.delete(book.file_path)
-        except (StorageError, OSError):
-            logger.warning("rag.book.source_cleanup_failed", extra={"book_id": str(book_id)}, exc_info=True)
-            return
-        book.file_path = ""
-        await session.flush()
-
     async def _mark_book_failed_without_chunks(self, session: AsyncSession, book: Book, book_id: uuid.UUID) -> None:
         logger.warning("rag.book.no_text_chunks", extra={"book_id": str(book_id)})
         book.rag_status = RAG_STATUS_FAILED
@@ -403,9 +395,7 @@ class RAGService:
                 temp_file.write(file_bytes)
                 temp_path = temp_file.name
             try:
-                text_content = await self.document_processor.process_document(
-                    temp_path, (book.file_type or "pdf").lower()
-                )
+                text_content = await self.document_processor.process_document(temp_path)
             finally:
                 temp_file_path = Path(temp_path)
                 try:
@@ -423,12 +413,7 @@ class RAGService:
                 return
 
             # Store chunks
-            if not hasattr(self, "_vector_rag"):
-                from src.ai.rag.embeddings import VectorRAG
-
-                self._vector_rag = VectorRAG()
-
-            await self._vector_rag.store_document_chunks_with_embeddings(
+            await self.vector_rag.store_document_chunks_with_embeddings(
                 session=session,
                 doc_type=CONTENT_TYPE_BOOK,
                 doc_id=book.id,
@@ -490,12 +475,7 @@ class RAGService:
                 await session.flush()
                 return
 
-            if not hasattr(self, "_vector_rag"):
-                from src.ai.rag.embeddings import VectorRAG
-
-                self._vector_rag = VectorRAG()
-
-            await self._vector_rag.store_document_chunks_with_embeddings(
+            await self.vector_rag.store_document_chunks_with_embeddings(
                 session=session,
                 doc_type=CONTENT_TYPE_VIDEO,
                 doc_id=video.id,
@@ -586,14 +566,8 @@ class RAGService:
 
             logger.info("Storing %s chunks for document %s using LiteLLM + pgvector", valid_chunk_count, document_id)
 
-            # Get VectorRAG instance
-            if not hasattr(self, "_vector_rag"):
-                from src.ai.rag.embeddings import VectorRAG
-
-                self._vector_rag = VectorRAG()
-
             # Use VectorRAG's existing method to store chunks with embeddings
-            await self._vector_rag.store_document_chunks_with_embeddings(
+            await self.vector_rag.store_document_chunks_with_embeddings(
                 session=session,
                 doc_type=CONTENT_TYPE_COURSE,
                 doc_id=doc_uuid,
@@ -627,13 +601,7 @@ class RAGService:
             if top_k is None:
                 top_k = self.config.rerank_k
 
-            # Lazy init
-            if not hasattr(self, "_vector_rag"):
-                from src.ai.rag.embeddings import VectorRAG
-
-                self._vector_rag = VectorRAG()
-
-            return await self._vector_rag.search(
+            return await self.vector_rag.search(
                 session=session,
                 doc_type=CONTENT_TYPE_COURSE,
                 query=query,

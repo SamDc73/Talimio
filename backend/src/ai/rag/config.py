@@ -16,12 +16,6 @@ class RAGConfig:
     embedding_batch_size: int
     embedding_output_dim: int | None
     hnsw_ef_search: int
-    hnsw_m: int
-    hnsw_ef_construction: int
-    enable_ocr: bool
-    extract_tables: bool
-    extract_images: bool
-    top_k: int
     rerank_k: int
     max_file_size_mb: int
 
@@ -37,12 +31,6 @@ def get_rag_config(settings: Settings | None = None) -> RAGConfig:
         embedding_batch_size=resolved_settings.RAG_EMBEDDING_BATCH_SIZE,
         embedding_output_dim=resolved_settings.RAG_EMBEDDING_OUTPUT_DIM,
         hnsw_ef_search=resolved_settings.RAG_HNSW_EF_SEARCH,
-        hnsw_m=resolved_settings.RAG_HNSW_M,
-        hnsw_ef_construction=resolved_settings.RAG_HNSW_EF_CONSTRUCTION,
-        enable_ocr=resolved_settings.RAG_ENABLE_OCR,
-        extract_tables=resolved_settings.RAG_EXTRACT_TABLES,
-        extract_images=resolved_settings.RAG_EXTRACT_IMAGES,
-        top_k=resolved_settings.RAG_TOP_K,
         rerank_k=resolved_settings.RAG_RERANK_K,
         max_file_size_mb=resolved_settings.RAG_MAX_FILE_SIZE_MB,
     )

@@ -12,15 +12,6 @@ from src.config.schema_casing import build_camel_config
 CourseDocumentStatus = Literal["pending", "processing", "embedded", "failed"]
 
 
-class DocumentUpload(BaseModel):
-    """Schema for document upload request."""
-
-    document_type: str = Field(description="Type of document (e.g. pdf, txt, md, epub)")
-    title: str = Field(description="Title for the document")
-
-    model_config = build_camel_config()
-
-
 class DocumentResponse(BaseModel):
     """Schema for document response."""
 
@@ -30,7 +21,6 @@ class DocumentResponse(BaseModel):
     title: str
     file_path: str | None = None
     content_hash: str | None = None
-    # Removed doc_metadata - not used for course documents, only for books
     created_at: datetime
     processed_at: datetime | None = None
     embedded_at: datetime | None = None
@@ -48,9 +38,6 @@ class DocumentList(BaseModel):
     size: int
 
     model_config = build_camel_config()
-
-
-# Removed unused DocumentChunkResponse class
 
 
 class SearchRequest(BaseModel):
