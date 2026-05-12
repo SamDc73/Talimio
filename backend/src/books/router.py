@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, Callable
 from typing import Annotated
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -74,8 +74,9 @@ async def create_book(
     auth: CurrentAuth,
     background_tasks: BackgroundTasks,
     facade: Annotated[BooksFacade, Depends(get_books_facade)],
-    file: Annotated[UploadFile | None, File(description="Book file (PDF or EPUB)")] = None,
-    title: Annotated[str, Form(description="Book title")] = "",
+    title: Annotated[str, Form(description="Book title")],
+    file_path: Annotated[str, Form(description="Storage key when finalizing a direct upload")],
+    storage_provider: Annotated[str, Form(description="Storage provider when finalizing a direct upload")],
     author: Annotated[str | None, Form(description="Book author")] = None,
     subtitle: Annotated[str | None, Form(description="Book subtitle")] = None,
     description: Annotated[str | None, Form(description="Book description")] = None,
@@ -84,12 +85,10 @@ async def create_book(
     publication_year: Annotated[int | None, Form(description="Publication year")] = None,
     publisher: Annotated[str | None, Form(description="Publisher")] = None,
     tags: Annotated[str, Form(description="Tags as JSON array string")] = "[]",
-    file_path: Annotated[str | None, Form(description="Storage key when finalizing a direct upload")] = None,
-    storage_provider: Annotated[str | None, Form(description="Storage provider when finalizing a direct upload")] = None,
     file_size: Annotated[int | None, Form(description="Uploaded file size in bytes for fast direct finalization")] = None,
     process_in_background: Annotated[bool, Form(description="Process RAG and tags after upload")] = True,
 ) -> BookResponse:
-    """Add a new book (PDF, EPUB) inline, or finalize an existing direct upload."""
+    """Finalize a direct upload to storage and create a book record."""
     try:
         tags_list = json.loads(tags) if tags else []
     except json.JSONDecodeError:
@@ -98,75 +97,36 @@ async def create_book(
             detail="Invalid tags format. Expected JSON array.",
         ) from None
 
-    if file is not None:
-        if not title:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Title is required",
-            )
-        if not file.filename:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No filename provided",
-            )
-        file_extension = file.filename.lower().split(".")[-1]
-        if file_extension not in {"pdf", "epub"}:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only PDF and EPUB files are supported",
-            )
-        file_content = await file.read()
-        return await facade.create_book_from_upload(
-            user_id=auth.user_id,
-            filename=file.filename,
-            file_content=file_content,
-            title=title,
-            author=author,
-            subtitle=subtitle,
-            description=description,
-            isbn=isbn,
-            language=language,
-            publication_year=publication_year,
-            publisher=publisher,
-            tags=tags_list,
-            background_tasks=background_tasks if process_in_background else None,
+    if not title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Title is required",
         )
 
-    if file_path and storage_provider:
-        if not title:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Title is required",
-            )
-        filename = file_path.split("/")[-1]
-        file_extension = filename.lower().split(".")[-1]
-        if file_extension not in {"pdf", "epub"}:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only PDF and EPUB files are supported",
-            )
-        return await facade.create_book_from_existing_storage(
-            user_id=auth.user_id,
-            filename=filename,
-            file_path=file_path,
-            storage_provider=storage_provider,
-            title=title,
-            file_size=file_size,
-            author=author,
-            subtitle=subtitle,
-            description=description,
-            isbn=isbn,
-            language=language,
-            publication_year=publication_year,
-            publisher=publisher,
-            tags=tags_list,
-            background_tasks=background_tasks if process_in_background else None,
-            extract_metadata=process_in_background,
+    filename = file_path.split("/")[-1]
+    file_extension = filename.lower().split(".")[-1]
+    if file_extension not in {"pdf", "epub"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PDF and EPUB files are supported",
         )
 
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Either upload a file or provide file_path and storage_provider",
+    return await facade.create_book_from_existing_storage(
+        user_id=auth.user_id,
+        filename=filename,
+        file_path=file_path,
+        storage_provider=storage_provider,
+        title=title,
+        file_size=file_size,
+        author=author,
+        subtitle=subtitle,
+        description=description,
+        isbn=isbn,
+        language=language,
+        publication_year=publication_year,
+        publisher=publisher,
+        tags=tags_list,
+        background_tasks=background_tasks if process_in_background else None,
     )
 
 

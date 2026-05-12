@@ -9,6 +9,12 @@ import { DialogIconHeader } from "@/features/home/components/dialogs/DialogIconH
 import { api } from "@/lib/apiClient"
 import logger from "@/lib/logger"
 
+function getBookContentType(file) {
+	if (file.type) return file.type
+	if (file.name.toLowerCase().endsWith(".epub")) return "application/epub+zip"
+	return "application/pdf"
+}
+
 export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 	const [selectedFile, setSelectedFile] = useState(null)
 	const [bookTitle, setBookTitle] = useState("")
@@ -92,15 +98,38 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 
 		setIsUploadingBook(true)
 		try {
+			const contentType = getBookContentType(selectedFile)
+			const uploadSession = await api.post("/upload-sessions", {
+				filename: selectedFile.name,
+				contentType,
+				fileSize: selectedFile.size,
+			})
+
+			const response = await fetch(uploadSession.uploadUrl, {
+				method: uploadSession.method || "PUT",
+				headers: {
+					...(uploadSession.headers || {}),
+					"Content-Type": contentType,
+				},
+				body: selectedFile,
+			})
+
+			if (!response.ok) {
+				const errorText = await response.text().catch(() => "")
+				throw new Error(`Upload failed: ${response.status} ${errorText || response.statusText}`)
+			}
+
 			const formData = new FormData()
-			formData.append("file", selectedFile)
 			formData.append("title", bookTitle)
 			formData.append("author", bookAuthor)
 			formData.append("tags", JSON.stringify([]))
+			formData.append("file_path", uploadSession.filePath)
+			formData.append("storage_provider", uploadSession.storageProvider)
+			formData.append("file_size", String(selectedFile.size))
+			formData.append("process_in_background", "true")
 
 			const newBook = await api.post("/books", formData)
 
-			// Reset and close
 			setSelectedFile(null)
 			setBookTitle("")
 			setBookAuthor("")

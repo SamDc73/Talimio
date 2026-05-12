@@ -10,7 +10,6 @@
 import { useApi } from "@/hooks/use-api"
 import { api } from "@/lib/apiClient"
 
-const DIRECT_UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
 const BOOK_ATTACHMENT_EXTENSIONS = new Set(["pdf", "epub"])
 
 function requireCourseId(courseId) {
@@ -47,42 +46,21 @@ function getBookTitleFromFile(file) {
 	return filename.slice(0, -(extension.length + 1)) || filename
 }
 
-function parseUploadedRangeEnd(rangeHeader) {
-	const match = /^bytes=\d+-(\d+)$/.exec(rangeHeader || "")
-	return match ? Number.parseInt(match[1], 10) : null
-}
-
-async function uploadFileChunksToSession(file, uploadSession) {
+async function uploadFileToSession(file, uploadSession) {
 	if (!file?.size) {
 		throw new Error("Cannot upload an empty file")
 	}
 
-	let offset = 0
-	while (offset < file.size) {
-		const nextOffset = Math.min(offset + DIRECT_UPLOAD_CHUNK_SIZE, file.size)
-		const response = await fetch(uploadSession.uploadUrl, {
-			method: uploadSession.method || "PUT",
-			headers: {
-				...(uploadSession.headers || {}),
-				"Content-Type": getUploadContentType(file),
-				"Content-Range": `bytes ${offset}-${nextOffset - 1}/${file.size}`,
-			},
-			body: file.slice(offset, nextOffset),
-		})
+	const response = await fetch(uploadSession.uploadUrl, {
+		method: uploadSession.method || "PUT",
+		headers: {
+			...(uploadSession.headers || {}),
+			"Content-Type": getUploadContentType(file),
+		},
+		body: file,
+	})
 
-		if (response.status === 308) {
-			const rangeEnd = parseUploadedRangeEnd(response.headers.get("Range"))
-			if (rangeEnd === null) {
-				throw new Error("Upload did not return a resumable range")
-			}
-			offset = rangeEnd + 1
-			continue
-		}
-
-		if ((response.status === 200 || response.status === 201) && nextOffset === file.size) {
-			return
-		}
-
+	if (!response.ok) {
 		const errorText = await response.text().catch(() => "")
 		throw new Error(`Upload failed: ${response.status} ${errorText || response.statusText}`)
 	}
@@ -95,7 +73,7 @@ export async function createBookFromCourseAttachment(file) {
 		fileSize: file.size,
 	})
 
-	await uploadFileChunksToSession(file, uploadSession)
+	await uploadFileToSession(file, uploadSession)
 
 	const formData = new FormData()
 	formData.append("title", getBookTitleFromFile(file))

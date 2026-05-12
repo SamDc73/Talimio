@@ -97,17 +97,24 @@ class GCSStorage(AbstractStorage):
         *,
         key: str,
         content_type: str,
-        content_length: int | None = None,
+        content_length: int | None = None,  # noqa: ARG002
     ) -> StorageUploadSession:
-        """Create a GCS resumable upload session URL."""
+        """Create a GCS direct upload signed URL."""
+        # Note: content_length is intentionally ignored for GCS signed URLs
+        # as GCS does not require it for v4 PUT signatures, unlike S3.
         blob = self._bucket.blob(key)
         try:
+            service_account_email, access_token = await self._get_signing_identity()
             upload_url = await run_in_threadpool(
-                blob.create_resumable_upload_session,
+                blob.generate_signed_url,
+                version="v4",
+                expiration=timedelta(hours=1),
+                method="PUT",
                 content_type=content_type,
-                size=content_length,
+                service_account_email=service_account_email,
+                access_token=access_token,
             )
-        except GoogleAPIError as error:
+        except (GoogleAPIError, GoogleAuthError) as error:
             msg = f"Failed to create GCS upload session for key: {key}"
             raise FileUploadError(msg) from error
 
