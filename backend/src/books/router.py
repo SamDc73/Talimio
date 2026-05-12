@@ -86,6 +86,8 @@ async def create_book(
     tags: Annotated[str, Form(description="Tags as JSON array string")] = "[]",
     file_path: Annotated[str | None, Form(description="Storage key when finalizing a direct upload")] = None,
     storage_provider: Annotated[str | None, Form(description="Storage provider when finalizing a direct upload")] = None,
+    file_size: Annotated[int | None, Form(description="Uploaded file size in bytes for fast direct finalization")] = None,
+    process_in_background: Annotated[bool, Form(description="Process RAG and tags after upload")] = True,
 ) -> BookResponse:
     """Add a new book (PDF, EPUB) inline, or finalize an existing direct upload."""
     try:
@@ -127,7 +129,7 @@ async def create_book(
             publication_year=publication_year,
             publisher=publisher,
             tags=tags_list,
-            background_tasks=background_tasks,
+            background_tasks=background_tasks if process_in_background else None,
         )
 
     if file_path and storage_provider:
@@ -149,6 +151,7 @@ async def create_book(
             file_path=file_path,
             storage_provider=storage_provider,
             title=title,
+            file_size=file_size,
             author=author,
             subtitle=subtitle,
             description=description,
@@ -157,7 +160,8 @@ async def create_book(
             publication_year=publication_year,
             publisher=publisher,
             tags=tags_list,
-            background_tasks=background_tasks,
+            background_tasks=background_tasks if process_in_background else None,
+            extract_metadata=process_in_background,
         )
 
     raise HTTPException(

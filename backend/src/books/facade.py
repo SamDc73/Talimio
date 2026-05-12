@@ -255,8 +255,8 @@ class BooksFacade:
         if metadata.title and (not title or title == filename_without_ext):
             final_title = metadata.title
 
-        final_author = author
-        if metadata.author and (not author or not author.strip()):
+        final_author = author.strip() if author and author.strip() else ""
+        if metadata.author and not final_author:
             final_author = metadata.author
 
         book_metadata: dict[str, JsonValue] = {
@@ -422,6 +422,7 @@ class BooksFacade:
         file_path: str,
         storage_provider: str,
         title: str,
+        file_size: int | None = None,
         author: str | None = None,
         subtitle: str | None = None,
         description: str | None = None,
@@ -431,6 +432,7 @@ class BooksFacade:
         publisher: str | None = None,
         tags: list[str] | None = None,
         background_tasks: BackgroundTasks | None = None,
+        extract_metadata: bool = True,
     ) -> BookResponse:
         """Create a book record after a browser-direct upload completes."""
         expected_prefix = f"books/{user_id!s}/direct/"
@@ -439,23 +441,34 @@ class BooksFacade:
             raise ValidationError(message)
 
         storage = get_storage_provider(storage_provider)
-        file_content = await storage.download(file_path)
 
         file_extension = filename.lower().split(".")[-1]
-        metadata_service = BookMetadataService()
-        try:
-            metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
-        except BookMetadataExtractionError as error:
-            logger.warning(
-                "books.direct_upload.metadata_extraction.failed",
-                extra={"user_id": str(user_id), "error_type": type(error).__name__},
-            )
+        if extract_metadata:
+            file_content = await storage.download(file_path)
+            metadata_service = BookMetadataService()
+            try:
+                metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
+            except BookMetadataExtractionError as error:
+                logger.warning(
+                    "books.direct_upload.metadata_extraction.failed",
+                    extra={"user_id": str(user_id), "error_type": type(error).__name__},
+                )
+                metadata = BookMetadata(file_type=file_extension)
+            resolved_file_size = len(file_content)
+            file_hash = hashlib.sha256(file_content).hexdigest()
+        else:
+            if file_size is None or file_size <= 0:
+                message = "file_size is required when metadata extraction is skipped"
+                raise ValidationError(message)
             metadata = BookMetadata(file_type=file_extension)
+            resolved_file_size = file_size
+            file_hash = None
 
-        file_hash = hashlib.sha256(file_content).hexdigest()
         filename_without_ext = filename.rsplit(".", 1)[0]
         final_title = metadata.title if metadata.title and (not title or title == filename_without_ext) else title
-        final_author = metadata.author if metadata.author and (not author or not author.strip()) else author
+        final_author = author.strip() if author and author.strip() else ""
+        if metadata.author and not final_author:
+            final_author = metadata.author
 
         book_metadata: dict[str, JsonValue] = {
             "title": final_title,
@@ -468,7 +481,7 @@ class BooksFacade:
             "publisher": publisher or metadata.publisher,
             "tags": tags or [],
             "file_type": file_extension,
-            "file_size": len(file_content),
+            "file_size": resolved_file_size,
             "total_pages": metadata.total_pages or 0,
             "file_hash": file_hash,
             "table_of_contents": json.dumps(metadata.table_of_contents) if metadata.table_of_contents else None,

@@ -3,9 +3,9 @@
  */
 
 import { AnimatePresence, motion } from "framer-motion"
-import { BookOpen, FileText, Image, Loader2, Paperclip, Sparkles, X, Zap } from "lucide-react"
+import { BookOpen, Check, FileText, Image, Loader2, Paperclip, RotateCcw, Sparkles, X, Zap } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
-import { useCourseService } from "@/api/courseApi"
+import { createBookFromCourseAttachment, useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/Dialog"
 import { Input } from "@/components/Input"
@@ -201,6 +201,11 @@ function isImageAttachmentFile(file) {
 	return mimeType.startsWith("image/")
 }
 
+function isBookAttachmentFile(file) {
+	const fileName = file?.name?.toLowerCase?.() ?? ""
+	return fileName.endsWith(".pdf") || fileName.endsWith(".epub")
+}
+
 function createAttachmentPreviewUrl(file) {
 	if (!isImageAttachmentFile(file) || typeof globalThis.URL?.createObjectURL !== "function") {
 		return null
@@ -359,17 +364,26 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			return
 		}
 
-		setAttachments((prev) => [
-			...prev,
-			...validFiles.map((file) => {
-				attachmentSequenceRef.current += 1
-				return {
-					id: buildAttachmentId(file, attachmentSequenceRef.current),
-					file,
-					previewUrl: createAttachmentPreviewUrl(file),
-				}
-			}),
-		])
+		const newAttachments = validFiles.map((file) => {
+			attachmentSequenceRef.current += 1
+			const isBook = isBookAttachmentFile(file)
+			return {
+				id: buildAttachmentId(file, attachmentSequenceRef.current),
+				file,
+				previewUrl: createAttachmentPreviewUrl(file),
+				status: isBook ? "uploading" : "idle",
+				bookId: null,
+				error: null,
+			}
+		})
+
+		setAttachments((prev) => [...prev, ...newAttachments])
+
+		for (const attachment of newAttachments) {
+			if (isBookAttachmentFile(attachment.file)) {
+				uploadBookAttachment(attachment.id, attachment.file)
+			}
+		}
 	}
 
 	const handleFileInputChange = (event) => {
@@ -417,6 +431,28 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			}
 			return nextAttachments
 		})
+	}
+
+	const uploadBookAttachment = async (attachmentId, file) => {
+		try {
+			const book = await createBookFromCourseAttachment(file)
+			setAttachments((prev) =>
+				prev.map((a) => (a.id === attachmentId ? { ...a, status: "uploaded", bookId: book.id } : a))
+			)
+		} catch (uploadError) {
+			setAttachments((prev) =>
+				prev.map((a) => (a.id === attachmentId ? { ...a, status: "failed", error: uploadError.message } : a))
+			)
+		}
+	}
+
+	const retryBookUpload = (attachmentId) => {
+		const attachment = attachments.find((a) => a.id === attachmentId)
+		if (!attachment || !isBookAttachmentFile(attachment.file)) return
+
+		setAttachments((prev) => prev.map((a) => (a.id === attachmentId ? { ...a, status: "uploading", error: null } : a)))
+
+		uploadBookAttachment(attachmentId, attachment.file)
 	}
 
 	const handlePaste = (event) => {
@@ -487,17 +523,35 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			return
 		}
 
+		const uploadingBooks = attachments.filter((a) => a.status === "uploading")
+		if (uploadingBooks.length > 0) {
+			setError("Please wait for book uploads to complete")
+			setActiveStep(MODAL_STEPS.PROMPT)
+			return
+		}
+
+		const failedBooks = attachments.filter((a) => a.status === "failed")
+		if (failedBooks.length > 0) {
+			setError(`${failedBooks.length} book upload(s) failed. Click the retry icon or remove them.`)
+			setActiveStep(MODAL_STEPS.PROMPT)
+			return
+		}
+
 		const summaryBlock = formatSelfAssessmentSummary(responses)
 		const finalPrompt = buildFinalPrompt(trimmedPrompt, summaryBlock)
 
 		setIsGenerating(true)
 		setError("")
 
+		const bookIds = attachments.filter((a) => a.status === "uploaded" && a.bookId).map((a) => a.bookId)
+		const imageFiles = attachments.filter((a) => !isBookAttachmentFile(a.file)).map((a) => a.file)
+
 		try {
 			const response = await courseService.createCourse({
 				prompt: finalPrompt,
 				adaptive_enabled: adaptiveEnabled,
-				files: attachments.map((attachment) => attachment.file),
+				files: imageFiles,
+				bookIds,
 			})
 
 			if (response?.id) {
@@ -603,6 +657,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 										{attachments.map((attachment) => {
 											const fileName = attachment.file?.name ?? "Untitled"
 											const isImage = isImageAttachmentFile(attachment.file)
+											const isBook = isBookAttachmentFile(attachment.file)
 
 											return (
 												<motion.div
@@ -611,7 +666,10 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 													initial={{ scale: 0.8, opacity: 0 }}
 													animate={{ scale: 1, opacity: 1 }}
 													exit={{ scale: 0.8, opacity: 0 }}
-													className={COURSE_ATTACHMENT_CHIP_CLASS_NAME}
+													className={cn(
+														COURSE_ATTACHMENT_CHIP_CLASS_NAME,
+														isBook && attachment.status === "failed" && "border-destructive/40 bg-destructive/5"
+													)}
 												>
 													{isImage && attachment.previewUrl ? (
 														<Dialog>
@@ -653,7 +711,32 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 															{isImage ? (
 																<Image className="size-3.5 text-muted-foreground/70" />
 															) : (
-																<FileText className="size-3.5 text-muted-foreground/70" />
+																<span className="relative">
+																	<FileText className="size-3.5 text-muted-foreground/70" />
+																	{attachment.status !== "idle" && (
+																		<span className="absolute -bottom-0.5 -right-0.5 flex size-2.5 items-center justify-center rounded-full bg-background ring-1 ring-border">
+																			{attachment.status === "uploading" && (
+																				<Loader2 className="size-1.5 animate-spin text-(--color-course)" />
+																			)}
+																			{attachment.status === "uploaded" && (
+																				<Check className="size-1.5 text-green-500" />
+																			)}
+																			{attachment.status === "failed" && (
+																				<button
+																					type="button"
+																					onClick={(event) => {
+																						event.stopPropagation()
+																						retryBookUpload(attachment.id)
+																					}}
+																					className="flex size-2.5 items-center justify-center"
+																					title="Retry upload"
+																				>
+																					<RotateCcw className="size-1.5 text-destructive" />
+																				</button>
+																			)}
+																		</span>
+																	)}
+																</span>
 															)}
 															<span className="truncate max-w-[100px]" title={fileName}>
 																{fileName}
@@ -763,7 +846,11 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 					<Button type="button" variant="outline" onClick={closeModal} disabled={isGenerating}>
 						Cancel
 					</Button>
-					<Button type="submit" disabled={isGenerating || !prompt.trim()} className={COURSE_PRIMARY_ACTION_CLASS_NAME}>
+					<Button
+						type="submit"
+						disabled={isGenerating || !prompt.trim() || attachments.some((a) => a.status === "uploading")}
+						className={COURSE_PRIMARY_ACTION_CLASS_NAME}
+					>
 						{isGenerating ? (
 							<div className="flex items-center gap-2xs">
 								<Loader2 className="size-md animate-spin" />

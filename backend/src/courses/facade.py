@@ -243,6 +243,7 @@ class CoursesFacade:  # noqa: PLR0904
         user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
         attachments: list[UploadFile] | None = None,
+        book_ids: list[uuid.UUID] | None = None,
     ) -> CourseResponse:
         """Create a new course entry and return its canonical response model."""
         try:
@@ -251,6 +252,7 @@ class CoursesFacade:  # noqa: PLR0904
                 user_id,
                 background_tasks=background_tasks,
                 attachments=attachments,
+                book_ids=book_ids,
             )
             query_service = CourseQueryService(self._session)
             return await query_service.get_course(created_course.id, user_id)

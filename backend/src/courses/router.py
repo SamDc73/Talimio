@@ -8,6 +8,7 @@ NOTE: Lesson, grading, frontier, practice drill, and review orchestration
 is delegated to CoursesFacade; this module keeps HTTP-layer handling only.
 """
 
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -58,7 +59,7 @@ router = APIRouter(
 # Local logger for analytics
 logger = logging.getLogger(__name__)
 
-_COURSE_ATTACHMENT_EXTENSIONS = {".pdf", ".epub", ".png", ".jpg", ".jpeg"}
+_INLINE_COURSE_ATTACHMENT_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 
 def get_courses_facade(auth: CurrentAuth) -> CoursesFacade:
@@ -121,6 +122,34 @@ class _InMemoryUploadFile:
         return self.content
 
 
+def _parse_book_ids(raw_book_ids: str) -> list[uuid.UUID]:
+    if not raw_book_ids:
+        return []
+
+    try:
+        parsed = json.loads(raw_book_ids)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid book_ids format") from None
+
+    if not isinstance(parsed, list):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="book_ids must be a JSON array")
+
+    book_ids: list[uuid.UUID] = []
+    seen: set[uuid.UUID] = set()
+    for raw_book_id in parsed:
+        try:
+            book_id = uuid.UUID(str(raw_book_id))
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="book_ids contains an invalid UUID") from None
+
+        if book_id in seen:
+            continue
+        seen.add(book_id)
+        book_ids.append(book_id)
+
+    return book_ids
+
+
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
 async def create_course(
     prompt: Annotated[str, Form()],
@@ -128,6 +157,7 @@ async def create_course(
     background_tasks: BackgroundTasks,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
     adaptive_enabled: Annotated[bool, Form()] = False,
+    book_ids: Annotated[str, Form()] = "[]",
     files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> CourseResponse:
     """Create a new course using AI generation."""
@@ -135,14 +165,18 @@ async def create_course(
     if not prompt_text:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Prompt must not be empty")
 
+    linked_book_ids = _parse_book_ids(book_ids)
     attachments = files or []
     in_memory_files = []
     for upload in attachments:
         if not upload.filename:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Attachment filename required")
         ext = Path(upload.filename).suffix.lower()
-        if ext not in _COURSE_ATTACHMENT_EXTENSIONS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported attachment type")
+        if ext not in _INLINE_COURSE_ATTACHMENT_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="PDF and EPUB attachments must be uploaded as books before creating a course",
+            )
         content = await upload.read()
         in_memory_files.append(_InMemoryUploadFile(upload.filename, upload.content_type or "", content))
 
@@ -151,6 +185,7 @@ async def create_course(
         auth.user_id,
         background_tasks=background_tasks,
         attachments=in_memory_files,
+        book_ids=linked_book_ids,
     )
 
 

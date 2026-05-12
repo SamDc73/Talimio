@@ -10,6 +10,9 @@
 import { useApi } from "@/hooks/use-api"
 import { api } from "@/lib/apiClient"
 
+const DIRECT_UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
+const BOOK_ATTACHMENT_EXTENSIONS = new Set(["pdf", "epub"])
+
 function requireCourseId(courseId) {
 	if (!courseId) {
 		throw new Error("Course ID required")
@@ -20,6 +23,89 @@ function requireCourseId(courseId) {
 
 function buildCoursePath(courseId, suffix = "") {
 	return `/courses/${requireCourseId(courseId)}${suffix}`
+}
+
+function getFileExtension(file) {
+	const filename = file?.name || ""
+	const extension = filename.split(".").pop()?.toLowerCase()
+	return extension && extension !== filename.toLowerCase() ? extension : ""
+}
+
+function isBookAttachment(file) {
+	return BOOK_ATTACHMENT_EXTENSIONS.has(getFileExtension(file))
+}
+
+function getUploadContentType(file) {
+	if (file?.type) return file.type
+	return getFileExtension(file) === "epub" ? "application/epub+zip" : "application/pdf"
+}
+
+function getBookTitleFromFile(file) {
+	const filename = file?.name || "Uploaded book"
+	const extension = getFileExtension(file)
+	if (!extension) return filename
+	return filename.slice(0, -(extension.length + 1)) || filename
+}
+
+function parseUploadedRangeEnd(rangeHeader) {
+	const match = /^bytes=\d+-(\d+)$/.exec(rangeHeader || "")
+	return match ? Number.parseInt(match[1], 10) : null
+}
+
+async function uploadFileChunksToSession(file, uploadSession) {
+	if (!file?.size) {
+		throw new Error("Cannot upload an empty file")
+	}
+
+	let offset = 0
+	while (offset < file.size) {
+		const nextOffset = Math.min(offset + DIRECT_UPLOAD_CHUNK_SIZE, file.size)
+		const response = await fetch(uploadSession.uploadUrl, {
+			method: uploadSession.method || "PUT",
+			headers: {
+				...(uploadSession.headers || {}),
+				"Content-Type": getUploadContentType(file),
+				"Content-Range": `bytes ${offset}-${nextOffset - 1}/${file.size}`,
+			},
+			body: file.slice(offset, nextOffset),
+		})
+
+		if (response.status === 308) {
+			const rangeEnd = parseUploadedRangeEnd(response.headers.get("Range"))
+			if (rangeEnd === null) {
+				throw new Error("Upload did not return a resumable range")
+			}
+			offset = rangeEnd + 1
+			continue
+		}
+
+		if ((response.status === 200 || response.status === 201) && nextOffset === file.size) {
+			return
+		}
+
+		const errorText = await response.text().catch(() => "")
+		throw new Error(`Upload failed: ${response.status} ${errorText || response.statusText}`)
+	}
+}
+
+export async function createBookFromCourseAttachment(file) {
+	const uploadSession = await api.post("/upload-sessions", {
+		filename: file.name,
+		contentType: getUploadContentType(file),
+		fileSize: file.size,
+	})
+
+	await uploadFileChunksToSession(file, uploadSession)
+
+	const formData = new FormData()
+	formData.append("title", getBookTitleFromFile(file))
+	formData.append("tags", "[]")
+	formData.append("file_path", uploadSession.filePath)
+	formData.append("storage_provider", uploadSession.storageProvider)
+	formData.append("file_size", String(file.size))
+	formData.append("process_in_background", "false")
+
+	return api.post("/books", formData)
 }
 
 export async function fetchCourseById(courseId, signal) {
@@ -71,12 +157,30 @@ export function useCourseService(courseId = null) {
 		 * @param {File[]} [courseData.files] - Optional attachments (pdf/epub/images)
 		 */
 		async createCourse(courseData) {
+			const files = Array.isArray(courseData?.files) ? courseData.files : []
+			const preUploadedBookIds = Array.isArray(courseData?.bookIds) ? courseData.bookIds : []
+			const inlineFiles = []
+			const bookIds = [...preUploadedBookIds]
+
+			for (const file of files) {
+				if (!isBookAttachment(file)) {
+					inlineFiles.push(file)
+					continue
+				}
+
+				const book = await createBookFromCourseAttachment(file)
+				if (!book?.id) {
+					throw new Error("Book upload finished without a book ID")
+				}
+				bookIds.push(book.id)
+			}
+
 			const formData = new FormData()
 			formData.append("prompt", courseData?.prompt ?? "")
 			formData.append("adaptive_enabled", String(Boolean(courseData?.adaptive_enabled)))
+			formData.append("book_ids", JSON.stringify(bookIds))
 
-			const files = Array.isArray(courseData?.files) ? courseData.files : []
-			for (const file of files) {
+			for (const file of inlineFiles) {
 				formData.append("files", file)
 			}
 
@@ -124,27 +228,6 @@ export function useCourseService(courseId = null) {
 				throw new Error("attemptId, questionId, and answer.kind are required")
 			}
 			return await submitAttemptEndpoint.execute(payload, { pathParams: { courseId } })
-		},
-
-		/**
-		 * Create a course from uploaded document
-		 * @param {FormData} formData - Form data containing file and metadata
-		 * @returns {Promise<Object>} The created course data
-		 */
-		async createCourseFromDocument(formData) {
-			return api.post("/courses/upload", formData)
-		},
-
-		/**
-		 * Extract metadata from a document
-		 * @param {File} file - The document file to analyze
-		 * @returns {Promise<Object>} Extracted metadata
-		 */
-		async extractDocumentMetadata(file) {
-			const formData = new FormData()
-			formData.append("file", file)
-
-			return api.post("/courses/extract-metadata", formData)
 		},
 
 		/**

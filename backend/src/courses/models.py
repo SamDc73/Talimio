@@ -246,6 +246,11 @@ class CourseDocument(Base):
     document_type: Mapped[str | None] = mapped_column(String(50))
     title: Mapped[str] = mapped_column(String(255))
     file_path: Mapped[str | None] = mapped_column(String(500))
+    book_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("books.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC))
     processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
     embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))

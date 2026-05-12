@@ -21,11 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai.models import AdaptiveConceptGraph, AdaptiveCourseStructure
 from src.ai.rag.service import RAGService
 from src.ai.service import AIService
+from src.books.models import Book
 from src.courses.models import (
     Concept,
     ConceptSimilarity,
     Course,
     CourseConcept,
+    CourseDocument,
     Lesson,
     UserConceptState,
 )
@@ -38,8 +40,12 @@ from .setup_commands_normalizer import normalize_setup_commands_payload
 
 logger = logging.getLogger(__name__)
 
-_DOC_EXTENSIONS = {".pdf", ".epub"}
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+_BOOK_RAG_STATUS_COMPLETED = "completed"
+_BOOK_RAG_STATUS_PROCESSING = "processing"
+_COURSE_DOCUMENT_STATUS_EMBEDDED = "embedded"
+_RAG_DOC_TYPE_BOOK = "book"
+_RAG_DOC_TYPE_COURSE = "course"
 
 
 @dataclass(slots=True)
@@ -75,6 +81,7 @@ class CourseContentService:
         user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
         attachments: list[UploadFile] | None = None,
+        book_ids: Sequence[uuid.UUID] | None = None,
     ) -> Course:
         """Create a new course and populate its lessons."""
         return await self._create_course_with_session(
@@ -83,6 +90,7 @@ class CourseContentService:
             user_id,
             background_tasks=background_tasks,
             attachments=attachments,
+            book_ids=book_ids,
         )
 
     async def _create_course_with_session(
@@ -93,11 +101,13 @@ class CourseContentService:
         *,
         background_tasks: BackgroundTasks | None = None,
         attachments: list[UploadFile] | None = None,
+        book_ids: Sequence[uuid.UUID] | None = None,
     ) -> Course:
         """Create a course using the provided session."""
         session_data = dict(data)
         is_adaptive = bool(session_data.get("adaptive_enabled"))
         prompt_text = self._normalize_prompt_text(session_data.get("prompt", ""))
+        linked_book_ids = await self._validate_linked_books(session, user_id, book_ids or [])
 
         course = self._build_draft_course(session_data=session_data, user_id=user_id, is_adaptive=is_adaptive)
         if not course.title or course.title == "Draft course":
@@ -116,10 +126,18 @@ class CourseContentService:
                 dict(data),
                 user_id,
                 attachments,
+                linked_book_ids,
                 background_tasks=background_tasks,
             )
         else:
-            await self._generate_course_background(course_id, dict(data), user_id, attachments, raise_errors=True)
+            await self._generate_course_background(
+                course_id,
+                dict(data),
+                user_id,
+                attachments,
+                linked_book_ids,
+                raise_errors=True,
+            )
             await session.refresh(course)
 
         return course
@@ -130,6 +148,7 @@ class CourseContentService:
         data: Mapping[str, object],
         user_id: uuid.UUID,
         attachments: list[UploadFile] | None = None,
+        book_ids: Sequence[uuid.UUID] | None = None,
         *,
         background_tasks: BackgroundTasks | None = None,
         raise_errors: bool = False,
@@ -144,8 +163,9 @@ class CourseContentService:
                 is_adaptive = bool(session_data.get("adaptive_enabled"))
                 prompt_text = self._normalize_prompt_text(session_data.pop("prompt", None))
                 attachments = attachments or []
+                book_ids = list(book_ids or [])
 
-                if not attachments:
+                if not attachments and not book_ids:
                     prompt_payload = self._build_prompt_payload(prompt_text, [])
                     adaptive_structure = await self._build_adaptive_structure(
                         is_adaptive=is_adaptive,
@@ -155,10 +175,8 @@ class CourseContentService:
                         user_id=user_id,
                     )
 
-                    raw_modules_payload = session_data.pop("modules", [])
-                    raw_lessons_payload = session_data.pop("lessons", [])
-                    modules_payload = self._sequence_payload(raw_modules_payload)
-                    lessons_payload = self._sequence_payload(raw_lessons_payload)
+                    modules_payload = self._sequence_payload(session_data.pop("modules", []))
+                    lessons_payload = self._sequence_payload(session_data.pop("lessons", []))
 
                     _, _ = await self._persist_course_structure(
                         session=session,
@@ -177,6 +195,7 @@ class CourseContentService:
                         user_id=user_id,
                         course_id=course.id,
                         attachments=attachments,
+                        book_ids=book_ids,
                     )
                     augmented_prompt = await self._build_augmented_prompt(
                         rag_service=rag_service,
@@ -196,10 +215,8 @@ class CourseContentService:
                         user_id=user_id,
                     )
 
-                    raw_modules_payload = session_data.pop("modules", [])
-                    raw_lessons_payload = session_data.pop("lessons", [])
-                    modules_payload = self._sequence_payload(raw_modules_payload)
-                    lessons_payload = self._sequence_payload(raw_lessons_payload)
+                    modules_payload = self._sequence_payload(session_data.pop("modules", []))
+                    lessons_payload = self._sequence_payload(session_data.pop("lessons", []))
 
                     _, _ = await self._persist_course_structure(
                         session=session,
@@ -323,6 +340,24 @@ class CourseContentService:
     def _sequence_payload(self, value: object) -> Sequence[object]:
         return value if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray) else []
 
+    async def _validate_linked_books(
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        book_ids: Sequence[uuid.UUID],
+    ) -> list[uuid.UUID]:
+        if not book_ids:
+            return []
+
+        linked_book_ids = list(dict.fromkeys(book_ids))
+        result = await session.execute(select(Book.id).where(Book.user_id == user_id, Book.id.in_(linked_book_ids)))
+        owned_book_ids = set(result.scalars().all())
+        resource_type = "book"
+        for book_id in linked_book_ids:
+            if book_id not in owned_book_ids:
+                raise NotFoundError(resource_type, str(book_id))
+        return linked_book_ids
+
     async def _ingest_course_attachments(
         self,
         *,
@@ -331,6 +366,7 @@ class CourseContentService:
         user_id: uuid.UUID,
         course_id: uuid.UUID,
         attachments: list[UploadFile],
+        book_ids: Sequence[uuid.UUID],
     ) -> CourseAttachmentIngestionResult:
         """Upload attachments and describe what can be used for RAG search."""
         image_data_urls: list[str] = []
@@ -340,21 +376,6 @@ class CourseContentService:
             filename = Path(raw_filename).name
             extension = Path(filename).suffix.lower()
             file_content = await attachment.read()
-            if extension in _DOC_EXTENSIONS:
-                has_searchable_documents = True
-                document_type = extension.lstrip(".")
-                document = await rag_service.upload_document(
-                    session=session,
-                    user_id=user_id,
-                    course_id=course_id,
-                    document_type=document_type,
-                    title=filename,
-                    file_content=file_content,
-                    filename=filename,
-                    process_in_background=False,
-                )
-                await rag_service.process_document(session, document.id)
-                continue
             if extension in _IMAGE_EXTENSIONS:
                 data_url = self._build_image_data_url(file_content, attachment.content_type, extension)
                 image_data_urls.append(data_url)
@@ -368,10 +389,139 @@ class CourseContentService:
                     filename=filename,
                     process_in_background=False,
                 )
+        for book_id in book_ids:
+            await self._link_book_to_course_documents(
+                rag_service=rag_service,
+                session=session,
+                user_id=user_id,
+                course_id=course_id,
+                book_id=book_id,
+            )
+            has_searchable_documents = True
         return CourseAttachmentIngestionResult(
             image_data_urls=image_data_urls,
             has_searchable_documents=has_searchable_documents,
         )
+
+    async def _link_book_to_course_documents(
+        self,
+        *,
+        rag_service: RAGService,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        book_id: uuid.UUID,
+    ) -> None:
+        book = await self._get_owned_book(session, user_id, book_id)
+        document = CourseDocument(
+            course_id=course_id,
+            book_id=book.id,
+            document_type=book.file_type,
+            title=book.title,
+            file_path=None,
+            status="pending",
+        )
+        session.add(document)
+        await session.flush()
+
+        await self._ensure_book_chunks_available(rag_service=rag_service, session=session, book=book)
+        copied_chunks = await self._copy_book_chunks_to_course_document(
+            session=session,
+            book=book,
+            course_id=course_id,
+            document_id=document.id,
+        )
+        if copied_chunks == 0:
+            msg = f"Book {book.id} has no RAG chunks to link into course {course_id}"
+            raise RuntimeError(msg)
+
+        now = datetime.now(UTC)
+        document.status = _COURSE_DOCUMENT_STATUS_EMBEDDED
+        document.processed_at = now
+        document.embedded_at = now
+        await session.flush()
+
+    async def _get_owned_book(self, session: AsyncSession, user_id: uuid.UUID, book_id: uuid.UUID) -> Book:
+        result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
+        book = result.scalar_one_or_none()
+        if book is None:
+            resource_type = "book"
+            raise NotFoundError(resource_type, str(book_id))
+        return book
+
+    async def _ensure_book_chunks_available(
+        self,
+        *,
+        rag_service: RAGService,
+        session: AsyncSession,
+        book: Book,
+    ) -> None:
+        if book.rag_status == _BOOK_RAG_STATUS_COMPLETED:
+            return
+
+        if book.rag_status == _BOOK_RAG_STATUS_PROCESSING:
+            msg = f"Book {book.id} is already processing RAG chunks"
+            raise RuntimeError(msg)
+
+        if book.rag_status != _BOOK_RAG_STATUS_COMPLETED:
+            await rag_service.process_book(session, book.id)
+            await session.refresh(book)
+
+        if book.rag_status != _BOOK_RAG_STATUS_COMPLETED:
+            msg = f"Book {book.id} did not finish RAG processing"
+            raise RuntimeError(msg)
+
+    async def _copy_book_chunks_to_course_document(
+        self,
+        *,
+        session: AsyncSession,
+        book: Book,
+        course_id: uuid.UUID,
+        document_id: int,
+    ) -> int:
+        course_doc_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
+        extra_metadata = {
+            "course_id": str(course_id),
+            "document_id": document_id,
+            "source_book_id": str(book.id),
+            "source_doc_type": _RAG_DOC_TYPE_BOOK,
+            "title": book.title,
+        }
+        result = await session.execute(
+            text(
+                """
+                INSERT INTO rag_document_chunks
+                    (doc_id, doc_type, chunk_index, content, metadata, embedding, created_at)
+                SELECT
+                    :course_doc_id,
+                    :course_doc_type,
+                    chunk_index,
+                    content,
+                    COALESCE(metadata, '{}'::jsonb) || CAST(:extra_metadata AS jsonb),
+                    embedding,
+                    NOW()
+                FROM rag_document_chunks
+                WHERE doc_id = :book_id AND doc_type = :book_doc_type
+                ON CONFLICT (doc_id, chunk_index)
+                DO UPDATE SET
+                    doc_type = EXCLUDED.doc_type,
+                    content = EXCLUDED.content,
+                    metadata = EXCLUDED.metadata,
+                    embedding = EXCLUDED.embedding
+                RETURNING id
+                """
+            ),
+            {
+                "course_doc_id": course_doc_id,
+                "course_doc_type": _RAG_DOC_TYPE_COURSE,
+                "book_id": book.id,
+                "book_doc_type": _RAG_DOC_TYPE_BOOK,
+                "extra_metadata": json.dumps(extra_metadata),
+            },
+        )
+        copied_rows = result.fetchall()
+        await session.flush()
+        return len(copied_rows)
 
     async def _build_augmented_prompt(
         self,
