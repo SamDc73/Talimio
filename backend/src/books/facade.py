@@ -26,7 +26,7 @@ from src.books.schemas import (
 )
 from src.database.session import async_session_maker
 from src.exceptions import ConflictError, DomainError, ErrorCategory, ErrorCode, NotFoundError, ValidationError
-from src.storage.factory import get_storage_provider
+from src.storage.factory import get_default_storage_provider_name, get_storage_provider
 
 from .services.book_content_service import BookContentService
 from .services.book_metadata_service import BookMetadata, BookMetadataExtractionError, BookMetadataService
@@ -224,7 +224,8 @@ class BooksFacade:
         file_extension = filename.lower().split(".")[-1]
         storage_key = f"books/{user_id!s}/{filename}"
 
-        storage = get_storage_provider()
+        storage_provider = get_default_storage_provider_name()
+        storage = get_storage_provider(storage_provider)
         logger.info(
             "books.upload.storage.started",
             extra={"user_id": str(user_id), "file_size_bytes": len(file_content)},
@@ -279,6 +280,7 @@ class BooksFacade:
             book_response, book_id = await self.upload_book(
                 user_id=user_id,
                 file_path=storage_key,
+                storage_provider=storage_provider,
                 title=final_title,
                 metadata=book_metadata,
             )
@@ -360,6 +362,7 @@ class BooksFacade:
         self,
         user_id: uuid.UUID,
         file_path: str,
+        storage_provider: str,
         title: str,
         metadata: dict[str, JsonValue] | None = None,
     ) -> tuple[BookResponse, uuid.UUID]:
@@ -368,6 +371,7 @@ class BooksFacade:
             data: dict[str, JsonValue] = {**(metadata or {})}
             data["title"] = title or data.get("title")
             data["file_path"] = file_path
+            data["storage_provider"] = storage_provider
             data.setdefault("rag_status", "pending")
 
             book = await self._content_service.create_book(data, user_id)
@@ -409,6 +413,92 @@ class BooksFacade:
         except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
             logger.exception("books.upload.failed", extra={"user_id": str(user_id), "title": title})
             raise
+
+    async def create_book_from_existing_storage(
+        self,
+        *,
+        user_id: uuid.UUID,
+        filename: str,
+        file_path: str,
+        storage_provider: str,
+        title: str,
+        author: str | None = None,
+        subtitle: str | None = None,
+        description: str | None = None,
+        isbn: str | None = None,
+        language: str | None = None,
+        publication_year: int | None = None,
+        publisher: str | None = None,
+        tags: list[str] | None = None,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> BookResponse:
+        """Create a book record after a browser-direct upload completes."""
+        expected_prefix = f"books/{user_id!s}/direct/"
+        if not file_path.startswith(expected_prefix):
+            message = "Uploaded file path does not belong to this user"
+            raise ValidationError(message)
+
+        storage = get_storage_provider(storage_provider)
+        file_content = await storage.download(file_path)
+
+        file_extension = filename.lower().split(".")[-1]
+        metadata_service = BookMetadataService()
+        try:
+            metadata = metadata_service.extract_metadata(file_content, f".{file_extension}")
+        except BookMetadataExtractionError as error:
+            logger.warning(
+                "books.direct_upload.metadata_extraction.failed",
+                extra={"user_id": str(user_id), "error_type": type(error).__name__},
+            )
+            metadata = BookMetadata(file_type=file_extension)
+
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        filename_without_ext = filename.rsplit(".", 1)[0]
+        final_title = metadata.title if metadata.title and (not title or title == filename_without_ext) else title
+        final_author = metadata.author if metadata.author and (not author or not author.strip()) else author
+
+        book_metadata: dict[str, JsonValue] = {
+            "title": final_title,
+            "subtitle": subtitle or metadata.subtitle,
+            "author": final_author,
+            "description": description or metadata.description,
+            "isbn": isbn or metadata.isbn,
+            "language": language or metadata.language,
+            "publication_year": publication_year or metadata.publication_year,
+            "publisher": publisher or metadata.publisher,
+            "tags": tags or [],
+            "file_type": file_extension,
+            "file_size": len(file_content),
+            "total_pages": metadata.total_pages or 0,
+            "file_hash": file_hash,
+            "table_of_contents": json.dumps(metadata.table_of_contents) if metadata.table_of_contents else None,
+        }
+
+        try:
+            book_response, book_id = await self.upload_book(
+                user_id=user_id,
+                file_path=file_path,
+                storage_provider=storage_provider,
+                title=final_title,
+                metadata=book_metadata,
+            )
+        except (ConflictError, NotFoundError, ValidationError, SQLAlchemyError, RuntimeError, ValueError, TypeError):
+            try:
+                await storage.delete(file_path)
+            except (OSError, RuntimeError, ValueError):
+                logger.exception(
+                    "books.direct_upload.rollback_file_delete_failed",
+                    extra={"user_id": str(user_id), "storage_key": file_path},
+                )
+                raise
+            raise
+
+        if background_tasks is not None:
+            await self._session.commit()
+            background_tasks.add_task(self.embed_book_background, book_id)
+            background_tasks.add_task(self.auto_tag_book_background, book_id, user_id)
+
+        return book_response
 
     async def update_progress(
         self, content_id: uuid.UUID, user_id: uuid.UUID, progress_data: dict[str, JsonValue]

@@ -26,6 +26,7 @@ class StoredBookRow(Protocol):
     """Book row fields needed for storage cleanup."""
 
     file_path: str | None
+    storage_provider: str
 
 
 class ContentService:
@@ -222,7 +223,7 @@ class ContentService:
             try:
                 from src.storage.factory import get_storage_provider
 
-                storage = get_storage_provider()
+                storage = get_storage_provider(row.storage_provider)
                 await storage.delete(row.file_path)
             except (OSError, RuntimeError, TypeError, ValueError):
                 logger.exception("Non-fatal: failed to delete stored file for book")

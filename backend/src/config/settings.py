@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_CLIENT_SECRET: SecretStr = SecretStr("")
 
     # Storage settings
-    STORAGE_PROVIDER: str = "local"  # "r2" or "local"
+    STORAGE_PROVIDER: str = "local"  # "local", "r2", or "gcs"
     LOCAL_STORAGE_PATH: str = "uploads"  # Path for local file storage (e.g., "uploads", "/app/uploads")
 
     # R2 Configuration (optional)
@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "talimio-books"
     R2_REGION: str = "auto"
+
+    # Google Cloud Storage Configuration (optional)
+    # On Cloud Run ADC is automatic; only need the bucket name to write to.
+    GCS_BUCKET_NAME: str = ""
 
     # Adaptive Learning Configuration
     ADAPTIVE_SIMILARITY_THRESHOLD: float = 0.78  # Threshold for concept similarity detection

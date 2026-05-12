@@ -479,7 +479,7 @@ class RAGService:
             await session.flush()
 
             # Download file
-            storage = get_storage_provider()
+            storage = get_storage_provider(book.storage_provider)
             file_bytes = await storage.download(book.file_path)
 
             # Parse via Unstructured using a secure temp file

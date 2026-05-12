@@ -4,7 +4,7 @@ from pathlib import Path
 
 import aiofiles
 
-from .base import AbstractStorage
+from .base import AbstractStorage, StorageUploadSession
 from .exceptions import FileDeleteError, FileUploadError, StorageFileNotFoundError
 
 
@@ -98,3 +98,15 @@ class LocalStorage(AbstractStorage):
         except OSError as e:
             msg = f"Failed to delete file locally: {key}"
             raise FileDeleteError(msg) from e
+
+    async def create_upload_session(
+        self,
+        *,
+        key: str,
+        content_type: str,
+        content_length: int | None = None,
+    ) -> StorageUploadSession:
+        """Local storage cannot accept browser-direct uploads."""
+        del key, content_type, content_length
+        msg = "Direct upload sessions are not supported for local storage"
+        raise FileUploadError(msg)

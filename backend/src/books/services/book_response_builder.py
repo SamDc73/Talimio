@@ -60,6 +60,7 @@ class BookResponseBuilder:
             "publisher": book.publisher,
             "tags": tags_list,
             "file_path": book.file_path,
+            "storage_provider": book.storage_provider,
             "file_type": book.file_type,
             "file_size": book.file_size,
             "total_pages": book.total_pages,

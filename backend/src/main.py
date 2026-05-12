@@ -29,9 +29,13 @@ from .auth.router import router as auth_router
 from .auth.security import get_csrf_signing_key, get_session_signing_key
 from .books.router import router as books_router
 
-# Setup logging
+# Setup logging - configure before any logger use
 from .config.logging import setup_logging
 from .config.settings import Settings, get_settings
+
+
+setup_logging(get_settings())
+logger = logging.getLogger(__name__)
 from .content.router import router as content_router
 from .courses.router import router as courses_router
 from .database.migrate import apply_migrations, assert_migrations_current, validate_vector_schema_dimensions
@@ -53,12 +57,9 @@ from .observability import configure_observability
 from .observability.log_context import update_log_context
 from .progress.router import router as progress_router
 from .tagging.router import router as tagging_router
+from .upload_sessions.router import router as upload_sessions_router
 from .user.router import router as user_router
 from .videos.router import router as videos_router
-
-
-setup_logging(get_settings())
-logger = logging.getLogger(__name__)
 
 
 def _register_routers(app: FastAPI) -> None:
@@ -72,6 +73,7 @@ def _register_routers(app: FastAPI) -> None:
         rag_router,
         courses_router,
         tagging_router,
+        upload_sessions_router,
         user_router,
         videos_router,
         auth_router,

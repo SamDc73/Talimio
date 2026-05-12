@@ -92,6 +92,7 @@ class BookResponse(BaseModel):
         return []
 
     file_path: str = Field(alias="filePath")
+    storage_provider: str = Field(alias="storageProvider")
     file_size: int = Field(alias="fileSize")
     total_pages: int | None = Field(None, alias="totalPages")
     table_of_contents: list[TableOfContentsItem] | None = Field(None, alias="tableOfContents")

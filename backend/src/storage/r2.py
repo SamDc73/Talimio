@@ -7,7 +7,7 @@ import aioboto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
 
-from .base import AbstractStorage
+from .base import AbstractStorage, StorageUploadSession
 from .exceptions import (
     CORSConfigError,
     FileDeleteError,
@@ -178,3 +178,29 @@ class R2Storage(AbstractStorage):
         except ClientError as e:
             msg = f"Failed to set CORS policy on bucket {self.bucket_name}"
             raise CORSConfigError(msg) from e
+
+    async def create_upload_session(
+        self,
+        *,
+        key: str,
+        content_type: str,
+        content_length: int | None = None,
+    ) -> StorageUploadSession:
+        """Generate a signed PUT URL for direct upload to R2."""
+        del content_length
+        try:
+            async with await self._get_client() as client:
+                upload_url = await client.generate_presigned_url(
+                    ClientMethod="put_object",
+                    Params={"Bucket": self.bucket_name, "Key": key, "ContentType": content_type},
+                    ExpiresIn=3600,
+                )
+        except ClientError as e:
+            msg = f"Failed to generate R2 upload URL for key: {key}"
+            raise FileUploadError(msg) from e
+
+        return StorageUploadSession(
+            upload_url=upload_url,
+            method="PUT",
+            headers={"Content-Type": content_type},
+        )

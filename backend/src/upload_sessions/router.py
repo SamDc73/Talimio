@@ -1,0 +1,73 @@
+"""Upload session router for provider-agnostic direct file uploads."""
+
+import uuid
+
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
+
+from src.auth import CurrentAuth
+from src.config.schema_casing import build_camel_config
+from src.storage.exceptions import FileUploadError
+from src.storage.factory import get_default_storage_provider_name, get_storage_provider
+
+
+router = APIRouter(prefix="/api/v1/upload-sessions", tags=["upload-sessions"])
+
+
+class UploadSessionRequest(BaseModel):
+    """Request a direct upload session for a file."""
+
+    model_config = build_camel_config()
+
+    filename: str
+    content_type: str
+    file_size: int | None = None
+
+
+class UploadSessionResponse(BaseModel):
+    """Provider-issued direct upload session details."""
+
+    model_config = build_camel_config()
+
+    upload_url: str
+    method: str
+    headers: dict[str, str] = Field(default_factory=dict)
+    file_path: str
+    storage_provider: str
+
+
+@router.post("")
+async def create_upload_session(
+    payload: UploadSessionRequest,
+    auth: CurrentAuth,
+) -> UploadSessionResponse:
+    """Create a provider-specific direct upload session."""
+    file_extension = payload.filename.lower().split(".")[-1]
+    if file_extension not in {"pdf", "epub", "txt", "md", "docx"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type",
+        )
+
+    storage_provider = get_default_storage_provider_name()
+    storage_key = f"books/{auth.user_id!s}/direct/{uuid.uuid4()}-{payload.filename}"
+    storage = get_storage_provider(storage_provider)
+    try:
+        session = await storage.create_upload_session(
+            key=storage_key,
+            content_type=payload.content_type,
+            content_length=payload.file_size,
+        )
+    except FileUploadError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(error),
+        ) from error
+
+    return UploadSessionResponse(
+        upload_url=session.upload_url,
+        method=session.method,
+        headers=session.headers,
+        file_path=storage_key,
+        storage_provider=storage_provider,
+    )

@@ -278,7 +278,7 @@ async def process_book_for_tagging(
 
     try:
         # Get storage provider and download file content
-        storage = get_storage_provider()
+        storage = get_storage_provider(book.storage_provider)
         file_content = await storage.download(book.file_path)
 
         # Determine file extension from file path

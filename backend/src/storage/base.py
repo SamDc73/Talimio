@@ -1,6 +1,16 @@
 """Abstract storage interface for different storage providers."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True, slots=True)
+class StorageUploadSession:
+    """Provider-issued direct upload session."""
+
+    upload_url: str
+    method: str
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 class AbstractStorage(ABC):
@@ -53,4 +63,9 @@ class AbstractStorage(ABC):
         ------
             FileDeleteError: If the deletion fails.
         """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def create_upload_session(self, *, key: str, content_type: str, content_length: int | None = None) -> StorageUploadSession:
+        """Create a direct upload session for a storage key."""
         raise NotImplementedError
