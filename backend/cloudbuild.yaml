@@ -70,6 +70,7 @@ steps:
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--update-env-vars=MIGRATIONS_AUTO_APPLY=false'
+      - '--no-cpu-throttling'
       - '--quiet'
 
 images:
