@@ -110,10 +110,14 @@ _OPTIONAL_RETRIEVAL_LLM_ERROR_TYPES = (AIRuntimeError, TimeoutError, asyncio.Tim
 
 _COURSE_DOCUMENT_EXTENSIONS_BY_TYPE = {
     "epub": {".epub"},
+    "fb2": {".fb2"},
     "image": {".jpeg", ".jpg", ".png"},
-    "md": {".md"},
+    "md": {".markdown", ".md"},
+    "mobi": {".mobi"},
     "pdf": {".pdf"},
+    "svg": {".svg"},
     "txt": {".txt"},
+    "xps": {".oxps", ".xps"},
 }
 
 
@@ -458,6 +462,39 @@ class RAGService:
         book.rag_status = RAG_STATUS_FAILED
         await session.flush()
 
+    async def _validate_book_file(self, book: Book) -> bool:
+        """Return True if the book has a valid, supported file. Set rag_status on failure."""
+        if not getattr(book, "file_path", None):
+            logger.warning("Book %s has no file path; marking as failed", book.id)
+            book.rag_status = RAG_STATUS_FAILED
+            return False
+
+        file_type = (book.file_type or "").lower()
+        if file_type not in {"pdf", "epub"}:
+            logger.warning("Book %s has unsupported file type '%s'; marking as failed", book.id, file_type)
+            book.rag_status = RAG_STATUS_FAILED
+            return False
+
+        return True
+
+    async def _download_book_bytes(self, book: Book) -> bytes:
+        storage = get_storage_provider(book.storage_provider)
+        return await storage.download(book.file_path)
+
+    async def _parse_book_to_text(self, book: Book, file_bytes: bytes) -> str:
+        file_type = (book.file_type or "").lower()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_type}") as temp_file:
+            temp_file.write(file_bytes)
+            temp_path = temp_file.name
+        try:
+            return await self.document_processor.process_document(temp_path)
+        finally:
+            temp_file_path = Path(temp_path)
+            try:
+                await run_in_threadpool(temp_file_path.unlink)
+            except OSError:
+                logger.warning("rag.book.temp_cleanup_failed", extra={"book_id": str(book.id)}, exc_info=True)
+
     async def process_book(self, session: AsyncSession, book_id: uuid.UUID) -> None:
         """Process a book (parse, chunk, embed, index) with unified RAG pipeline."""
         try:
@@ -467,10 +504,7 @@ class RAGService:
                 logger.warning("Book %s not found for processing", book_id)
                 return
 
-            # Validate file
-            if not getattr(book, "file_path", None):
-                logger.warning("Book %s has no file path; marking as failed", book_id)
-                book.rag_status = RAG_STATUS_FAILED
+            if not await self._validate_book_file(book):
                 await session.flush()
                 return
 
@@ -478,22 +512,8 @@ class RAGService:
             book.rag_status = RAG_STATUS_PROCESSING
             await session.flush()
 
-            # Download file
-            storage = get_storage_provider(book.storage_provider)
-            file_bytes = await storage.download(book.file_path)
-
-            # Parse via Unstructured using a secure temp file
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{(book.file_type or 'pdf').lower()}") as temp_file:
-                temp_file.write(file_bytes)
-                temp_path = temp_file.name
-            try:
-                text_content = await self.document_processor.process_document(temp_path)
-            finally:
-                temp_file_path = Path(temp_path)
-                try:
-                    await run_in_threadpool(temp_file_path.unlink)
-                except OSError:
-                    logger.warning("rag.book.temp_cleanup_failed", extra={"book_id": str(book_id)}, exc_info=True)
+            file_bytes = await self._download_book_bytes(book)
+            text_content = await self._parse_book_to_text(book, file_bytes)
 
             # Chunk
             chunks, per_chunk_metadata = await chunk_text_with_metadata_async(

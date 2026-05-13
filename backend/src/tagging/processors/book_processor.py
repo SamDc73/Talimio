@@ -11,11 +11,15 @@ import os
 from contextlib import redirect_stderr
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf
 
 from src.books.models import Book
 from src.storage.exceptions import StorageError
 from src.storage.factory import get_storage_provider
+
+
+pymupdf.TOOLS.mupdf_display_errors(on=False)
+pymupdf.TOOLS.mupdf_display_warnings(on=False)
 
 
 logger = logging.getLogger(__name__)
@@ -94,7 +98,7 @@ class BookProcessor:
 
         try:
             # Open PDF from bytes
-            pdf_document = fitz.open(stream=file_content, filetype="pdf")
+            pdf_document = pymupdf.open(stream=file_content, filetype="pdf")
 
             if pdf_document is None:
                 logger.warning("Failed to open PDF document")
@@ -147,7 +151,7 @@ class BookProcessor:
         try:
             # Open EPUB directly from bytes with PyMuPDF (suppress MuPDF CSS warnings)
             with redirect_stderr(Path(os.devnull).open("w", encoding="utf-8")):
-                epub_document = fitz.open(stream=file_content, filetype="epub")
+                epub_document = pymupdf.open(stream=file_content, filetype="epub")
 
             if epub_document is None:
                 logger.warning("Failed to open EPUB document")

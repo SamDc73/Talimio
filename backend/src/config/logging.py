@@ -287,8 +287,6 @@ def setup_logging(settings: Settings | None = None) -> None:
             "litellm": {"level": "WARNING", "handlers": ["console"], "propagate": False},
             "mem0": {"level": "WARNING", "handlers": ["console"], "propagate": False},
             "charset_normalizer": {"level": "WARNING", "handlers": ["console"], "propagate": False},
-            "unstructured": {"level": "WARNING", "handlers": ["console"], "propagate": False},
-            "unstructured.trace": {"level": "WARNING", "handlers": ["console"], "propagate": False},
         },
     }
 

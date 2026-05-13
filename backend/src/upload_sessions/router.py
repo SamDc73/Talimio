@@ -43,10 +43,10 @@ async def create_upload_session(
 ) -> UploadSessionResponse:
     """Create a provider-specific direct upload session."""
     file_extension = payload.filename.lower().split(".")[-1]
-    if file_extension not in {"pdf", "epub", "txt", "md", "docx"}:
+    if file_extension not in {"epub", "pdf"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported file type",
+            detail="Only PDF and EPUB files are supported",
         )
 
     storage_provider = get_default_storage_provider_name()

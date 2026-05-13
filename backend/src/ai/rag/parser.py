@@ -1,258 +1,66 @@
-"""Document parsing using Unstructured."""
+"""Document parsing for RAG ingestion."""
 
 from __future__ import annotations
 
-import re
-from collections.abc import Sequence
+import os
+from contextlib import redirect_stderr
 from pathlib import Path
 
+import pymupdf
 from fastapi.concurrency import run_in_threadpool
 
 from src.ai.rag.exceptions import RagUnavailableError
 
 
-_DEFAULT_LANGUAGES = ["eng"]
-_WHITESPACE_RE = re.compile(r"\s+")
-_CHAPTER_TITLE_RE = re.compile(r"^chapter\s+\d+\b", re.IGNORECASE)
-_NUMBERED_CHAPTER_RE = re.compile(r"^\d+\s+\S+")
-_CALLOUT_TITLES = {"note", "tip", "warning"}
-_PRIMARY_SECTION_TITLES = {"preface", "epilogue", "introduction"}
-_SKIPPED_SECTION_TITLES = {
-    "acknowledgments",
-    "contents",
-    "how to contact us",
-    "navigating this book",
-    "revision history for the first edition",
-    "table of contents",
-    "using code examples",
-}
-_TRAILING_SECTION_TITLES = {
-    "about the author",
-    "about the authors",
-    "colophon",
-    "index",
-}
-_JUNK_TEXT_PREFIXES = (
-    "copyright ",
-    "printed in ",
-    "published by ",
-    "see http://",
-    "see https://",
-    "the views expressed in this work",
-)
-_FAST_STRATEGY_EXTENSIONS = {".epub", ".md", ".txt"}
-_BODY_START_BRIDGE_CATEGORIES = {
-    "CodeSnippet",
-    "Formula",
-    "ListItem",
-    "Table",
-    "Title",
-    "UncategorizedText",
+pymupdf.TOOLS.mupdf_display_errors(on=False)
+pymupdf.TOOLS.mupdf_display_warnings(on=False)
+
+
+_DOCUMENT_FILE_TYPES_BY_EXTENSION = {
+    ".pdf": "pdf",
+    ".xps": "xps",
+    ".oxps": "xps",
+    ".epub": "epub",
+    ".mobi": "mobi",
+    ".fb2": "fb2",
+    ".svg": "svg",
+    ".txt": "txt",
+    ".md": "txt",
+    ".markdown": "txt",
 }
 
 
-def _partition_strategy_for_file(file_path: str) -> str:
-    """Choose the Unstructured partition strategy by file type."""
+def _file_type_for_path(file_path: str) -> str:
+    """Map supported file extensions to PyMuPDF file types."""
     suffix = Path(file_path).suffix.lower()
-    if suffix in _FAST_STRATEGY_EXTENSIONS:
-        return "fast"
-    if suffix == ".pdf":
-        return "hi_res"
-    return "auto"
+    file_type = _DOCUMENT_FILE_TYPES_BY_EXTENSION.get(suffix)
+    if file_type is None:
+        message = "Unsupported document type for RAG parsing"
+        raise RagUnavailableError(message)
+    return file_type
 
 
-def _normalize_text(text: str) -> str:
-    """Normalize parser element text without changing its meaning."""
-    return _WHITESPACE_RE.sub(" ", text).strip()
+def _extract_text_with_pymupdf(file_path: str) -> str:
+    """Extract selectable text from a document with PyMuPDF."""
+    file_type = _file_type_for_path(file_path)
 
-
-def _normalize_title(text: str) -> str:
-    """Normalize section titles for filtering decisions."""
-    return _normalize_text(text).casefold().replace("\u2019", "'")
-
-
-def _looks_like_junk_text(text: str) -> bool:
-    """Filter publisher metadata that harms retrieval more than it helps."""
-    normalized = _normalize_title(text)
-    if normalized == "[lsi]":
-        return True
-    if normalized.startswith(_JUNK_TEXT_PREFIXES):
-        return True
-    return bool(re.fullmatch(r"(?:97[89][- ]?)?[0-9][- 0-9]{8,}[0-9x]", normalized))
-
-
-def _looks_like_body_text(text: str) -> bool:
-    """Identify prose-like body text from loosely categorized parser output."""
-    if _looks_like_junk_text(text):
-        return False
-    if _looks_like_heading("UncategorizedText", text):
-        return False
-    words = _normalize_text(text).split()
-    if len(words) >= 5:
-        return True
-    return len(text) > 24 and text.endswith((".", "?", "!", ":"))
-
-
-def _extract_plain_text_from_rows(rows: Sequence[tuple[str, str]]) -> str:
-    """Return cleaned text when structural markers are absent or unreliable."""
-    blocks: list[str] = []
-    skip_section = False
-
-    for category, text in rows:
-        if not text:
-            continue
-
-        normalized_title = _normalize_title(text)
-        if _looks_like_heading(category, text):
-            if normalized_title in _TRAILING_SECTION_TITLES and blocks:
-                break
-            if normalized_title in _SKIPPED_SECTION_TITLES or (not blocks and normalized_title.startswith("praise for ")):
-                skip_section = True
-                continue
-            skip_section = False
-
-        if skip_section or _looks_like_junk_text(text):
-            continue
-
-        if category == "ListItem":
-            blocks.append(f"- {text}")
-        else:
-            blocks.append(text)
-
-    return "\n\n".join(blocks)
-
-
-def _heading_level(title: str) -> int:
-    """Pick a simple Markdown heading level from book section text."""
-    normalized = _normalize_title(title)
-    if _CHAPTER_TITLE_RE.match(title) or _NUMBERED_CHAPTER_RE.match(title) or normalized in _PRIMARY_SECTION_TITLES:
-        return 1
-    return 2
-
-
-def _looks_like_heading(category: str, text: str) -> bool:
-    """Detect headings from EPUBs that Unstructured labels as plain text."""
-    if category == "Title":
-        return True
-    if category != "UncategorizedText" or len(text) > 96:
-        return False
-
-    normalized = _normalize_title(text)
-    if normalized in _PRIMARY_SECTION_TITLES | _SKIPPED_SECTION_TITLES | _TRAILING_SECTION_TITLES | _CALLOUT_TITLES:
-        return True
-    if _NUMBERED_CHAPTER_RE.match(text):
-        return True
-    if text.endswith((".", ",", ";")):
-        return False
-    return text.isupper() or text.istitle()
-
-
-def _is_body_start_heading(rows: Sequence[tuple[str, str]], index: int, text: str) -> bool:
-    """Distinguish a real opening heading from a table-of-contents entry."""
-    normalized = _normalize_title(text)
-    is_opening_heading = (
-        bool(_CHAPTER_TITLE_RE.match(text))
-        or bool(_NUMBERED_CHAPTER_RE.match(text))
-        or normalized in _PRIMARY_SECTION_TITLES
-    )
-    if not is_opening_heading:
-        return False
-
-    for next_category, next_text in rows[index + 1 :]:
-        if not next_text:
-            continue
-        if next_category == "NarrativeText":
-            return True
-        if next_category == "UncategorizedText" and _looks_like_body_text(next_text):
-            return True
-
-        normalized_next_title = _normalize_title(next_text)
-        if (
-            normalized_next_title in _SKIPPED_SECTION_TITLES | _TRAILING_SECTION_TITLES
-            or _CHAPTER_TITLE_RE.match(next_text)
-            or _NUMBERED_CHAPTER_RE.match(next_text)
-            or next_category not in _BODY_START_BRIDGE_CATEGORIES
+    try:
+        with (
+            Path(os.devnull).open("w", encoding="utf-8") as devnull,
+            redirect_stderr(devnull),
+            pymupdf.open(file_path, filetype=file_type) as document,
         ):
-            return False
-    return False
-
-
-def _extract_structured_text_from_elements(elements: Sequence[object]) -> str:
-    """Convert Unstructured elements into Markdown-like book text."""
-    rows = [
-        (str(getattr(element, "category", type(element).__name__)), _normalize_text(str(element)))
-        for element in elements
-    ]
-    blocks: list[str] = []
-    skip_section = False
-    seen_body_start = False
-
-    for index, (category, text) in enumerate(rows):
-        if not text:
-            continue
-
-        if _looks_like_heading(category, text):
-            normalized_title = _normalize_title(text)
-            if seen_body_start and normalized_title in _TRAILING_SECTION_TITLES:
-                break
-            is_body_start = _is_body_start_heading(rows, index, text)
-            if not seen_body_start and not is_body_start:
-                skip_section = True
-                continue
-            if normalized_title in _SKIPPED_SECTION_TITLES:
-                skip_section = True
-                continue
-            if normalized_title in _CALLOUT_TITLES:
-                skip_section = False
-                blocks.append(f"**{text}.**")
-                continue
-
-            seen_body_start = True
-            skip_section = False
-            heading_prefix = "#" * _heading_level(text)
-            blocks.append(f"{heading_prefix} {text}")
-            continue
-
-        if skip_section or _looks_like_junk_text(text):
-            continue
-
-        if category == "ListItem":
-            blocks.append(f"- {text}")
-        else:
-            blocks.append(text)
-
-    structured_text = "\n\n".join(blocks)
-    if structured_text:
-        return structured_text
-    return _extract_plain_text_from_rows(rows)
-
-
-def _extract_text_with_unstructured(file_path: str) -> str:
-    """Extract structured text through Unstructured partitioning."""
-    try:
-        from unstructured.partition.auto import partition
-    except ImportError as error:
-        message = "RAG document parser is unavailable"
-        raise RagUnavailableError(message) from error
-
-    try:
-        elements = partition(
-            filename=file_path,
-            strategy=_partition_strategy_for_file(file_path),
-            languages=_DEFAULT_LANGUAGES,
-        )
-    except ImportError as error:
-        message = "RAG document parser dependencies are unavailable"
-        raise RagUnavailableError(message) from error
-    except OSError as error:
+            pages = [page.get_text("text", sort=True).strip() for page in document]
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
         message = "RAG document parser failed to read the source file"
         raise RagUnavailableError(message) from error
-    return _extract_structured_text_from_elements(elements)
+
+    return "\n\n".join(page_text for page_text in pages if page_text)
 
 
 class DocumentProcessor:
-    """Document processing using Unstructured partitioning."""
+    """Document text extraction for supported RAG files."""
 
     async def process_document(self, file_path: str) -> str:
         """Extract text from a document on disk."""
-        return await run_in_threadpool(_extract_text_with_unstructured, file_path)
+        return await run_in_threadpool(_extract_text_with_pymupdf, file_path)

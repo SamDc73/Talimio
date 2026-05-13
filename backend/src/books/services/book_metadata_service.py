@@ -1,8 +1,15 @@
 """Book metadata extraction utilities."""
 
 import logging
+import os
+from contextlib import redirect_stderr
+from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf
+
+
+pymupdf.TOOLS.mupdf_display_errors(on=False)
+pymupdf.TOOLS.mupdf_display_warnings(on=False)
 
 
 logger = logging.getLogger(__name__)
@@ -80,7 +87,7 @@ class BookMetadataService:
         metadata = BookMetadata(file_type="pdf")
 
         try:
-            with fitz.open(stream=file_content, filetype="pdf") as pdf_document:
+            with pymupdf.open(stream=file_content, filetype="pdf") as pdf_document:
                 metadata.total_pages = pdf_document.page_count
 
                 pdf_metadata = pdf_document.metadata
@@ -117,10 +124,11 @@ class BookMetadataService:
 
         try:
             # Open EPUB with PyMuPDF (suppress MuPDF CSS warnings)
-            import os
-            from contextlib import redirect_stderr
-
-            with redirect_stderr(open(os.devnull, "w", encoding="utf-8")), fitz.open(stream=file_content, filetype="epub") as epub_document:  # noqa: PTH123
+            with (
+                Path(os.devnull).open("w", encoding="utf-8") as devnull,
+                redirect_stderr(devnull),
+                pymupdf.open(stream=file_content, filetype="epub") as epub_document,
+            ):
                 # Get page count (EPUBs in PyMuPDF are treated as pages)
                 metadata.total_pages = epub_document.page_count
 
