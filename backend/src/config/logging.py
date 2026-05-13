@@ -215,6 +215,7 @@ def _build_shared_processors() -> list[Processor]:
     return [
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
+        structlog.stdlib.ExtraAdder(),
         structlog.processors.TimeStamper(fmt="iso", utc=True, key="timestamp"),
         _attach_request_context,
         _attach_access_log_context,

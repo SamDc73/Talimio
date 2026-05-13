@@ -3,10 +3,10 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
 
 import { fetchConceptFrontierByCourseId } from "@/api/courseApi"
-import { useCourseData } from "@/features/course/hooks/use-course-data"
-import { useOutlineData } from "@/features/course/hooks/use-outline-data"
+import { isDraftGeneratedCourse, useCourseData } from "@/features/course/hooks/use-course-data"
 
 const CourseContext = createContext(null)
+const EMPTY_MODULES = []
 
 export function CourseProvider({ children }) {
 	const { courseId: routeCourseId } = useParams()
@@ -14,7 +14,8 @@ export function CourseProvider({ children }) {
 
 	// Base course + outline data
 	const { course, isLoading: courseLoading } = useCourseData(courseId)
-	const { modules, isLoading: modulesLoading } = useOutlineData(courseId)
+	const modules = Array.isArray(course?.modules) ? course.modules : EMPTY_MODULES
+	const isGeneratingCourse = isDraftGeneratedCourse(course)
 
 	const isAdaptiveCourse = course?.adaptive_enabled === true || course?.adaptiveEnabled === true
 
@@ -43,10 +44,11 @@ export function CourseProvider({ children }) {
 		() => ({
 			courseId,
 			courseName: course?.title || "Course",
-			modules: Array.isArray(modules) ? modules : [],
+			modules,
 			adaptiveEnabled: isAdaptiveCourse,
 			adaptiveProgressPct: typeof adaptiveProgressPct === "number" ? adaptiveProgressPct : lastAdaptiveProgressPct,
-			isLoading: courseLoading || modulesLoading,
+			isLoading: courseLoading,
+			isGeneratingCourse,
 		}),
 		[
 			courseId,
@@ -56,7 +58,7 @@ export function CourseProvider({ children }) {
 			adaptiveProgressPct,
 			lastAdaptiveProgressPct,
 			courseLoading,
-			modulesLoading,
+			isGeneratingCourse,
 		]
 	)
 

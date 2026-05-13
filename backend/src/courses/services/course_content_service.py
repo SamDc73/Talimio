@@ -127,7 +127,16 @@ class CourseContentService:
                 user_id,
                 attachments,
                 linked_book_ids,
-                background_tasks=background_tasks,
+            )
+            logger.info(
+                "courses.generation.scheduled",
+                extra={
+                    "course_id": str(course_id),
+                    "user_id": str(user_id),
+                    "attachment_count": len(attachments or []),
+                    "book_count": len(linked_book_ids),
+                    "adaptive_enabled": is_adaptive,
+                },
             )
         else:
             await self._generate_course_background(
@@ -150,96 +159,142 @@ class CourseContentService:
         attachments: list[UploadFile] | None = None,
         book_ids: Sequence[uuid.UUID] | None = None,
         *,
-        background_tasks: BackgroundTasks | None = None,
         raise_errors: bool = False,
     ) -> None:
-        async with async_session_maker() as session:
-            try:
-                course = await session.get(Course, course_id)
-                if not course:
-                    return
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("courses.generation.background") as span:
+            async with async_session_maker() as session:
+                module_count = 0
+                lesson_count = 0
+                try:
+                    span.set_attribute("app.course_id", str(course_id))
+                    span.set_attribute("enduser.id", str(user_id))
 
-                session_data = dict(data)
-                is_adaptive = bool(session_data.get("adaptive_enabled"))
-                prompt_text = self._normalize_prompt_text(session_data.pop("prompt", None))
-                attachments = attachments or []
-                book_ids = list(book_ids or [])
+                    course = await session.get(Course, course_id)
+                    if not course:
+                        logger.warning("courses.generation.course_missing", extra={"course_id": str(course_id)})
+                        course_missing = True
+                        span.set_attribute("app.course_generation.course_missing", course_missing)
+                        return
 
-                if not attachments and not book_ids:
-                    prompt_payload = self._build_prompt_payload(prompt_text, [])
-                    adaptive_structure = await self._build_adaptive_structure(
-                        is_adaptive=is_adaptive,
-                        prompt=prompt_payload,
-                        prompt_text=prompt_text,
-                        session_data=session_data,
-                        user_id=user_id,
+                    session_data = dict(data)
+                    is_adaptive = bool(session_data.get("adaptive_enabled"))
+                    prompt_text = self._normalize_prompt_text(session_data.pop("prompt", None))
+                    attachments = attachments or []
+                    book_ids = list(book_ids or [])
+                    span.set_attribute("app.adaptive_enabled", is_adaptive)
+                    span.set_attribute("app.course_attachment_count", len(attachments))
+                    span.set_attribute("app.course_book_count", len(book_ids))
+
+                    logger.info(
+                        "courses.generation.started",
+                        extra={
+                            "course_id": str(course_id),
+                            "user_id": str(user_id),
+                            "attachment_count": len(attachments),
+                            "book_count": len(book_ids),
+                            "adaptive_enabled": is_adaptive,
+                        },
                     )
 
-                    modules_payload = self._sequence_payload(session_data.pop("modules", []))
-                    lessons_payload = self._sequence_payload(session_data.pop("lessons", []))
-
-                    _, _ = await self._persist_course_structure(
+                    module_count, lesson_count = await self._build_and_persist_generated_course(
                         session=session,
                         course=course,
                         session_data=session_data,
-                        adaptive_structure=adaptive_structure,
-                        modules_payload=modules_payload,
-                        lessons_payload=lessons_payload,
-                    )
-                    await session.commit()
-                else:
-                    rag_service = RAGService()
-                    attachment_result = await self._ingest_course_attachments(
-                        rag_service=rag_service,
-                        session=session,
+                        prompt_text=prompt_text,
+                        is_adaptive=is_adaptive,
                         user_id=user_id,
-                        course_id=course.id,
                         attachments=attachments,
                         book_ids=book_ids,
                     )
-                    augmented_prompt = await self._build_augmented_prompt(
-                        rag_service=rag_service,
-                        session=session,
-                        user_id=user_id,
-                        course_id=course.id,
-                        prompt_text=prompt_text,
-                        has_searchable_documents=attachment_result.has_searchable_documents,
-                    )
-                    prompt_payload = self._build_prompt_payload(augmented_prompt, attachment_result.image_data_urls)
-
-                    adaptive_structure = await self._build_adaptive_structure(
-                        is_adaptive=is_adaptive,
-                        prompt=prompt_payload,
-                        prompt_text=prompt_text,
-                        session_data=session_data,
-                        user_id=user_id,
-                    )
-
-                    modules_payload = self._sequence_payload(session_data.pop("modules", []))
-                    lessons_payload = self._sequence_payload(session_data.pop("lessons", []))
-
-                    _, _ = await self._persist_course_structure(
-                        session=session,
-                        course=course,
-                        session_data=session_data,
-                        adaptive_structure=adaptive_structure,
-                        modules_payload=modules_payload,
-                        lessons_payload=lessons_payload,
-                    )
                     await session.commit()
 
-                await session.refresh(course)
-                await self._handle_post_creation(
-                    session=session,
-                    course=course,
-                    user_id=user_id,
-                    background_tasks=background_tasks,
-                )
-                await session.commit()
-            except Exception:
-                logger.exception("Failed to generate course in background", extra={"course_id": str(course_id)})
-                if raise_errors:
-                    raise
+                    await session.refresh(course)
+                    await self._handle_post_creation(
+                        session=session,
+                        course=course,
+                        user_id=user_id,
+                        background_tasks=None,
+                    )
+                    await session.commit()
+                    span.set_attribute("app.course_module_count", module_count)
+                    span.set_attribute("app.course_lesson_count", lesson_count)
+                    logger.info(
+                        "courses.generation.completed",
+                        extra={
+                            "course_id": str(course_id),
+                            "user_id": str(user_id),
+                            "module_count": module_count,
+                            "lesson_count": lesson_count,
+                        },
+                    )
+                except Exception as error:
+                    span.record_exception(error)
+                    logger.exception(
+                        "courses.generation.failed",
+                        extra={
+                            "course_id": str(course_id),
+                            "user_id": str(user_id),
+                            "module_count": module_count,
+                            "lesson_count": lesson_count,
+                        },
+                    )
+                    if raise_errors:
+                        raise
+
+    async def _build_and_persist_generated_course(
+        self,
+        *,
+        session: AsyncSession,
+        course: Course,
+        session_data: MutableCoursePayload,
+        prompt_text: str,
+        is_adaptive: bool,
+        user_id: uuid.UUID,
+        attachments: list[UploadFile],
+        book_ids: Sequence[uuid.UUID],
+    ) -> tuple[int, int]:
+        if attachments or book_ids:
+            rag_service = RAGService()
+            attachment_result = await self._ingest_course_attachments(
+                rag_service=rag_service,
+                session=session,
+                user_id=user_id,
+                course_id=course.id,
+                attachments=attachments,
+                book_ids=book_ids,
+            )
+            prompt_text = await self._build_augmented_prompt(
+                rag_service=rag_service,
+                session=session,
+                user_id=user_id,
+                course_id=course.id,
+                prompt_text=prompt_text,
+                has_searchable_documents=attachment_result.has_searchable_documents,
+            )
+            image_data_urls = attachment_result.image_data_urls
+        else:
+            image_data_urls = []
+
+        prompt_payload = self._build_prompt_payload(prompt_text, image_data_urls)
+        adaptive_structure = await self._build_adaptive_structure(
+            is_adaptive=is_adaptive,
+            prompt=prompt_payload,
+            prompt_text=prompt_text,
+            session_data=session_data,
+            user_id=user_id,
+        )
+        modules_payload = self._sequence_payload(session_data.pop("modules", []))
+        lessons_payload = self._sequence_payload(session_data.pop("lessons", []))
+        normalized_modules, lesson_count = await self._persist_course_structure(
+            session=session,
+            course=course,
+            session_data=session_data,
+            adaptive_structure=adaptive_structure,
+            modules_payload=modules_payload,
+            lessons_payload=lessons_payload,
+        )
+        return len(normalized_modules), lesson_count
 
     def _build_draft_course(
         self,
@@ -424,7 +479,12 @@ class CourseContentService:
         session.add(document)
         await session.flush()
 
-        await self._ensure_book_chunks_available(rag_service=rag_service, session=session, book=book)
+        await self._ensure_book_chunks_available(
+            rag_service=rag_service,
+            session=session,
+            course_id=course_id,
+            book=book,
+        )
         copied_chunks = await self._copy_book_chunks_to_course_document(
             session=session,
             book=book,
@@ -440,6 +500,15 @@ class CourseContentService:
         document.processed_at = now
         document.embedded_at = now
         await session.flush()
+        logger.info(
+            "courses.generation.book_linked",
+            extra={
+                "course_id": str(course_id),
+                "book_id": str(book.id),
+                "course_document_id": document.id,
+                "chunk_count": copied_chunks,
+            },
+        )
 
     async def _get_owned_book(self, session: AsyncSession, user_id: uuid.UUID, book_id: uuid.UUID) -> Book:
         result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
@@ -454,16 +523,25 @@ class CourseContentService:
         *,
         rag_service: RAGService,
         session: AsyncSession,
+        course_id: uuid.UUID,
         book: Book,
     ) -> None:
         if book.rag_status == _BOOK_RAG_STATUS_COMPLETED:
             return
 
         if book.rag_status == _BOOK_RAG_STATUS_PROCESSING:
+            logger.warning(
+                "courses.generation.book_rag_busy",
+                extra={"course_id": str(course_id), "book_id": str(book.id), "rag_status": book.rag_status},
+            )
             msg = f"Book {book.id} is already processing RAG chunks"
             raise RuntimeError(msg)
 
         if book.rag_status != _BOOK_RAG_STATUS_COMPLETED:
+            logger.info(
+                "courses.generation.book_rag_started",
+                extra={"course_id": str(course_id), "book_id": str(book.id), "rag_status": book.rag_status},
+            )
             await rag_service.process_book(session, book.id)
             await session.refresh(book)
 
