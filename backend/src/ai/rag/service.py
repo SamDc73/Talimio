@@ -388,6 +388,8 @@ class RAGService:
             chunks, per_chunk_metadata = await chunk_text_with_metadata_async(
                 text_content,
                 document_title=str(doc_dict.get("title") or ""),
+                chunk_size=self.config.chunk_size,
+                chunk_overlap_ratio=self.config.chunk_overlap_ratio,
             )
             logger.info("Document %s chunked into %s pieces", document_id, len(chunks))
             if not self._has_valid_chunks(chunks):
@@ -519,6 +521,8 @@ class RAGService:
             chunks, per_chunk_metadata = await chunk_text_with_metadata_async(
                 text_content,
                 document_title=book.title or "",
+                chunk_size=self.config.chunk_size,
+                chunk_overlap_ratio=self.config.chunk_overlap_ratio,
             )
             if not self._has_valid_chunks(chunks):
                 await self._mark_book_failed_without_chunks(session, book, book_id)

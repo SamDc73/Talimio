@@ -11,7 +11,6 @@ from fastapi.concurrency import run_in_threadpool
 from src.ai.rag.exceptions import RagUnavailableError
 
 
-_CHUNK_SIZE = 400
 _CHUNK_OVERLAP_RATIO = 0.12
 _MIN_CHARS_PER_CHUNK = 120
 _CHONKIE_TOKENIZER = "cl100k_base"
@@ -81,7 +80,13 @@ def _add_chunk_context(text: str, document_title: str | None, metadata: dict[str
     return f"{context}\n\n{text.strip()}"
 
 
-def _chunk_text_with_metadata_sync(text: str, document_title: str | None) -> tuple[list[str], list[dict[str, object]]]:
+def _chunk_text_with_metadata_sync(
+    text: str,
+    document_title: str | None,
+    *,
+    chunk_size: int = 400,
+    chunk_overlap_ratio: float = 0.12,
+) -> tuple[list[str], list[dict[str, object]]]:
     """Chunk text and keep source-section metadata beside each chunk."""
     normalized_text = text.strip()
     if not normalized_text:
@@ -90,7 +95,7 @@ def _chunk_text_with_metadata_sync(text: str, document_title: str | None) -> tup
     heading_context = _collect_heading_context(normalized_text)
     chunker = RecursiveChunker(
         tokenizer=_CHONKIE_TOKENIZER,
-        chunk_size=_CHUNK_SIZE,
+        chunk_size=chunk_size,
         rules=_build_markdown_rules(),
         min_characters_per_chunk=_MIN_CHARS_PER_CHUNK,
     )
@@ -110,7 +115,7 @@ def _chunk_text_with_metadata_sync(text: str, document_title: str | None) -> tup
 
     overlap_refinery = OverlapRefinery(
         tokenizer=_CHONKIE_TOKENIZER,
-        context_size=_CHUNK_OVERLAP_RATIO,
+        context_size=chunk_overlap_ratio,
         method="prefix",
         merge=False,
     )
@@ -134,10 +139,18 @@ async def chunk_text_with_metadata_async(
     text: str,
     *,
     document_title: str | None = None,
+    chunk_size: int = 400,
+    chunk_overlap_ratio: float = 0.12,
 ) -> tuple[list[str], list[dict[str, object]]]:
     """Chunk text and return metadata aligned by chunk index."""
     try:
-        return await run_in_threadpool(_chunk_text_with_metadata_sync, text, document_title)
+        return await run_in_threadpool(
+            _chunk_text_with_metadata_sync,
+            text,
+            document_title,
+            chunk_size=chunk_size,
+            chunk_overlap_ratio=chunk_overlap_ratio,
+        )
     except OSError as error:
         message = "RAG text chunking failed"
         raise RagUnavailableError(message) from error

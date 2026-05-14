@@ -18,6 +18,8 @@ class RAGConfig:
     hnsw_ef_search: int
     rerank_model: str
     max_file_size_mb: int
+    chunk_size: int
+    chunk_overlap_ratio: float
 
 
 def get_rag_config(settings: Settings | None = None) -> RAGConfig:
@@ -33,4 +35,6 @@ def get_rag_config(settings: Settings | None = None) -> RAGConfig:
         hnsw_ef_search=resolved_settings.RAG_HNSW_EF_SEARCH,
         rerank_model=resolved_settings.RAG_RERANK_MODEL,
         max_file_size_mb=resolved_settings.RAG_MAX_FILE_SIZE_MB,
+        chunk_size=resolved_settings.RAG_CHUNK_SIZE,
+        chunk_overlap_ratio=resolved_settings.RAG_CHUNK_OVERLAP_RATIO,
     )

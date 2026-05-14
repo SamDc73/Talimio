@@ -121,6 +121,8 @@ class Settings(BaseSettings):
     RAG_EMBEDDING_MANUAL_RETRIES: int = 1
     RAG_EMBEDDING_RETRY_DELAY_SECONDS: float = 1.0
     RAG_EMBEDDING_BATCH_SIZE: int = 1
+    RAG_CHUNK_SIZE: int = 400
+    RAG_CHUNK_OVERLAP_RATIO: float = 0.12
     RAG_EMBEDDING_OUTPUT_DIM: int | None = None
     RAG_RERANK_MODEL: str = ""
     MEMORY_LLM_MODEL: str = ""
@@ -239,6 +241,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "RAG_EMBEDDING_BATCH_SIZE",
+        "RAG_CHUNK_SIZE",
         "RAG_HNSW_EF_SEARCH",
         "RAG_MAX_FILE_SIZE_MB",
     )
@@ -255,7 +258,16 @@ class Settings(BaseSettings):
     def validate_non_negative_rag_retries(cls, value: int) -> int:
         """Ensure manual embedding retries are not negative."""
         if value < 0:
-            msg = "RAG_EMBEDDING_MANUAL_RETRIES must be greater than or equal to zero"
+            msg = "Manual embedding retries cannot be negative"
+            raise ValueError(msg)
+        return value
+
+    @field_validator("RAG_CHUNK_OVERLAP_RATIO")
+    @classmethod
+    def validate_chunk_overlap_ratio(cls, value: float) -> float:
+        """Ensure chunk overlap ratio is between 0 and 1."""
+        if not 0 <= value <= 1:
+            msg = "RAG_CHUNK_OVERLAP_RATIO must be between 0 and 1"
             raise ValueError(msg)
         return value
 
