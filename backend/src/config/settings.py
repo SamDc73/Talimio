@@ -85,8 +85,9 @@ class Settings(BaseSettings):
     R2_REGION: str = "auto"
 
     # Google Cloud Storage Configuration (optional)
-    # On Cloud Run ADC is automatic; only need the bucket name to write to.
     GCS_BUCKET_NAME: str = ""
+    GCS_HMAC_ACCESS_KEY_ID: str = ""
+    GCS_HMAC_SECRET_KEY: str = ""
 
     # Adaptive Learning Configuration
     ADAPTIVE_SIMILARITY_THRESHOLD: float = 0.78  # Threshold for concept similarity detection

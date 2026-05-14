@@ -54,7 +54,14 @@ def get_storage_provider(provider_name: str | None = None) -> AbstractStorage:
         if not settings.GCS_BUCKET_NAME:
             msg = "GCS storage selected but GCS_BUCKET_NAME is empty"
             raise RuntimeError(msg)
-        return GCSStorage(bucket_name=settings.GCS_BUCKET_NAME)
+        if not settings.GCS_HMAC_ACCESS_KEY_ID or not settings.GCS_HMAC_SECRET_KEY:
+            msg = "GCS storage selected but GCS_HMAC_ACCESS_KEY_ID or GCS_HMAC_SECRET_KEY is empty"
+            raise RuntimeError(msg)
+        return GCSStorage(
+            bucket_name=settings.GCS_BUCKET_NAME,
+            hmac_access_key_id=settings.GCS_HMAC_ACCESS_KEY_ID,
+            hmac_secret_key=settings.GCS_HMAC_SECRET_KEY,
+        )
 
     msg = f"Unsupported storage provider: {provider}"
     raise RuntimeError(msg)
