@@ -156,22 +156,19 @@ def _get_cors_allow_origins(settings: Settings) -> list[str]:
 
 
 def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
-    """Register built-in middlewares."""
-    session_secret = get_session_signing_key()
+    """Register built-in middlewares.
+
+    CORS must be outermost so that responses returned by any inner
+    middleware (e.g. CSRF rejections) still carry CORS headers.
+    """
     csrf_secret = get_csrf_signing_key()
-    app.add_middleware(
-        cast("Any", CORSMiddleware),
-        allow_origins=_get_cors_allow_origins(settings),
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    app.add_middleware(cast("Any", GZipMiddleware), minimum_size=1000)
-    app.add_middleware(
-        cast("Any", SessionMiddleware),
-        secret_key=session_secret,
-        https_only=settings.ENVIRONMENT == "production",
-    )
+    session_secret = get_session_signing_key()
+
+    # Security headers closest to the browser
+    app.add_middleware(cast("Any", SimpleSecurityMiddleware))
+
+    # CSRF inside CORS but outside session so that CORS headers survive
+    # CSRF error responses.
     app.add_middleware(
         cast("Any", CSRFMiddlewareWithMaxAge),
         secret=csrf_secret,
@@ -182,7 +179,26 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
         cookie_domain=get_csrf_cookie_domain(settings.FRONTEND_URL),
         cookie_secure=settings.ENVIRONMENT == "production",
     )
-    app.add_middleware(cast("Any", SimpleSecurityMiddleware))
+
+    # Session after CSRF so request.session is available for app logic.
+    app.add_middleware(
+        cast("Any", SessionMiddleware),
+        secret_key=session_secret,
+        https_only=settings.ENVIRONMENT == "production",
+    )
+
+    # Gzip goes outside session/CSRF but inside CORS.
+    app.add_middleware(cast("Any", GZipMiddleware), minimum_size=1000)
+
+    # CORSMiddleware must wrap everything; reverse of execution is
+    # CORS → GZip → Session → CSRF → Security → App.
+    app.add_middleware(
+        cast("Any", CORSMiddleware),
+        allow_origins=_get_cors_allow_origins(settings),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 def _register_exception_handlers(app: FastAPI) -> None:
