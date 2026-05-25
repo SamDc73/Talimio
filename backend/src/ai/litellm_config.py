@@ -149,6 +149,10 @@ def configure_litellm() -> None:
     cast("Any", litellm)._async_client_cleanup_registered = True  # noqa: SLF001
     litellm.enable_json_schema_validation = True
     litellm.drop_params = True
+    # Retry each model once (2 attempts total) on transient errors before
+    # escalating to the next model in `fallbacks`. Catches single 429s without
+    # burning a fallback hop. Per-call num_retries still overrides this default.
+    litellm.num_retries = 1
     # LiteLLM exposes suppress_debug_info as Literal[False]; cast avoids false-positive type errors.
     cast("Any", litellm).suppress_debug_info = True
     asyncio_logger = logging.getLogger("asyncio")

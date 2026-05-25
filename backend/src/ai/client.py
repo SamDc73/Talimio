@@ -858,6 +858,12 @@ class LLMClient:
             completion_kwargs["messages"] = list(messages)
             if response_format is not None:
                 completion_kwargs["response_format"] = response_format
+            # When the caller did not pin a specific model, let LiteLLM fall back
+            # through the remaining configured primary models on failure.
+            # See: litellm.acompletion(..., fallbacks=[...]).
+            if model is None and len(settings.primary_llm_models) > 1:
+                completion_kwargs["fallbacks"] = settings.primary_llm_models[1:]
+
             response = await asyncio.wait_for(litellm.acompletion(**completion_kwargs), timeout=settings.ai_request_timeout)
             if not stream:
                 self._record_response_observability_fields(response, tool_names=tool_names)
