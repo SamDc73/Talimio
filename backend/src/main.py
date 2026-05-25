@@ -306,6 +306,7 @@ def create_app() -> FastAPI:
         version="0.1.0",
         debug=settings.DEBUG,
         lifespan=lifespan if settings.ENVIRONMENT != "test" else None,
+        redirect_slashes=False,
     )
 
     # Middleware
