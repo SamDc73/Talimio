@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ENVIRONMENT: str = "development"  # "development", "production"
     PLATFORM_MODE: Literal["cloud", "oss"] = "cloud"
-    AUTH_SECRET_KEY: SecretStr = SecretStr("")  # Required for JWT/session/CSRF signing
+    AUTH_SECRET_KEY: SecretStr = SecretStr("")  # Required for JWT/session signing
     MCP_TOKEN_ENCRYPTION_KEY: SecretStr | None = None
 
     # Server Configuration (used when running src/main.py directly)
@@ -317,6 +317,25 @@ class Settings(BaseSettings):
         if not auth_secret_key.get_secret_value().strip():
             msg = "AUTH_SECRET_KEY environment variable is required"
             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def apply_secure_cookie_defaults(self) -> Settings:
+        """Default to the ``__Host-`` cookie prefix in production.
+
+        The ``__Host-`` prefix is browser-enforced: the cookie is rejected
+        unless ``Secure`` is set, ``Path=/`` is set, and no ``Domain``
+        attribute is present (host-only). This structurally prevents the
+        duplicate-cookie scoping bug that motivated the CSRF removal.
+
+        Development keeps ``access_token`` because the dev server runs over
+        HTTP and ``__Host-`` cookies require ``Secure``.
+        """
+        if (
+            "AUTH_COOKIE_NAME" not in self.model_fields_set
+            and self.ENVIRONMENT == "production"
+        ):
+            self.AUTH_COOKIE_NAME = "__Host-access_token"
         return self
 
     @property

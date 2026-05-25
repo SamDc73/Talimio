@@ -2844,19 +2844,6 @@ wheels = [
 ]
 
 [[package]]
-name = "starlette-csrf"
-version = "3.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "itsdangerous" },
-    { name = "starlette" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/7c/53c57b4cd76c9a4493a8525d34a76d7e4bbe0ff957de1c53f30241aa757a/starlette_csrf-3.0.0.tar.gz", hash = "sha256:7afaca8c72cc3c726e5942778af53454607ca3e653fd86cd75ee35d8cd1cfa77", size = 8371, upload-time = "2023-06-27T13:23:24.387Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b9/83/6641e4fdcf33b1cc614a74ecabe5835236a1b2564bf6735db7e35d788795/starlette_csrf-3.0.0-py3-none-any.whl", hash = "sha256:aac29b366e83621d3fc56be690866e16f3c56df91ab5e184b77950540a4e2761", size = 6170, upload-time = "2023-06-27T13:23:25.563Z" },
-]
-
-[[package]]
 name = "storage3"
 version = "2.28.3"
 source = { registry = "https://pypi.org/simple" }
@@ -2996,7 +2983,6 @@ dependencies = [
     { name = "python-multipart" },
     { name = "slowapi" },
     { name = "sqlalchemy" },
-    { name = "starlette-csrf" },
     { name = "structlog" },
     { name = "supabase" },
     { name = "uvicorn" },
@@ -3051,7 +3037,6 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.5" },
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "starlette-csrf", specifier = ">=3.0.0" },
     { name = "structlog", specifier = ">=25.5.0" },
     { name = "supabase", specifier = ">=2.0.0" },
     { name = "uvicorn", specifier = ">=0.32.0" },

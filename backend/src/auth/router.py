@@ -21,7 +21,6 @@ from starlette.responses import RedirectResponse
 
 from src.auth import crud as local_crud
 from src.auth.context import CurrentAuth, validate_local_auth_state
-from src.auth.csrf import set_csrf_cookie
 from src.auth.dependencies import (
     CookieTokenOptional,
     decode_local_token_claims_optional,
@@ -286,7 +285,6 @@ async def get_auth_options(response: Response) -> AuthOptionsResponse:
     google_oauth_available = settings.AUTH_PROVIDER == "local" and bool(
         settings.GOOGLE_OAUTH_CLIENT_ID and google_client_secret
     )
-    set_csrf_cookie(response)
     response.headers["Cache-Control"] = "no-store"
     return AuthOptionsResponse(
         provider=settings.AUTH_PROVIDER,

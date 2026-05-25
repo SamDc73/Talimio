@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react"
 import { getApiUrl } from "@/lib/apiBase"
-import { CSRF_HEADER_NAME, getCsrfToken } from "@/lib/csrf"
 
 /**
  * Hook to handle video progress saving
@@ -49,7 +48,6 @@ export function useVideoProgressSaving({
 	useEffect(() => {
 		const handleBeforeUnload = () => {
 			if (currentTime > 0 && video && videoId) {
-				const csrfToken = getCsrfToken()
 				const data = JSON.stringify({
 					progress_percentage: duration > 0 ? Math.round((currentTime / duration) * 100) : 0,
 					metadata: {
@@ -60,13 +58,9 @@ export function useVideoProgressSaving({
 					},
 				})
 
-				const headers = { "Content-Type": "application/json" }
-				if (csrfToken) {
-					headers[CSRF_HEADER_NAME] = csrfToken
-				}
 				void fetch(getApiUrl(`/progress/${videoId}`), {
 					method: "PUT",
-					headers,
+					headers: { "Content-Type": "application/json" },
 					body: data,
 					credentials: "include",
 					keepalive: true,

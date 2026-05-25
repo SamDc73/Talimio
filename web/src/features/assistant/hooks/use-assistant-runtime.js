@@ -12,7 +12,6 @@ import { useChatSidebar } from "@/contexts/ChatSidebarContext"
 import { assistantApi } from "@/features/assistant/api/assistantApi"
 import { getAssistantToolRenderers } from "@/features/assistant/assistantToolRenderers"
 import { getApiUrl } from "@/lib/apiBase"
-import { getCsrfHeaders } from "@/lib/csrf"
 import logger from "@/lib/logger"
 import { useContextualChat } from "./use-contextual-chat"
 
@@ -192,11 +191,6 @@ const useAssistantDataStreamRuntime = () => {
 			.trim()
 	}, [])
 
-	const headers = useCallback(async () => {
-		// Keep the existing CSRF token stable during send so concurrent history writes and chat POST share the same token.
-		return getCsrfHeaders()
-	}, [])
-
 	const body = useCallback(async () => {
 		const { remoteId } = await aui.threadListItem().initialize()
 		const payload = {
@@ -218,11 +212,10 @@ const useAssistantDataStreamRuntime = () => {
 			() => ({
 				api: getApiUrl("/assistant/chat"),
 				credentials: "include",
-				headers,
 				body,
 				sendExtraMessageFields: true,
 			}),
-			[body, headers]
+			[body]
 		)
 	)
 }

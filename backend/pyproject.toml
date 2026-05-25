@@ -40,7 +40,6 @@ dependencies = [
     "e2b-code-interpreter>=2.0.0",
     "latex2sympy2-extended>=1.11.0",
     "mcp>=1.26.0",
-    "starlette-csrf>=3.0.0",
     "pwdlib[argon2]>=0.3.0",
     "httpx-oauth>=0.16.1",
     "deptry>=0.24.0",

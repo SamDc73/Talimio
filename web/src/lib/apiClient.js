@@ -1,5 +1,4 @@
 import { API_BASE, joinApiUrl } from "@/lib/apiBase"
-import { CSRF_HEADER_NAME, getCsrfHeaders, isCsrfVerificationFailure, SAFE_METHODS } from "@/lib/csrf"
 import logger from "@/lib/logger"
 
 // In-flight request cache for deduplication
@@ -100,44 +99,32 @@ const secureRequest = async (method, endpoint, data = null, options = {}) => {
 const executeRequest = async (method, endpoint, data = null, options = {}) => {
 	const { headers: optionHeaders, responseType, absoluteUrl, ...restOptions } = options
 
-	const makeRequest = async ({ forceRefreshCsrf = false } = {}) => {
-		const requestUrl = absoluteUrl ? endpoint : joinApiUrl(API_BASE, endpoint)
-		const headers = { ...optionHeaders }
-		const hasCsrfHeader = Object.keys(headers).some((key) => key.toLowerCase() === CSRF_HEADER_NAME)
-		if (!SAFE_METHODS.has(method) && !hasCsrfHeader) {
-			Object.assign(headers, await getCsrfHeaders({ forceRefresh: forceRefreshCsrf }))
-		}
-		const requestOptions = {
-			method,
-			headers,
-			credentials: "include", // Include httpOnly cookies
-			cache: method === "GET" ? "no-store" : undefined,
-			...restOptions,
-		}
+	const requestUrl = absoluteUrl ? endpoint : joinApiUrl(API_BASE, endpoint)
+	const headers = { ...optionHeaders }
+	const requestOptions = {
+		method,
+		headers,
+		credentials: "include", // Include httpOnly cookies
+		cache: method === "GET" ? "no-store" : undefined,
+		...restOptions,
+	}
 
-		if (data && method !== "GET") {
-			if (isFormData(data) || isBinaryBody(data)) {
-				requestOptions.body = data
-				delete requestOptions.headers["Content-Type"]
-				delete requestOptions.headers["content-type"]
-			} else if (typeof data === "string") {
-				requestOptions.body = data
-			} else {
-				requestOptions.body = JSON.stringify(data)
-				if (!requestOptions.headers["Content-Type"] && !requestOptions.headers["content-type"]) {
-					requestOptions.headers["Content-Type"] = "application/json"
-				}
+	if (data && method !== "GET") {
+		if (isFormData(data) || isBinaryBody(data)) {
+			requestOptions.body = data
+			delete requestOptions.headers["Content-Type"]
+			delete requestOptions.headers["content-type"]
+		} else if (typeof data === "string") {
+			requestOptions.body = data
+		} else {
+			requestOptions.body = JSON.stringify(data)
+			if (!requestOptions.headers["Content-Type"] && !requestOptions.headers["content-type"]) {
+				requestOptions.headers["Content-Type"] = "application/json"
 			}
 		}
-
-		return fetch(requestUrl, requestOptions)
 	}
 
-	let response = await makeRequest()
-	if (!SAFE_METHODS.has(method) && (await isCsrfVerificationFailure(response))) {
-		response = await makeRequest({ forceRefreshCsrf: true })
-	}
-
+	const response = await fetch(requestUrl, requestOptions)
 	return handleResponse(response, endpoint, responseType)
 }
 

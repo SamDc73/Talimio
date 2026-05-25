@@ -16,7 +16,6 @@ password_hash = PasswordHash((Argon2Hasher(),))
 ALGORITHM = "HS256"
 _JWT_KEY_PURPOSE = "jwt"
 _SESSION_KEY_PURPOSE = "session"
-_CSRF_KEY_PURPOSE = "csrf"
 
 
 def _derive_secret_key(secret_key: str, purpose: str) -> str:
@@ -34,12 +33,6 @@ def get_session_signing_key() -> str:
     """Return session middleware key derived from AUTH_SECRET_KEY."""
     secret_key = get_settings().AUTH_SECRET_KEY.get_secret_value()
     return _derive_secret_key(secret_key, _SESSION_KEY_PURPOSE)
-
-
-def get_csrf_signing_key() -> str:
-    """Return CSRF middleware key derived from AUTH_SECRET_KEY."""
-    secret_key = get_settings().AUTH_SECRET_KEY.get_secret_value()
-    return _derive_secret_key(secret_key, _CSRF_KEY_PURPOSE)
 
 
 def create_access_token(

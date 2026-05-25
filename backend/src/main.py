@@ -1,5 +1,4 @@
 import logging
-import re
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -24,9 +23,8 @@ from .ai.client import cleanup_ai_background_tasks
 from .ai.litellm_config import cleanup_litellm_async_clients
 from .ai.mcp.router import router as mcp_router
 from .ai.rag.router import router as rag_router
-from .auth.csrf import CSRFMiddlewareWithMaxAge, get_csrf_cookie_domain
 from .auth.router import router as auth_router
-from .auth.security import get_csrf_signing_key, get_session_signing_key
+from .auth.security import get_session_signing_key
 from .books.router import router as books_router
 
 # Setup logging - configure before any logger use
@@ -52,6 +50,7 @@ from .middleware.error_handlers import (
     handle_validation_errors,
     log_error_context,
 )
+from .middleware.origin_check import OriginProtectionMiddleware
 from .middleware.security import SimpleSecurityMiddleware
 from .observability import configure_observability
 from .observability.log_context import update_log_context
@@ -159,42 +158,36 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
     """Register built-in middlewares.
 
     CORS must be outermost so that responses returned by any inner
-    middleware (e.g. CSRF rejections) still carry CORS headers.
+    middleware (e.g. origin-check rejections) still carry CORS headers.
     """
-    csrf_secret = get_csrf_signing_key()
     session_secret = get_session_signing_key()
+    allowed_origins = _get_cors_allow_origins(settings)
 
     # Security headers closest to the browser
     app.add_middleware(cast("Any", SimpleSecurityMiddleware))
 
-    # CSRF inside CORS but outside session so that CORS headers survive
-    # CSRF error responses.
+    # Cross-origin protection inside CORS but outside session so that CORS
+    # headers survive 403 rejections.
     app.add_middleware(
-        cast("Any", CSRFMiddlewareWithMaxAge),
-        secret=csrf_secret,
-        exempt_urls=[
-            re.compile(r"^/api/v1/auth/(login|signup|forgot-password|reset-password|verify|resend-verification)$")
-        ],
-        sensitive_cookies={settings.AUTH_COOKIE_NAME},
-        cookie_domain=get_csrf_cookie_domain(settings.FRONTEND_URL),
-        cookie_secure=settings.ENVIRONMENT == "production",
+        cast("Any", OriginProtectionMiddleware),
+        allowed_origins=allowed_origins,
     )
 
-    # Session after CSRF so request.session is available for app logic.
+    # Session after origin-check so request.session is available for app logic.
     app.add_middleware(
         cast("Any", SessionMiddleware),
         secret_key=session_secret,
         https_only=settings.ENVIRONMENT == "production",
     )
 
-    # Gzip goes outside session/CSRF but inside CORS.
+    # Gzip goes outside session/origin-check but inside CORS.
     app.add_middleware(cast("Any", GZipMiddleware), minimum_size=1000)
 
     # CORSMiddleware must wrap everything; reverse of execution is
-    # CORS → GZip → Session → CSRF → Security → App.
+    # CORS → GZip → Session → OriginProtection → Security → App.
     app.add_middleware(
         cast("Any", CORSMiddleware),
-        allow_origins=_get_cors_allow_origins(settings),
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
