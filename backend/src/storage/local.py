@@ -8,6 +8,9 @@ from .base import AbstractStorage, StorageUploadSession
 from .exceptions import FileDeleteError, FileUploadError, StorageFileNotFoundError
 
 
+_LOCAL_UPLOAD_URL_PREFIX = "/api/v1/upload-sessions/local"
+
+
 class LocalStorage(AbstractStorage):
     """Local filesystem storage provider."""
 
@@ -106,7 +109,16 @@ class LocalStorage(AbstractStorage):
         content_type: str,
         content_length: int | None = None,
     ) -> StorageUploadSession:
-        """Local storage cannot accept browser-direct uploads."""
-        del key, content_type, content_length
-        msg = "Direct upload sessions are not supported for local storage"
-        raise FileUploadError(msg)
+        """Route self-hosted uploads through the backend's local-upload endpoint.
+
+        Local storage has no S3-style presigned URL surface, so we hand the
+        browser a same-origin URL that points at a small PUT receiver in the
+        upload-sessions router. The auth cookie travels with the same-origin
+        PUT, so the receiver can validate ownership before writing to disk.
+        """
+        del content_length
+        return StorageUploadSession(
+            upload_url=f"{_LOCAL_UPLOAD_URL_PREFIX}/{key}",
+            method="PUT",
+            headers={"Content-Type": content_type},
+        )
