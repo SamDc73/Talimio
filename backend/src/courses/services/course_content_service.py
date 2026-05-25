@@ -559,7 +559,10 @@ class CourseContentService:
         course_id: uuid.UUID,
         document_id: int,
     ) -> int:
-        course_doc_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
+        course_doc_id = uuid.uuid5(
+            uuid.NAMESPACE_DNS,
+            f"course_{course_id}_document_{document_id}",
+        )
         extra_metadata = {
             "course_id": str(course_id),
             "document_id": document_id,

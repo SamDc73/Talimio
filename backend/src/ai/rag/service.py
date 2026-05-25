@@ -672,7 +672,10 @@ class RAGService:
                 raise RagDocumentNotFoundError(document_id)
 
             # Determine deterministic UUID for course document
-            doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
+            doc_uuid = uuid.uuid5(
+                uuid.NAMESPACE_DNS,
+                f"course_{doc_info.course_id}_document_{document_id}",
+            )
 
             # Prepare chunks to ensure we don't call VectorRAG with empty content
             valid_chunk_count = sum(1 for chunk in chunks if chunk.strip())
@@ -1124,7 +1127,10 @@ class RAGService:
                 except OSError as e:
                     logger.warning("Failed to delete file %s: %s", doc.file_path, e)
 
-            doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
+            doc_uuid = uuid.uuid5(
+                uuid.NAMESPACE_DNS,
+                f"course_{doc.course_id}_document_{document_id}",
+            )
             chunks_result = await session.execute(
                 text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_uuid AND doc_type = 'course'"),
                 {"doc_uuid": str(doc_uuid)},
@@ -1178,7 +1184,7 @@ class RAGService:
         """
         Delete all RAG chunks for a specific document.
 
-        For courses: Uses uuid5(NAMESPACE_DNS, f"document_{document_id}")
+        For courses: Uses uuid5(NAMESPACE_DNS, f"course_{course_id}_document_{document_id}")
         For books: Uses the book_id directly as doc_id when RAG storage is enabled
 
         Returns the number of chunks deleted.
@@ -1195,8 +1201,17 @@ class RAGService:
                     {"doc_id": document_id, "doc_type": doc_type},
                 )
             else:
-                # For courses, compute the UUID
-                doc_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, f"document_{document_id}")
+                # For courses, compute the UUID from the course_documents row.
+                course_id = await session.scalar(
+                    text("SELECT course_id FROM course_documents WHERE id = :doc_id"),
+                    {"doc_id": document_id},
+                )
+                if not course_id:
+                    return 0
+                doc_uuid = uuid.uuid5(
+                    uuid.NAMESPACE_DNS,
+                    f"course_{course_id}_document_{document_id}",
+                )
                 result = await session.execute(
                     text("DELETE FROM rag_document_chunks WHERE doc_id = :doc_uuid AND doc_type = :doc_type"),
                     {"doc_uuid": doc_uuid, "doc_type": doc_type},
