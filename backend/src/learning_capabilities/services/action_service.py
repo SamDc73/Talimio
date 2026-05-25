@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.assistant.models import AssistantActiveProbe, AssistantConversation
 from src.ai.errors import AIRuntimeError
+from src.ai.models import GeneratedLesson
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.models import Course, LearningQuestion, Lesson
 from src.courses.schemas import (
@@ -21,6 +22,7 @@ from src.courses.schemas import (
     CourseResponse,
     PracticeDrillItem,
 )
+from src.courses.services.inline_question_materializer import InlineQuestionMaterializer
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.practice_drill_service import PracticeDrillService
 from src.exceptions import ConflictError
@@ -194,15 +196,21 @@ class LearningCapabilityActionService:
             course_id=payload.course_id,
             lesson_id=payload.lesson_id,
         )
-        generated_content = await self._generate_lesson_content(
+        generated = await self._generate_lesson_content(
             user_id=user_id,
             course=course,
             lesson=lesson,
             extra_context=payload.context,
             mode="append",
         )
+        materialized = await self._materialize_generated_lesson(
+            generated=generated,
+            user_id=user_id,
+            course=course,
+            lesson=lesson,
+        )
 
-        normalized_generated = generated_content.strip()
+        normalized_generated = materialized.strip()
         existing_content = (lesson.content or "").rstrip()
         lesson.content = f"{existing_content}\n\n---\n\n{normalized_generated}" if existing_content else normalized_generated
         lesson.updated_at = datetime.now(UTC)
@@ -245,15 +253,21 @@ class LearningCapabilityActionService:
             course_id=payload.course_id,
             lesson_id=payload.lesson_id,
         )
-        regenerated_content = await self._generate_lesson_content(
+        generated = await self._generate_lesson_content(
             user_id=user_id,
             course=course,
             lesson=lesson,
             extra_context=payload.context,
             mode="replace",
         )
+        materialized = await self._materialize_generated_lesson(
+            generated=generated,
+            user_id=user_id,
+            course=course,
+            lesson=lesson,
+        )
 
-        lesson.content = regenerated_content.strip()
+        lesson.content = materialized.strip()
         lesson.updated_at = datetime.now(UTC)
         await self._session.flush()
 
@@ -763,7 +777,7 @@ class LearningCapabilityActionService:
         lesson: Lesson,
         extra_context: str,
         mode: str,
-    ) -> str:
+    ) -> GeneratedLesson:
         context_text = extra_context.strip()
         if not context_text:
             detail = "Context is required for lesson mutation."
@@ -793,12 +807,30 @@ class LearningCapabilityActionService:
         from src.ai.client import LLMClient
 
         llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
-        generated = await llm_client.generate_lesson_content(
+        return await llm_client.generate_lesson_content(
             composed_context,
             user_id=user_id,
             function_tools=[build_wikipedia_resolver_function_tool()],
         )
-        return generated.body
+
+    async def _materialize_generated_lesson(
+        self,
+        *,
+        generated: GeneratedLesson,
+        user_id: uuid.UUID,
+        course: Course,
+        lesson: Lesson,
+    ) -> str:
+        """Persist inline questions for an action-driven mutation and return materialized content."""
+        materializer = InlineQuestionMaterializer(self._session)
+        return await materializer.materialize_generated_lesson(
+            generated=generated,
+            user_id=user_id,
+            course_id=course.id,
+            lesson_id=lesson.id,
+            concept_id=lesson.concept_id,
+            lesson_version_id=lesson.current_version_id,
+        )
 
 
 _OPEN_LESSON_LABEL = "Open lesson"

@@ -29,7 +29,7 @@ from src.ai.models import (
     AdaptiveCourseStructure,
     CourseStructure,
     ExecutionPlan,
-    LessonContent,
+    GeneratedLesson,
     SelfAssessmentQuiz,
 )
 from src.ai.prompts import (
@@ -1919,8 +1919,8 @@ class LLMClient:
         lesson_context: str,
         user_id: str | uuid.UUID | None = None,
         function_tools: list[FunctionToolDefinition] | None = None,
-    ) -> LessonContent:
-        """Generate a lesson body from a prepared LESSON_CONTEXT string."""
+    ) -> GeneratedLesson:
+        """Generate a lesson body and inline practice questions from a prepared LESSON_CONTEXT string."""
         context_text = lesson_context.strip()
         if not context_text:
             msg = "Lesson context must not be empty"
@@ -1934,18 +1934,21 @@ class LLMClient:
         ]
 
         try:
-            response_content = await self.get_completion(
+            result = await self.get_completion(
                 messages,
+                response_model=GeneratedLesson,
                 user_id=normalized_user_id,
                 function_tools=function_tools,
             )
-
-            content = response_content if isinstance(response_content, str) else str(response_content or "")
-            return LessonContent(body=content.strip())
         except _GENERATION_WRAPPER_ERROR_TYPES as error:
             self._logger.exception("Error generating lesson content")
             msg = "Failed to generate lesson content"
             raise RuntimeError(msg) from error
+
+        if not isinstance(result, GeneratedLesson):
+            msg = "Expected GeneratedLesson from structured output"
+            raise TypeError(msg)
+        return result
 
     async def generate_execution_plan(
         self,

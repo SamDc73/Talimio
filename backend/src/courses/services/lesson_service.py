@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
+from src.ai.models import GeneratedLesson
 from src.ai.rag.exceptions import RagUnavailableError, RagValidationError
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.models import (
@@ -38,6 +39,7 @@ from src.courses.schemas import (
     LessonWindowResponse,
 )
 from src.courses.services.concept_scheduler_service import AdaptivePassRecommendation, LectorSchedulerService
+from src.courses.services.inline_question_materializer import InlineQuestionMaterializer
 from src.courses.services.lesson_version_service import LessonVersionService
 from src.courses.services.lesson_window_service import LessonWindowService
 from src.exceptions import ConflictError, NotFoundError, UpstreamUnavailableError, ValidationError
@@ -718,12 +720,18 @@ class LessonService:
             current_version=current_version,
             recommendation=generation_recommendation,
         )
-        generated_content = await self._generate_lesson_body(lesson_context=lesson_context)
+        generated = await self._generate_lesson_body(lesson_context=lesson_context)
         selected_version = await lesson_version_service.create_adaptive_pass_version(
             lesson=lesson,
-            content=generated_content,
+            content=generated.content,
             source_version=current_version,
             source_reason=source_reason,
+        )
+        await self._materialize_and_persist_inline_questions(
+            generated=generated,
+            lesson=lesson,
+            course=course,
+            version=selected_version,
         )
         selected_windows = await lesson_window_service.rebuild_windows(lesson_version=selected_version)
         return selected_version, selected_windows
@@ -894,14 +902,38 @@ class LessonService:
             adaptive_recommendation=recommendation,
         )
 
-    async def _generate_lesson_body(self, *, lesson_context: str) -> str:
+    async def _generate_lesson_body(self, *, lesson_context: str) -> GeneratedLesson:
         llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
-        lesson_content = await llm_client.generate_lesson_content(
+        return await llm_client.generate_lesson_content(
             lesson_context,
             user_id=self.user_id,
             function_tools=[build_wikipedia_resolver_function_tool()],
         )
-        return lesson_content.body
+
+    async def _materialize_and_persist_inline_questions(
+        self,
+        *,
+        generated: GeneratedLesson,
+        lesson: Lesson,
+        course: Course,
+        version: LessonVersion,
+    ) -> None:
+        """Persist inline questions and rewrite the version+lesson content with question IDs."""
+        materializer = InlineQuestionMaterializer(self.session)
+        materialized = await materializer.materialize_generated_lesson(
+            generated=generated,
+            user_id=self.user_id,
+            course_id=course.id,
+            lesson_id=lesson.id,
+            concept_id=lesson.concept_id,
+            lesson_version_id=version.id,
+        )
+        if materialized == generated.content:
+            return
+        version.content = materialized
+        lesson.content = materialized
+        lesson.updated_at = datetime.now(UTC)
+        await self.session.flush()
 
     def _build_version_summaries(
         self,
@@ -1196,11 +1228,17 @@ class LessonService:
                 current_version=current_version,
                 critique_text=trimmed_critique,
             )
-            generated_content = await self._generate_lesson_body(lesson_context=lesson_context)
+            generated = await self._generate_lesson_body(lesson_context=lesson_context)
             selected_version = await lesson_version_service.create_regenerated_version(
                 lesson=lesson,
-                content=generated_content,
+                content=generated.content,
                 critique_text=trimmed_critique,
+            )
+            await self._materialize_and_persist_inline_questions(
+                generated=generated,
+                lesson=lesson,
+                course=course,
+                version=selected_version,
             )
             feedback_event = LessonFeedbackEvent(
                 course_id=course.id,
@@ -1256,16 +1294,22 @@ class LessonService:
                 course=course,
                 generation_mode="first_pass",
             )
-            content = await self._generate_lesson_body(lesson_context=lesson_context)
+            generated = await self._generate_lesson_body(lesson_context=lesson_context)
             lesson_version_service = LessonVersionService(self.session)
-            await lesson_version_service.create_initial_version(lesson=lesson, content=content)
+            new_version = await lesson_version_service.create_initial_version(lesson=lesson, content=generated.content)
+            await self._materialize_and_persist_inline_questions(
+                generated=generated,
+                lesson=lesson,
+                course=course,
+                version=new_version,
+            )
             await self.session.refresh(lesson)
             logger.info(
                 "Lesson content generated and saved",
                 extra={
                     "user_id": str(self.user_id),
                     "lesson_id": str(lesson.id),
-                    "content_length": len(content) if content else 0,
+                    "content_length": len(lesson.content) if lesson.content else 0,
                 },
             )
 

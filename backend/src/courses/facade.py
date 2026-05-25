@@ -65,7 +65,6 @@ from .services.course_progress_service import CourseProgressService
 from .services.course_query_service import CourseQueryService
 from .services.frontier_builder import build_course_frontier
 from .services.grading_service import GradingService
-from .services.inline_question_materializer import InlineQuestionMaterializer
 from .services.lesson_service import LessonService
 from .services.practice_drill_service import PracticeDrillService
 
@@ -441,14 +440,12 @@ class CoursesFacade:  # noqa: PLR0904
     ) -> LessonDetailResponse:
         """Get a lesson detail payload for an owned course."""
         lesson_service = LessonService(self._session, user_id)
-        lesson = await lesson_service.get_lesson(
+        return await lesson_service.get_lesson(
             course_id,
             lesson_id,
             force_refresh=generate,
             version_id=version_id,
         )
-        materializer = InlineQuestionMaterializer(self._session)
-        return await materializer.materialize_lesson_response(lesson=lesson, user_id=user_id, course_id=course_id)
 
     async def list_lesson_versions(
         self,
@@ -502,13 +499,11 @@ class CoursesFacade:  # noqa: PLR0904
         lesson_service = LessonService(self._session, user_id)
 
         try:
-            lesson = await lesson_service.start_next_pass(
+            return await lesson_service.start_next_pass(
                 course_id=course_id,
                 lesson_id=lesson_id,
                 force=force,
             )
-            materializer = InlineQuestionMaterializer(self._session)
-            return await materializer.materialize_lesson_response(lesson=lesson, user_id=user_id, course_id=course_id)
         except DomainError:
             raise
         except (SQLAlchemyError, RuntimeError, TypeError, ValueError) as error:

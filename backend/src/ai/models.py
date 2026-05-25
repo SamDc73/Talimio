@@ -1,9 +1,10 @@
 """Pydantic models for AI-related data structures."""
 
 import json
+import re
 from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationInfo, field_validator, model_validator
 
 
 def _normalize_slug_text(value: object) -> str:
@@ -639,12 +640,113 @@ class SelfAssessmentQuiz(BaseModel):
         return filtered
 
 
-class LessonContent(BaseModel):
-    """Model for lesson content returned by AI."""
+SupportedInlineComponent = Literal["LatexExpression", "FreeForm", "JXGBoard"]
+InlineGradeKind = Literal["latex_expression", "jxg_state", "practice_answer"]
 
-    body: str = Field(description="The full lesson content in Markdown format")
+_PLACEHOLDER_PATTERN = re.compile(r"^__Q[A-Za-z0-9_]+__$")
+_QUESTION_ID_REFERENCE = re.compile(r'questionId\s*=\s*"(__Q[A-Za-z0-9_]+__)"')
+_FORBIDDEN_CONTENT_ATTRS = (
+    "expectedAnswer=",
+    "expectedLatex=",
+    "expectedState=",
+    "sampleAnswer=",
+    "solutionLatex=",
+    "tolerance=",
+    "perCheckTolerance=",
+)
+
+
+class GeneratedInlineQuestion(BaseModel):
+    """One inline practice question generated alongside lesson content.
+
+    The lesson body references this question via a ``questionId="<placeholder>"`` attribute
+    on a supported MDX component. The server materializes the question into a
+    ``LearningQuestion`` row and rewrites the placeholder to the row's UUID before sending
+    the lesson to the client. Answer data never leaves the server.
+    """
+
+    placeholder: str = Field(description='Placeholder used in content, e.g. "__Q0__"')
+    component: SupportedInlineComponent = Field(description="MDX component name used in content")
+    question: str = Field(description="Question prompt text")
+    hints: list[str] = Field(default_factory=list, description="Ordered hint strings")
+    practice_context: str = Field(default="inline", description="Practice context label")
+    grade_kind: InlineGradeKind = Field(description="Grading strategy applied to attempts")
+    answer_kind: str | None = Field(default=None, description='Answer format, e.g. "text" or "latex"')
+    expected_answer: str | None = Field(default=None, description="Expected text answer (latex or plain)")
+    expected_payload: dict[str, JsonValue] = Field(
+        default_factory=dict,
+        description="Structured expected data for graders (e.g. expectedLatex, expectedState, criteria)",
+    )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_per_component(self) -> "GeneratedInlineQuestion":
+        if not _PLACEHOLDER_PATTERN.match(self.placeholder):
+            msg = f'placeholder must match "__Q<id>__", got {self.placeholder!r}'
+            raise ValueError(msg)
+        if self.component == "LatexExpression":
+            if self.grade_kind != "latex_expression":
+                msg = "LatexExpression requires grade_kind='latex_expression'"
+                raise ValueError(msg)
+            if not self.expected_answer or self.answer_kind != "latex":
+                msg = "LatexExpression requires expected_answer (latex) and answer_kind='latex'"
+                raise ValueError(msg)
+        elif self.component == "JXGBoard":
+            if self.grade_kind != "jxg_state":
+                msg = "JXGBoard requires grade_kind='jxg_state'"
+                raise ValueError(msg)
+            if not self.expected_payload.get("expectedState"):
+                msg = "JXGBoard requires expected_payload['expectedState']"
+                raise ValueError(msg)
+        elif self.component == "FreeForm":
+            if self.grade_kind != "practice_answer":
+                msg = "FreeForm requires grade_kind='practice_answer'"
+                raise ValueError(msg)
+            if not self.expected_answer:
+                msg = "FreeForm requires expected_answer"
+                raise ValueError(msg)
+        return self
+
+
+class GeneratedLesson(BaseModel):
+    """Lesson body plus inline practice questions returned by the LLM.
+
+    ``content`` is Markdown/MDX. Supported inline practice components reference a question
+    via ``questionId="__Q<id>__"`` placeholders. Each placeholder must have a matching
+    ``GeneratedInlineQuestion`` in ``inline_questions``. Forbidden answer attributes are
+    rejected to prevent leaking grading data to the client.
+    """
+
+    content: str = Field(description="Lesson body in Markdown/MDX with questionId placeholders")
+    inline_questions: list[GeneratedInlineQuestion] = Field(
+        default_factory=list,
+        description="Server-owned practice questions referenced by placeholder in content",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _validate_placeholders_consistent(self) -> "GeneratedLesson":
+        declared = [question.placeholder for question in self.inline_questions]
+        if len(set(declared)) != len(declared):
+            msg = "inline_questions placeholders must be unique"
+            raise ValueError(msg)
+        referenced = set(_QUESTION_ID_REFERENCE.findall(self.content))
+        declared_set = set(declared)
+        missing = sorted(referenced - declared_set)
+        if missing:
+            msg = f"content references placeholders not declared in inline_questions: {missing}"
+            raise ValueError(msg)
+        orphaned = sorted(declared_set - referenced)
+        if orphaned:
+            msg = f"inline_questions declared but not referenced in content: {orphaned}"
+            raise ValueError(msg)
+        for forbidden in _FORBIDDEN_CONTENT_ATTRS:
+            if forbidden in self.content:
+                msg = f"lesson content must not contain {forbidden!r}; place it in inline_questions"
+                raise ValueError(msg)
+        return self
 
 
 class ExecutionFile(BaseModel):

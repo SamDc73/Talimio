@@ -102,9 +102,9 @@ def _attach_request_context(
     context = get_log_context()
     for field_name in _CONTEXT_EVENT_FIELDS:
         current_value = event_dict.get(field_name)
-        if current_value in {None, ""}:
+        if current_value in (None, ""):
             context_value = context.get(field_name)
-            if context_value not in {None, ""}:
+            if context_value not in (None, ""):
                 event_dict[field_name] = context_value
     return event_dict
 
@@ -124,11 +124,11 @@ def _attach_access_log_context(
 
     args = cast("tuple[object, ...]", raw_args)
     route = event_dict.get("route") or str(args[2])
-    if event_dict.get("route") in {None, ""}:
+    if event_dict.get("route") in (None, ""):
         event_dict["route"] = route
-    if event_dict.get("status_code") in {None, ""}:
+    if event_dict.get("status_code") in (None, ""):
         event_dict["status_code"] = args[4]
-    if event_dict.get("feature_area") in {None, ""}:
+    if event_dict.get("feature_area") in (None, ""):
         event_dict["feature_area"] = get_feature_area(str(route))
     return event_dict
 
@@ -138,7 +138,7 @@ def _attach_trace_context(
     _method_name: str,
     event_dict: ProcessorEventDict,
 ) -> ProcessorEventDict:
-    if event_dict.get("trace_id") not in {None, ""} and event_dict.get("span_id") not in {None, ""}:
+    if event_dict.get("trace_id") not in (None, "") and event_dict.get("span_id") not in (None, ""):
         return event_dict
 
     current_span = trace.get_current_span()
@@ -167,14 +167,14 @@ def _normalize_event_contract(
     message = "" if raw_message is None else str(raw_message)
 
     explicit_event_name = event_dict.pop("event_name", None)
-    if explicit_event_name in {None, ""} and isinstance(record, logging.LogRecord):
+    if explicit_event_name in (None, "") and isinstance(record, logging.LogRecord):
         explicit_event_name = getattr(record, "event", None)
-    if explicit_event_name in {None, ""} and message and _is_message_event_name(message):
+    if explicit_event_name in (None, "") and message and _is_message_event_name(message):
         explicit_event_name = message
 
     fallback_event_name = "http_access" if logger_name == _UVICORN_ACCESS_LOGGER_NAME else str(logger_name or "app")
     normalized_event = _normalize_event_name(
-        explicit_event_name if explicit_event_name not in {None, ""} else fallback_event_name,
+        explicit_event_name if explicit_event_name not in (None, "") else fallback_event_name,
         fallback=fallback_event_name,
     )
 
@@ -189,7 +189,7 @@ def _normalize_event_contract(
         event_dict["level"] = level.upper()
 
     route = event_dict.get("route")
-    if route not in {None, ""} and event_dict.get("feature_area") in {None, ""}:
+    if route not in (None, "") and event_dict.get("feature_area") in (None, ""):
         event_dict["feature_area"] = get_feature_area(str(route))
 
     return event_dict
@@ -203,7 +203,7 @@ def _render_json(
     payload = {
         key: value
         for key, value in event_dict.items()
-        if key not in _PROCESSOR_INTERNAL_FIELDS and (key == "route" or value not in {None, ""})
+        if key not in _PROCESSOR_INTERNAL_FIELDS and (key == "route" or value not in (None, ""))
     }
     rendered = _JSON_RENDERER(_logger, _method_name, payload)
     if isinstance(rendered, bytes):
