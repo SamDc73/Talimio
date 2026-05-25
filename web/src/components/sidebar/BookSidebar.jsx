@@ -337,7 +337,7 @@ function BookSidebar({
 		<SidebarContainer>
 			<ProgressIndicator progress={overallProgress} variant="book" suffix="Read">
 				<span className="text-xs text-muted-foreground">
-					{book.totalPages ? `Page 1 of ${book.totalPages}` : "Page 1"}
+					{book.totalPages ? `Page ${currentPage} of ${book.totalPages}` : `Page ${currentPage}`}
 				</span>
 			</ProgressIndicator>
 

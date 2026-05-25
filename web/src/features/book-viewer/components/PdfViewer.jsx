@@ -284,7 +284,16 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		const fetchPdf = async () => {
 			try {
 				setLoadError(null)
-				const blob = await apiClient.blob(url, { absoluteUrl: true })
+				// Use raw() so we can validate the Content-Type before handing the blob to PDFium.
+				// Without this guard, a 200 OK that returns HTML/JSON (e.g. an auth redirect)
+				// would silently produce a blob that PDFium fails to decode -> blank viewport.
+				const response = await apiClient.raw(url, { absoluteUrl: true })
+				if (cancelled) return
+				const contentType = response.headers.get("content-type") || ""
+				if (!contentType.toLowerCase().includes("application/pdf")) {
+					throw new Error(`Server returned ${contentType || "unknown content"} instead of a PDF`)
+				}
+				const blob = await response.blob()
 				if (cancelled) return
 				if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
 				const blobUrl = URL.createObjectURL(blob)

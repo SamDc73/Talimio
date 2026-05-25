@@ -63,10 +63,16 @@ async def list_books(
 async def get_book(
     book_id: uuid.UUID,
     auth: CurrentAuth,
+    background_tasks: BackgroundTasks,
     facade: Annotated[BooksFacade, Depends(get_books_facade)],
 ) -> BookWithProgress:
-    """Get book details with progress information."""
-    return await facade.get_book(book_id, auth.user_id)
+    """Get book details with progress information.
+
+    Triggers a one-shot metadata backfill (page count + TOC) for books that
+    were uploaded before metadata extraction was wired in; the extraction is
+    idempotent so concurrent GETs are safe.
+    """
+    return await facade.get_book(book_id, auth.user_id, background_tasks=background_tasks)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

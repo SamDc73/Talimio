@@ -28,7 +28,7 @@ from src.exceptions import ConflictError, DomainError, ErrorCategory, ErrorCode,
 from src.storage.factory import get_storage_provider
 
 from .services.book_content_service import BookContentService
-from .services.book_metadata_service import BookMetadata
+from .services.book_metadata_service import BookMetadata, BookMetadataExtractionError, BookMetadataService
 from .services.book_progress_service import BookProgressService
 from .services.book_response_builder import BookResponseBuilder
 
@@ -150,10 +150,22 @@ class BooksFacade:
             "completion_percentage": (progress or {}).get("completion_percentage", 0),
         }
 
-    async def get_book(self, book_id: uuid.UUID, user_id: uuid.UUID) -> BookWithProgress:
-        """Get a single book with progress as a typed response."""
+    async def get_book(
+        self,
+        book_id: uuid.UUID,
+        user_id: uuid.UUID,
+        background_tasks: BackgroundTasks | None = None,
+    ) -> BookWithProgress:
+        """Get a single book with progress as a typed response.
+
+        When ``background_tasks`` is provided and the book has no ``total_pages``,
+        schedule a one-shot metadata extraction so legacy books (uploaded before
+        commit ``fe92e20``) self-heal on the next view.
+        """
         try:
             book = await self._require_owned_book(book_id=book_id, user_id=user_id, operation="get_book")
+            if background_tasks is not None and not book.total_pages and book.file_path:
+                background_tasks.add_task(self.extract_book_metadata_background, book_id)
             progress_payload = await self._progress_service.get_progress(book_id, user_id)
             progress = BookResponseBuilder.build_progress_response(progress_payload, book_id) if progress_payload else None
             return BookResponseBuilder.build_book_with_progress(book, progress)
@@ -215,6 +227,72 @@ class BooksFacade:
                 except SQLAlchemyError:
                     logger.debug("Failed to commit failed RAG status for book %s", book_id, exc_info=True)
                 logger.exception("Failed to embed book %s", book_id)
+
+    async def extract_book_metadata_background(self, book_id: uuid.UUID) -> None:
+        """Download the uploaded file once and persist page count + table of contents.
+
+        Runs in a dedicated short-lived session so request transactions stay short.
+        Uses the single ``storage.download(key)`` primitive that all providers
+        implement (local/R2/GCS), so the same code path works identically across
+        every backend with zero branching.
+
+        Idempotent: only fills empty fields, so re-scheduling on a book that
+        already has metadata is a no-op and re-running after partial failure is safe.
+        """
+        async with async_session_maker() as session:
+            book = await session.get(Book, book_id)
+            if book is None or not book.file_path:
+                return
+
+            storage = get_storage_provider(book.storage_provider)
+            try:
+                content = await storage.download(book.file_path)
+            except (OSError, RuntimeError, ValueError):
+                logger.exception("books.metadata.download_failed", extra={"book_id": str(book_id)})
+                return
+
+            if not content:
+                logger.warning("books.metadata.empty_content", extra={"book_id": str(book_id)})
+                return
+
+            try:
+                metadata = BookMetadataService().extract_metadata(content, f".{book.file_type}")
+            except BookMetadataExtractionError:
+                logger.exception("books.metadata.extract_failed", extra={"book_id": str(book_id)})
+                return
+
+            updated = False
+            if metadata.total_pages and not book.total_pages:
+                book.total_pages = metadata.total_pages
+                updated = True
+            if metadata.table_of_contents and not book.table_of_contents:
+                book.table_of_contents = json.dumps(metadata.table_of_contents)
+                updated = True
+            if metadata.publication_year and not book.publication_year:
+                book.publication_year = metadata.publication_year
+                updated = True
+            if metadata.language and not book.language:
+                book.language = metadata.language
+                updated = True
+            if metadata.isbn and not book.isbn:
+                book.isbn = metadata.isbn
+                updated = True
+
+            if not updated:
+                return
+
+            try:
+                await session.commit()
+                logger.info(
+                    "books.metadata.extracted",
+                    extra={
+                        "book_id": str(book_id),
+                        "total_pages": book.total_pages,
+                        "toc_entries": len(metadata.table_of_contents or []),
+                    },
+                )
+            except SQLAlchemyError:
+                logger.exception("books.metadata.commit_failed", extra={"book_id": str(book_id)})
 
     async def auto_tag_book_background(self, book_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Generate and persist tags for a book in a dedicated background session."""
