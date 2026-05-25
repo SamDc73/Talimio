@@ -272,6 +272,7 @@ class CourseContentService:
                 prompt_text=prompt_text,
                 has_searchable_documents=attachment_result.has_searchable_documents,
                 image_count=len(attachment_result.image_data_urls),
+                has_linked_books=bool(book_ids),
             )
             image_data_urls = attachment_result.image_data_urls
         else:
@@ -612,6 +613,7 @@ class CourseContentService:
         prompt_text: str,
         has_searchable_documents: bool,
         image_count: int = 0,
+        has_linked_books: bool = False,
     ) -> str:
         """Append RAG context to the prompt when available and useful.
 
@@ -625,7 +627,7 @@ class CourseContentService:
         if not has_searchable_documents:
             return prompt_text
 
-        if not self._rag_useful_for_course_generation(prompt_text, image_count):
+        if not self._rag_useful_for_course_generation(prompt_text, image_count, has_linked_books):
             logger.info(
                 "courses.generation.rag_skipped",
                 extra={
@@ -659,7 +661,7 @@ class CourseContentService:
         context_block = "\n\nReference Context:\n" + "\n\n".join(chunks)
         return f"{prompt_text}{context_block}"
 
-    def _rag_useful_for_course_generation(self, prompt_text: str, image_count: int) -> bool:
+    def _rag_useful_for_course_generation(self, prompt_text: str, image_count: int, has_linked_books: bool = False) -> bool:
         """Return False when the user already provided a syllabus image.
 
         When a user uploads an image of a course syllabus, textbook table of
@@ -673,6 +675,9 @@ class CourseContentService:
 
         Paper: When2Call (Ross et al., 2025).
         """
+        if has_linked_books:
+            return True
+
         if image_count == 0:
             return True
 
@@ -697,10 +702,7 @@ class CourseContentService:
             )
         )
 
-        if is_course_request:
-            return False
-
-        return True
+        return not is_course_request
 
     def _build_prompt_payload(self, prompt_text: str, image_data_urls: list[str]) -> PromptPayload:
         """Return text-only or multimodal prompt payload for course generation."""
