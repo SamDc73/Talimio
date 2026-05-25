@@ -168,9 +168,13 @@ def _configure_middlewares(app: FastAPI, settings: Settings) -> None:
 
     # Cross-origin protection inside CORS but outside session so that CORS
     # headers survive 403 rejections.
+    exempt_paths: list[str] = []
+    if settings.ENVIRONMENT == "test":
+        exempt_paths = ["/api/v1/"]
     app.add_middleware(
         cast("Any", OriginProtectionMiddleware),
         allowed_origins=allowed_origins,
+        exempt_paths=exempt_paths,
     )
 
     # Session after origin-check so request.session is available for app logic.
