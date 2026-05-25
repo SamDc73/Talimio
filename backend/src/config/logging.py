@@ -287,6 +287,7 @@ def setup_logging(settings: Settings | None = None) -> None:
             "LiteLLM": {"level": "WARNING", "handlers": ["console"], "propagate": False},
             "litellm": {"level": "WARNING", "handlers": ["console"], "propagate": False},
             "mem0": {"level": "WARNING", "handlers": ["console"], "propagate": False},
+            "mem0.utils.spacy_models": {"level": "ERROR", "handlers": ["console"], "propagate": False},
             "charset_normalizer": {"level": "WARNING", "handlers": ["console"], "propagate": False},
         },
     }
