@@ -1,17 +1,12 @@
-import CodeMirror from "@uiw/react-codemirror"
 import { AlertTriangle, CheckCircle, Play, RotateCcw } from "lucide-react"
 
 import { Badge } from "@/components/Badge"
 import { Button } from "@/components/Button"
+import { CodeBlockEditor } from "@/components/CodeBlock"
 import ErrorBoundary from "@/components/ErrorBoundary"
-import { useCodeMirrorLanguageExtensions } from "@/features/course/hooks/use-code-mirror-language"
 import { useExecutableCodeBlockState } from "@/features/course/hooks/use-executable-code-block-state"
 import { flattenText, getLanguage } from "@/features/course/utils/codeBlockUtils"
 import { cn } from "@/lib/utils"
-
-import { catppuccinLatteColors } from "./catppuccinTheme"
-
-const LATTE_BORDER_COLOR = catppuccinLatteColors.surface1.hex
 
 export default function ExecutableCodeBlock({ children, className, lessonId, courseId, ...props }) {
 	const language = getLanguage(props, children)
@@ -28,11 +23,6 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 		lessonId,
 	})
 
-	const editorExtensions = useCodeMirrorLanguageExtensions({
-		kind: "label",
-		languageLabel: language,
-	})
-
 	const actionGroupClassName =
 		"inline-flex items-center overflow-hidden rounded-full border border-border/60 bg-background/60 shadow-xs backdrop-blur-[1px]"
 	const actionButtonBaseClass =
@@ -45,15 +35,9 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 	}
 
 	return (
-		<div
-			className="relative group mb-8 rounded-xl overflow-hidden border bg-card shadow-sm hover:shadow-md transition-all duration-200"
-			style={{ borderColor: LATTE_BORDER_COLOR }}
-		>
+		<div className="relative group mb-8 rounded-xl overflow-hidden border border-border/60 bg-card shadow-sm hover:shadow-md transition-all duration-200">
 			{/* Header */}
-			<div
-				className="flex items-center justify-between gap-3 px-4 py-2.5 border-b bg-linear-to-r from-primary/6 via-muted/45 to-muted/35 backdrop-blur-[1px]"
-				style={{ borderBottomColor: LATTE_BORDER_COLOR }}
-			>
+			<div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border/60 bg-linear-to-r from-primary/6 via-muted/45 to-muted/35 backdrop-blur-[1px]">
 				<div className="flex items-center gap-2.5">
 					<Badge
 						variant="outline"
@@ -112,18 +96,9 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 				</div>
 			</div>
 			{/* Code editor - always editable */}
-			<div className={`p-4 bg-muted/25 ${className || ""}`} {...props}>
+			<div className={cn("bg-muted/25", className)} {...props}>
 				<ErrorBoundary>
-					<CodeMirror
-						value={code}
-						onChange={handleCodeChange}
-						// UIW's bundled setup pulls in mixed CodeMirror runtimes in this repo.
-						basicSetup={false}
-						theme="none"
-						className="bg-transparent"
-						style={{ fontSize: "0.9rem", lineHeight: 1.6 }}
-						extensions={editorExtensions}
-					/>
+					<CodeBlockEditor value={code} language={language} onChange={handleCodeChange} />
 				</ErrorBoundary>
 			</div>
 			{/* Output */}

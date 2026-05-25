@@ -1,14 +1,10 @@
-import CodeMirror from "@uiw/react-codemirror"
 import { AlertTriangle, CheckCircle, FileText, Play, RotateCcw } from "lucide-react"
 import { Button } from "@/components/Button"
+import { CodeBlockEditor } from "@/components/CodeBlock"
 import ErrorBoundary from "@/components/ErrorBoundary"
-import { useCodeMirrorLanguageExtensions } from "@/features/course/hooks/use-code-mirror-language"
 import { useWorkspaceExecutionState } from "@/features/course/hooks/use-workspace-execution-state"
 import { useWorkspaceState } from "@/features/course/hooks/use-workspace-registry"
 import { cn } from "@/lib/utils"
-import { catppuccinLatteColors } from "./catppuccinTheme"
-
-const LATTE_BORDER_COLOR = catppuccinLatteColors.surface1.hex
 
 export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId }) {
 	const { workspace, files } = useWorkspaceState(workspaceId)
@@ -27,11 +23,6 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 		canReset,
 	} = useWorkspaceExecutionState({ workspaceId, lessonId, courseId, files })
 
-	const editorExtensions = useCodeMirrorLanguageExtensions({
-		kind: "both",
-		languageLabel: activeFile?.language,
-		filename: activeFile?.filePath,
-	})
 	const workspaceLabel = workspace?.label || "Workspace"
 
 	if (!workspace || editableFiles.length === 0) {
@@ -39,14 +30,8 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 	}
 
 	return (
-		<div
-			className="relative group mb-8 rounded-xl overflow-hidden border bg-card shadow-sm"
-			style={{ borderColor: LATTE_BORDER_COLOR }}
-		>
-			<div
-				className="flex flex-col gap-2 border-b bg-linear-to-r from-background/80 via-muted/45 to-muted/25 px-4 py-3"
-				style={{ borderBottomColor: LATTE_BORDER_COLOR }}
-			>
+		<div className="relative group mb-8 rounded-xl overflow-hidden border border-border/60 bg-card shadow-sm">
+			<div className="flex flex-col gap-2 border-b border-border/60 bg-linear-to-r from-background/80 via-muted/45 to-muted/25 px-4 py-3">
 				<div className="flex flex-wrap items-center justify-between gap-3">
 					<div>
 						<p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary/80">Workspace</p>
@@ -106,17 +91,12 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 						)
 					})}
 				</div>
-				<div className="p-4">
+				<div>
 					<ErrorBoundary>
-						<CodeMirror
+						<CodeBlockEditor
 							value={activeFile?.code || ""}
+							language={activeFile?.language}
 							onChange={(value) => activeFile?.filePath && onCodeChange(activeFile.filePath, value)}
-							// UIW's bundled setup pulls in mixed CodeMirror runtimes in this repo.
-							basicSetup={false}
-							theme="none"
-							className="bg-transparent"
-							style={{ fontSize: "0.9rem", lineHeight: 1.6 }}
-							extensions={editorExtensions}
 						/>
 					</ErrorBoundary>
 				</div>

@@ -11,9 +11,24 @@ import { CheckIcon, CopyIcon } from "lucide-react"
 import { Children, isValidElement, memo, useEffect, useRef, useState } from "react"
 import remarkGfm from "remark-gfm"
 
+import { CodeBlockView } from "@/components/CodeBlock"
 import { TooltipIconButton } from "@/features/assistant/components/TooltipIconButton"
 import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
+
+function extractLanguage(className) {
+	const match = (className || "").match(/language-(\S+)/)
+	return match ? match[1] : "text"
+}
+
+function flattenChildren(children) {
+	if (typeof children === "string") return children
+	if (Array.isArray(children)) return children.map(flattenChildren).join("")
+	if (children && typeof children === "object" && "props" in children) {
+		return flattenChildren(children.props?.children)
+	}
+	return children == null ? "" : String(children)
+}
 
 function MarkdownTextImpl() {
 	return <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} className="aui-md" components={defaultComponents} />
@@ -184,21 +199,24 @@ const defaultComponents = memoizeMarkdownComponents({
 	sup: ({ className, ...props }) => (
 		<sup className={cn("aui-md-sup [&>a]:text-xs [&>a]:no-underline", className)} {...props} />
 	),
-	pre: ({ className, ...props }) => (
-		<pre
-			className={cn(
-				"aui-md-pre overflow-x-auto rounded-t-none! rounded-b-lg bg-code-surface p-4 text-code-foreground",
-				className
-			)}
-			{...props}
-		/>
-	),
-	code: function Code({ className, ...props }) {
+	pre: function Pre({ children }) {
+		// CodeBlockView owns its own <pre>; unwrap so we don't nest <pre><pre>.
+		return children
+	},
+	code: function Code({ className, children, ...props }) {
 		const isCodeBlock = useIsMarkdownCodeBlock()
+		if (!isCodeBlock) {
+			return (
+				<code className={cn("aui-md-inline-code rounded-sm border bg-muted font-semibold", className)} {...props}>
+					{children}
+				</code>
+			)
+		}
 		return (
-			<code
-				className={cn(!isCodeBlock && "aui-md-inline-code rounded-sm border bg-muted font-semibold", className)}
-				{...props}
+			<CodeBlockView
+				code={flattenChildren(children)}
+				language={extractLanguage(className)}
+				className="aui-md-pre rounded-t-none rounded-b-lg"
 			/>
 		)
 	},
