@@ -123,21 +123,6 @@ _SOURCE_EXCERPT_CHARS = 900
 _RELATED_CONCEPT_LIMIT = 3
 _RECENT_PROBE_LIMIT = 5
 _STALE_EVIDENCE_DAYS = 30
-_SOURCE_GROUNDING_TERMS = {
-    "according",
-    "book",
-    "chapter",
-    "document",
-    "excerpt",
-    "material",
-    "pdf",
-    "reading",
-    "reference",
-    "section",
-    "source",
-    "summarize",
-    "uploaded",
-}
 
 
 class LearningCapabilityQueryService:
@@ -250,8 +235,6 @@ class LearningCapabilityQueryService:
         compact_query = query_text.strip()
         if len(compact_query) < _SOURCE_FOCUS_QUERY_MIN_CHARS:
             return None
-        if not self._query_needs_source_context(compact_query):
-            return None
         if not await self._has_embedded_course_documents(course_id=course_id):
             return None
 
@@ -275,10 +258,6 @@ class LearningCapabilityQueryService:
         if not results.items:
             return None
         return SourceFocus(course_id=course_id, items=results.items[:_AUTO_SOURCE_FOCUS_LIMIT])
-
-    def _query_needs_source_context(self, query_text: str) -> bool:
-        normalized_words = {word.strip(".,!?;:'\"()[]{}").casefold() for word in query_text.split()}
-        return bool(normalized_words & _SOURCE_GROUNDING_TERMS)
 
     async def get_mode_aware_focus(
         self,
