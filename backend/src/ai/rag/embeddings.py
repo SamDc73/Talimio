@@ -341,9 +341,18 @@ class VectorRAG:
 
     @staticmethod
     def _build_lexical_search_sql(where_sql: str) -> str:
+        # Tokenize the query with the same 'simple' config used document-side, then OR-fold the
+        # lexemes into a tsquery. 'simple' is language-agnostic (no stemming, no stopword list),
+        # so natural-language questions in any language still produce a non-empty tsquery instead
+        # of being AND-collapsed to zero hits by websearch_to_tsquery. NULLIF guards the all-noise
+        # case (e.g. punctuation-only query) by producing NULL, which the IS NOT NULL filter then
+        # short-circuits.
         return """
             WITH lexical_query AS (
-                SELECT websearch_to_tsquery('english', :query) AS query
+                SELECT NULLIF(
+                    array_to_string(tsvector_to_array(to_tsvector('simple', :query)), ' | '),
+                    ''
+                )::tsquery AS query
             )
             SELECT
                 doc_id,
@@ -351,10 +360,11 @@ class VectorRAG:
                 chunk_index,
                 content,
                 metadata,
-                ts_rank_cd(to_tsvector('english', content), lexical_query.query) AS lexical_score
+                ts_rank_cd(to_tsvector('simple', content), lexical_query.query) AS lexical_score
             FROM rag_document_chunks, lexical_query
             WHERE __SEARCH_SCOPE__
-              AND to_tsvector('english', content) @@ lexical_query.query
+              AND lexical_query.query IS NOT NULL
+              AND to_tsvector('simple', content) @@ lexical_query.query
             ORDER BY lexical_score DESC, chunk_index
             LIMIT :candidate_limit
         """.replace("__SEARCH_SCOPE__", where_sql)
