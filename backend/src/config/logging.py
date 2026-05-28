@@ -9,6 +9,7 @@ from typing import cast
 
 import structlog
 from opentelemetry import trace
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler  # noqa: PLC2701
 from structlog.typing import Processor
 
 from src.config.settings import Settings, get_settings
@@ -293,3 +294,32 @@ def setup_logging(settings: Settings | None = None) -> None:
     }
 
     logging.config.dictConfig(config)
+
+
+def build_otlp_log_handler(logger_provider: LoggerProvider, *, level: int = logging.NOTSET) -> logging.Handler:
+    """Build a stdlib handler that ships log records via OTLP using the JSON formatter."""
+    handler = LoggingHandler(level=level, logger_provider=logger_provider)
+    handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(
+            foreign_pre_chain=_build_shared_processors(),
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.processors.format_exc_info,
+                _render_json,
+            ],
+        )
+    )
+    return handler
+
+
+def attach_handler_to_named_loggers(handler: logging.Handler) -> None:
+    """Attach a handler to the root logger and every named logger configured by setup_logging."""
+    root = logging.getLogger()
+    if handler not in root.handlers:
+        root.addHandler(handler)
+    for name in list(logging.Logger.manager.loggerDict.keys()):
+        existing = logging.getLogger(name)
+        if not isinstance(existing, logging.Logger) or existing.propagate:
+            continue
+        if handler not in existing.handlers:
+            existing.addHandler(handler)
