@@ -425,7 +425,7 @@ class CourseContentService:
         attachments: list[UploadFile],
         book_ids: Sequence[uuid.UUID],
     ) -> CourseAttachmentIngestionResult:
-        """Upload attachments and describe what can be used for RAG search."""
+        """Inline images as LLM data URLs and link books for RAG search."""
         image_data_urls: list[str] = []
         has_searchable_documents = False
         for attachment in attachments:
@@ -436,16 +436,6 @@ class CourseContentService:
             if extension in _IMAGE_EXTENSIONS:
                 data_url = self._build_image_data_url(file_content, attachment.content_type, extension)
                 image_data_urls.append(data_url)
-                await rag_service.upload_document(
-                    session=session,
-                    user_id=user_id,
-                    course_id=course_id,
-                    document_type="image",
-                    title=filename,
-                    file_content=file_content,
-                    filename=filename,
-                    process_in_background=False,
-                )
         for book_id in book_ids:
             await self._link_book_to_course_documents(
                 rag_service=rag_service,

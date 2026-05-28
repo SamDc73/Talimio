@@ -59,7 +59,6 @@ COURSE_DOCUMENT_STATUS_PENDING = "pending"
 COURSE_DOCUMENT_STATUS_PROCESSING = "processing"
 COURSE_DOCUMENT_STATUS_EMBEDDED = "embedded"
 COURSE_DOCUMENT_STATUS_FAILED = "failed"
-COURSE_IMAGE_DOCUMENT_TYPE = "image"
 MISSING_FILE_PATH_ERROR_MESSAGE = "No file path to process"
 DEFAULT_SEARCH_TOP_K = 10
 RERANK_CANDIDATE_MULTIPLIER = 4
@@ -111,7 +110,6 @@ _OPTIONAL_RETRIEVAL_LLM_ERROR_TYPES = (AIRuntimeError, TimeoutError, asyncio.Tim
 _COURSE_DOCUMENT_EXTENSIONS_BY_TYPE = {
     "epub": {".epub"},
     "fb2": {".fb2"},
-    "image": {".jpeg", ".jpg", ".png"},
     "md": {".markdown", ".md"},
     "mobi": {".mobi"},
     "pdf": {".pdf"},
@@ -300,15 +298,11 @@ class RAGService:
         )
 
         try:
-            is_image = document_type_text == COURSE_IMAGE_DOCUMENT_TYPE
-            now = datetime.now(UTC)
             doc = CourseDocument(
                 course_id=course_id,
                 title=title_text,
                 document_type=document_type_text,
-                status=COURSE_DOCUMENT_STATUS_EMBEDDED if is_image else COURSE_DOCUMENT_STATUS_PENDING,
-                processed_at=now if is_image else None,
-                embedded_at=now if is_image else None,
+                status=COURSE_DOCUMENT_STATUS_PENDING,
             )
             session.add(doc)
             await session.flush()
@@ -322,7 +316,7 @@ class RAGService:
 
             await session.flush()
 
-            if process_in_background and not is_image:
+            if process_in_background:
                 await session.commit()
                 doc_id = doc.id
                 if background_tasks is not None:
