@@ -413,27 +413,8 @@ class AdaptiveOutlineMeta(BaseModel):
 
     scope: str
     concept_graph: AdaptiveConceptGraph = Field(alias="conceptGraph")
-    concept_tags: list[list[str]] = Field(default_factory=list, alias="conceptTags")
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
-
-    @field_validator("concept_tags", mode="before")
-    @classmethod
-    def _normalize_concept_tags(cls, value: object) -> list[list[str]]:
-        if value is None:
-            return []
-        if not isinstance(value, list):
-            return []
-        normalized: list[list[str]] = []
-        for raw in value:
-            if isinstance(raw, list):
-                normalized.append([str(entry).strip() for entry in raw if str(entry).strip()])
-            elif isinstance(raw, str):
-                stripped = raw.strip()
-                normalized.append([stripped] if stripped else [])
-            else:
-                normalized.append([])
-        return normalized
 
 
 class AdaptiveCourseStructure(BaseModel):

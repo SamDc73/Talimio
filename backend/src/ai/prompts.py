@@ -170,7 +170,6 @@ Return ONLY valid JSON that matches the Schema section. Optional fields may be o
   - Target 60-90 atomic lessons total covering the canonical arc of the subject.
   - If output size is a concern, do NOT reduce concept/lesson count; instead:
     - Omit optional `slug` fields (course + nodes + lessons).
-    - Omit `ai_outline_meta.conceptTags` entirely.
     - Ensure meaningful dependency chains; do NOT leave advanced topics as independent roots unless there is a clear reason to do so.
     - Leave `conceptGraph.confusors` empty.
 - Only go shorter if USER_PROMPT explicitly asks for an overview, mini-course, or a strict time limit.
@@ -354,10 +353,7 @@ Lesson titles SHOULD:
           ]
         }
       ]
-    },
-    "conceptTags": [
-      ["tag"]
-    ]
+    }
   },
   "lessons": [
     {
@@ -397,12 +393,6 @@ Lesson titles SHOULD:
 - Each entry includes a base `index` and a list of confusors `{index, risk}`.
 - Risk is 0.0 to 1.0.
 
-### `conceptTags`
-- `conceptTags` is OPTIONAL; omit it unless you have high-confidence tags.
-- If you include it, it must be a list aligned with nodes by index.
-- `conceptTags[i]` is the tag list for `nodes[i]` and it may be an empty list.
-- If present, length MUST equal `conceptGraph.nodes` length.
-
 
 ## Lessons (HARD REQUIREMENTS)
 - Generate exactly one lesson per conceptGraph node.
@@ -424,7 +414,6 @@ Lesson titles SHOULD:
 - Output is valid JSON and matches the Schema section (optional fields may be omitted).
 - Every index reference in edges, layers, confusors, and lessons points to a valid node index.
 - Lesson indices cover every node index exactly once.
-- `conceptTags` length equals node count.
 """
 
 
