@@ -243,6 +243,7 @@ class ConceptSummary(BaseModel):
     mastery: float | None = Field(None, description="Current mastery score in [0,1]")
     next_review_at: datetime | None = Field(None, description="Next scheduled review timestamp")
     exposures: int = Field(0, description="Total review exposures")
+    unlocked: bool = Field(default=True, description="Whether all prerequisites are satisfied so the concept can be started")
     lesson_id: uuid.UUID | None = Field(None, description="Lesson ID linked to this concept")
     recommended_lesson_entry: Literal["open_current", "start_next_pass"] | None = Field(
         None,

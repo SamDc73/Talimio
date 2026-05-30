@@ -38,6 +38,7 @@ def _to_concept_summary(
     recommended_lesson_entries: dict[uuid.UUID, RecommendedLessonEntry] | None = None,
     prerequisites: list[uuid.UUID] | None = None,
     order_hint: int | None = None,
+    unlocked: bool,
 ) -> ConceptSummary:
     mastery = state.s_mastery if state is not None else None
     next_review = state.next_review_at if state is not None else None
@@ -51,6 +52,7 @@ def _to_concept_summary(
         mastery=mastery,
         next_review_at=next_review,
         exposures=exposures,
+        unlocked=unlocked,
         lesson_id=lesson_id,
         recommended_lesson_entry=(recommended_lesson_entries or {}).get(concept.id),
         prerequisites=prerequisites or [],
@@ -94,6 +96,7 @@ def _prepare_frontier_snapshot(
             recommended_lesson_entries=recommended_lesson_entries,
             prerequisites=entry["prerequisites"],
             order_hint=entry["order_hint"],
+            unlocked=entry["unlocked"],
         )
         # Due-for-review concepts belong in due_for_review, not frontier
         if concept.id in due_ids:
@@ -111,6 +114,7 @@ def _prepare_frontier_snapshot(
             recommended_lesson_entries=recommended_lesson_entries,
             prerequisites=prereqs_by_id.get(item["concept"].id, []),
             order_hint=item["order_hint"],
+            unlocked=True,
         )
         for item in due_list
     ]
