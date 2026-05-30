@@ -195,42 +195,12 @@ function ViewerRuntime({
 function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi = null }) {
 	// Component-local state (ephemeral UI)
 	const [hasRestoredPage, setHasRestoredPage] = useState(false)
-	const initialZoomLevelRef = useRef(null)
-	const initialZoomModeRef = useRef(null)
-	const initialPageRef = useRef(null)
 
 	// Engine and store
 	const { engine, isLoading: engineLoading } = usePdfiumEngine()
 	const readingState = useBookReadingState(bookId)
 	const { updateBookReadingState } = useBookActions()
 	const storeHydrated = useBookStoreHydrated()
-
-	// Capture initial snapshots at render time (before plugin creation) to avoid flicker
-	if (
-		storeHydrated &&
-		initialZoomLevelRef.current === null &&
-		typeof readingState?.zoomLevel === "number" &&
-		readingState.zoomLevel > 0
-	) {
-		initialZoomLevelRef.current = readingState.zoomLevel
-	}
-	if (
-		storeHydrated &&
-		initialZoomModeRef.current === null &&
-		typeof readingState?.zoomMode === "string" &&
-		readingState.zoomMode
-	) {
-		initialZoomModeRef.current = readingState.zoomMode
-	}
-	if (
-		storeHydrated &&
-		initialPageRef.current === null &&
-		storeHydrated &&
-		typeof readingState?.currentPage === "number" &&
-		readingState.currentPage > 0
-	) {
-		initialPageRef.current = readingState.currentPage
-	}
 
 	// Mark restored page flag once runtime confirms
 	const markPageRestored = useCallback(() => {
@@ -245,35 +215,27 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		setHasRestoredPage(false)
 	}, [url])
 
-	// Optionally restore persisted zoom/page once store is hydrated
-	useEffect(() => {
-		if (!storeHydrated) return
-		if (initialZoomLevelRef.current === null) {
-			const z = readingState?.zoomLevel
-			if (typeof z === "number" && z > 0) initialZoomLevelRef.current = z
-		}
-		if (initialZoomModeRef.current === null) {
-			const m = readingState?.zoomMode
-			if (typeof m === "string" && m) initialZoomModeRef.current = m
-		}
-		if (initialPageRef.current === null) {
-			const p = readingState?.currentPage
-			if (typeof p === "number" && p > 0) initialPageRef.current = p
-		}
-	}, [storeHydrated, readingState?.zoomLevel, readingState?.zoomMode, readingState?.currentPage])
-
+	// biome-ignore lint/correctness/useExhaustiveDependencies: readingState is intentionally read as a one-time snapshot at document (re)init; recomputing on every persistence update would re-register plugins
 	const plugins = useMemo(() => {
 		if (!url) {
 			return []
 		}
 
+		// Read the saved zoom/page once as a snapshot at document (re)init.
+		const savedZoomMode =
+			typeof readingState?.zoomMode === "string" && readingState.zoomMode ? readingState.zoomMode : null
+		const savedZoomLevel =
+			typeof readingState?.zoomLevel === "number" && readingState.zoomLevel > 0 ? readingState.zoomLevel : null
+		const savedPage =
+			typeof readingState?.currentPage === "number" && readingState.currentPage > 0 ? readingState.currentPage : null
+
 		const documentId = bookId ? `book-${bookId}` : "pdf-document"
 		// Prefer saved zoomMode (Automatic/FitPage/FitWidth). If absent, use saved numeric zoom; else Automatic.
 		let defaultZoom = ZoomMode.Automatic
-		if (typeof initialZoomModeRef.current === "string" && initialZoomModeRef.current) {
-			defaultZoom = initialZoomModeRef.current
-		} else if (typeof initialZoomLevelRef.current === "number" && initialZoomLevelRef.current > 0) {
-			defaultZoom = initialZoomLevelRef.current / 100
+		if (savedZoomMode) {
+			defaultZoom = savedZoomMode
+		} else if (savedZoomLevel) {
+			defaultZoom = savedZoomLevel / 100
 		}
 		return [
 			createPluginRegistration(DocumentManagerPluginPackage, {
@@ -287,8 +249,7 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 			}),
 			createPluginRegistration(ViewportPluginPackage),
 			createPluginRegistration(ScrollPluginPackage, {
-				initialPage:
-					typeof initialPageRef.current === "number" && initialPageRef.current > 0 ? initialPageRef.current : undefined,
+				initialPage: savedPage ?? undefined,
 			}),
 			createPluginRegistration(RenderPluginPackage),
 			createPluginRegistration(ZoomPluginPackage, {
