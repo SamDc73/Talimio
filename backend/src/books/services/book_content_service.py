@@ -3,7 +3,6 @@
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
 
 from pydantic import JsonValue
 from sqlalchemy import select
@@ -30,7 +29,7 @@ class BookContentService:
         return await self._create_with_session(self._session, data, user_id)
 
     async def _create_with_session(self, session: AsyncSession, data: dict[str, JsonValue], user_id: uuid.UUID) -> Book:
-        book = Book(**data, user_id=user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
+        book = Book(**data, user_id=user_id)
         session.add(book)
         await session.flush()
         await session.refresh(book)
@@ -58,7 +57,6 @@ class BookContentService:
             else:
                 setattr(book, field, value)
 
-        book.updated_at = datetime.now(UTC)
         await self._session.flush()
         await self._session.refresh(book)
 
