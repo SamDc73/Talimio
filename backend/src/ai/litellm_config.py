@@ -109,31 +109,28 @@ def _configure_llm_completion_logger_callback() -> None:
 
 
 def _configure_langfuse_otel_callback() -> None:
-    """Enable Langfuse OTEL callback only for cloud mode with credentials."""
-    callbacks = _normalize_callbacks(getattr(litellm, "callbacks", []))
-    callbacks_without_langfuse = [callback for callback in callbacks if callback != "langfuse_otel"]
-
+    """Enable Langfuse's built-in LiteLLM OTEL callback for cloud mode with credentials."""
     settings = get_settings()
     public_key = settings.LANGFUSE_PUBLIC_KEY.strip()
     secret_key = settings.LANGFUSE_SECRET_KEY.get_secret_value().strip()
-    configured_host = settings.LANGFUSE_OTEL_HOST.strip()
-    base_url = settings.LANGFUSE_BASE_URL.strip()
+    host = settings.LANGFUSE_OTEL_HOST.strip()
 
+    callbacks = _normalize_callbacks(getattr(litellm, "callbacks", []))
+    callbacks = [callback for callback in callbacks if callback != "langfuse_otel"]
     is_cloud = settings.PLATFORM_MODE == "cloud"
-    has_credentials = bool(public_key) and bool(secret_key)
-    resolved_host = configured_host or base_url
+    has_credentials = bool(public_key and secret_key and host)
 
-    if not is_cloud or not has_credentials or not resolved_host:
-        cast("Any", litellm).callbacks = callbacks_without_langfuse
+    if not is_cloud or not has_credentials:
+        cast("Any", litellm).callbacks = callbacks
         return
 
-    if not configured_host and base_url:
-        # LiteLLM's Langfuse adapter reads this host from process env only.
-        os.environ["LANGFUSE_OTEL_HOST"] = base_url
+    # LiteLLM's langfuse_otel adapter reads credentials and host from the process env.
+    os.environ["LANGFUSE_PUBLIC_KEY"] = public_key
+    os.environ["LANGFUSE_SECRET_KEY"] = secret_key
+    os.environ["LANGFUSE_OTEL_HOST"] = host
 
-    if "langfuse_otel" not in callbacks_without_langfuse:
-        callbacks_without_langfuse.append("langfuse_otel")
-    cast("Any", litellm).callbacks = callbacks_without_langfuse
+    callbacks.append("langfuse_otel")
+    cast("Any", litellm).callbacks = callbacks
 
 
 def configure_litellm() -> None:

@@ -150,7 +150,6 @@ class Settings(BaseSettings):
     LANGFUSE_PUBLIC_KEY: str = ""
     LANGFUSE_SECRET_KEY: SecretStr = SecretStr("")
     LANGFUSE_OTEL_HOST: str = ""
-    LANGFUSE_BASE_URL: str = ""
 
     # Code Execution (E2B)
     E2B_SANDBOX_TTL: int = 600
