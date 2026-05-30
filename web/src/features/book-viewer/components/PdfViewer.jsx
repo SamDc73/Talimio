@@ -195,7 +195,6 @@ function ViewerRuntime({
 function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi = null }) {
 	// Component-local state (ephemeral UI)
 	const [hasRestoredPage, setHasRestoredPage] = useState(false)
-	const previousSourceRef = useRef({ url: null, bookId: null })
 	const initialZoomLevelRef = useRef(null)
 	const initialZoomModeRef = useRef(null)
 	const initialPageRef = useRef(null)
@@ -238,14 +237,13 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		setHasRestoredPage(true)
 	}, [])
 
-	// Reset page restoration when source changes
+	// Re-arm restoration when the document URL refreshes for the same book
+	// (presigned URLs expire and refetch without a remount). bookId changes
+	// already remount the whole viewer via key={bookId}, so url is the trigger.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: url is the intended trigger, not a body dependency
 	useEffect(() => {
-		const hasSourceChanged = previousSourceRef.current.url !== url || previousSourceRef.current.bookId !== bookId
-		if (hasSourceChanged) {
-			setHasRestoredPage(false)
-			previousSourceRef.current = { url, bookId }
-		}
-	}, [url, bookId])
+		setHasRestoredPage(false)
+	}, [url])
 
 	// Optionally restore persisted zoom/page once store is hydrated
 	useEffect(() => {

@@ -73,9 +73,12 @@ function BookViewerContent() {
 		refetchInterval: (query) => (query.state.data?.totalPages ? false : 3000),
 	})
 
+	// Clear any stale viewer API when switching books. The viewer subtree remounts
+	// via key={bookId}, but the register callback holds no cleanup, so null it here.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: bookId is the intended trigger, not a body dependency
 	useEffect(() => {
 		viewerApiRef.current = null
-	}, [])
+	}, [bookId])
 
 	const handleZoomIn = () => {
 		viewerApiRef.current?.zoomIn?.()
@@ -140,9 +143,9 @@ function BookViewerContent() {
 		/>
 	)
 	if (isPdf) {
-		viewerContent = <PdfViewer url={bookUrl} bookId={bookId} registerApi={handleRegisterApi} />
+		viewerContent = <PdfViewer key={bookId} url={bookUrl} bookId={bookId} registerApi={handleRegisterApi} />
 	} else if (isEpub) {
-		viewerContent = <EpubViewer url={bookUrl} bookId={bookId} />
+		viewerContent = <EpubViewer key={bookId} url={bookUrl} bookId={bookId} />
 	}
 
 	return (
