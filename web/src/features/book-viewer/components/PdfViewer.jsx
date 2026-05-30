@@ -14,13 +14,13 @@ import { SelectionLayer, SelectionPluginPackage, useSelectionCapability } from "
 import { Viewport, ViewportPluginPackage } from "@embedpdf/plugin-viewport/react"
 import { ZoomMode } from "@embedpdf/plugin-zoom"
 import { useZoom, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../hooks/use-book-state"
 
 function ViewerRuntime({
 	documentId,
 	bookId,
-	registerApi,
+	apiRef,
 	getBookReadingState,
 	updateBookReadingState,
 	hasRestoredPage: HasRestoredPage,
@@ -35,18 +35,18 @@ function ViewerRuntime({
 	const { provides: zoomProvides, state: zoomState } = useZoom(documentId)
 	const currentZoomLevel = zoomState?.currentZoomLevel
 
-	// Expose a narrow API for header controls
-	useEffect(() => {
-		if (!registerApi) return
-		const api = {
+	// Expose a narrow API for header controls via ref-as-prop (React 19).
+	// React nulls the handle on unmount, so the parent ref clears automatically.
+	useImperativeHandle(
+		apiRef,
+		() => ({
 			zoomIn: () => zoomProvides?.zoomIn?.(),
 			zoomOut: () => zoomProvides?.zoomOut?.(),
 			fitToScreen: () => zoomProvides?.requestZoom?.(ZoomMode.FitPage),
 			goToPage: (pageNumber) => scrollProvides?.scrollToPage?.({ pageNumber }),
-		}
-		registerApi(api)
-		// Intentionally no cleanup to avoid clearing API when parent callback identity changes
-	}, [registerApi, zoomProvides, scrollProvides])
+		}),
+		[zoomProvides, scrollProvides]
+	)
 
 	// Persist zoom changes using EmbedPDF Zoom state (fractional value, e.g. 1.0 = 100%)
 	useEffect(() => {
@@ -192,7 +192,7 @@ function ViewerRuntime({
 	)
 }
 
-function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi = null }) {
+function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, ref }) {
 	// Component-local state (ephemeral UI)
 	const [hasRestoredPage, setHasRestoredPage] = useState(false)
 
@@ -321,11 +321,11 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 								return (
 									<GlobalPointerProvider documentId={activeDocumentId}>
 										<div className="flex size-full  justify-center" data-selection-zone="true">
-											<ViewerRuntime
-												documentId={activeDocumentId}
-												bookId={bookId}
-												registerApi={registerApi}
-												getBookReadingState={(id) => (id === bookId ? readingState : null)}
+							<ViewerRuntime
+								documentId={activeDocumentId}
+								bookId={bookId}
+								apiRef={ref}
+								getBookReadingState={(id) => (id === bookId ? readingState : null)}
 												updateBookReadingState={updateBookReadingState}
 												hasRestoredPage={hasRestoredPage}
 												onMarkPageRestored={markPageRestored}
