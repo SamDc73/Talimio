@@ -4,7 +4,6 @@ import { useParams } from "react-router-dom"
 import ErrorBoundary from "@/components/ErrorBoundary"
 import { BookHeader } from "@/components/header/BookHeader"
 import BookSidebarContainer from "@/features/book-viewer/components/BookSidebarContainer"
-import { getApiUrl } from "@/lib/apiBase"
 import { booksApi } from "./api/booksApi"
 import EpubViewer from "./components/EpubViewer"
 import PdfViewer from "./components/PdfViewer"
@@ -44,7 +43,15 @@ function BookViewerContent() {
 	const { setBookZoom } = useBookActions()
 	const sidebarOpen = useSidebarOpen()
 	const toggleSidebar = useToggleSidebar()
-	const bookUrl = bookId ? getApiUrl(`/books/${bookId}/content`) : null
+
+	const { data: presigned } = useQuery({
+		queryKey: ["book-presigned-url", bookId],
+		queryFn: () => booksApi.getPresignedUrl(bookId),
+		enabled: !!bookId,
+		staleTime: 55 * 60 * 1000, // signed URLs are valid ~1h; keep stable within a session
+		refetchOnWindowFocus: false,
+	})
+	const bookUrl = presigned?.url ?? null
 
 	const {
 		data: book,

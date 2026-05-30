@@ -15,7 +15,6 @@ import { Viewport, ViewportPluginPackage } from "@embedpdf/plugin-viewport/react
 import { ZoomMode } from "@embedpdf/plugin-zoom"
 import { useZoom, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { api as apiClient } from "@/lib/apiClient"
 import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../hooks/use-book-state"
 
 function ViewerRuntime({
@@ -196,10 +195,7 @@ function ViewerRuntime({
 function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi = null }) {
 	// Component-local state (ephemeral UI)
 	const [hasRestoredPage, setHasRestoredPage] = useState(false)
-	const [pdfBlobUrl, setPdfBlobUrl] = useState(null)
-	const [loadError, setLoadError] = useState(null)
 	const previousSourceRef = useRef({ url: null, bookId: null })
-	const blobUrlRef = useRef(null)
 	const initialZoomLevelRef = useRef(null)
 	const initialZoomModeRef = useRef(null)
 	const initialPageRef = useRef(null)
@@ -267,63 +263,9 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 			if (typeof p === "number" && p > 0) initialPageRef.current = p
 		}
 	}, [storeHydrated, readingState?.zoomLevel, readingState?.zoomMode, readingState?.currentPage])
-	// Fetch PDF and create blob URL (EmbedPDF needs blob URL for auth endpoints)
-	useEffect(() => {
-		if (!url) {
-			if (blobUrlRef.current) {
-				URL.revokeObjectURL(blobUrlRef.current)
-				blobUrlRef.current = null
-			}
-			setPdfBlobUrl(null)
-			setLoadError(null)
-			return
-		}
-
-		let cancelled = false
-
-		const fetchPdf = async () => {
-			try {
-				setLoadError(null)
-				// Use raw() so we can validate the Content-Type before handing the blob to PDFium.
-				// Without this guard, a 200 OK that returns HTML/JSON (e.g. an auth redirect)
-				// would silently produce a blob that PDFium fails to decode -> blank viewport.
-				const response = await apiClient.raw(url, { absoluteUrl: true })
-				if (cancelled) return
-				const contentType = response.headers.get("content-type") || ""
-				if (!contentType.toLowerCase().includes("application/pdf")) {
-					throw new Error(`Server returned ${contentType || "unknown content"} instead of a PDF`)
-				}
-				const blob = await response.blob()
-				if (cancelled) return
-				if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
-				const blobUrl = URL.createObjectURL(blob)
-				blobUrlRef.current = blobUrl
-				setPdfBlobUrl(blobUrl)
-			} catch (error) {
-				if (!cancelled) {
-					setLoadError(error.message)
-					setPdfBlobUrl(null)
-				}
-			}
-		}
-
-		fetchPdf()
-		return () => {
-			cancelled = true
-		}
-	}, [url])
-
-	// Cleanup blob URL on unmount
-	useEffect(() => {
-		return () => {
-			if (blobUrlRef.current) {
-				URL.revokeObjectURL(blobUrlRef.current)
-			}
-		}
-	}, [])
 
 	const plugins = useMemo(() => {
-		if (!pdfBlobUrl) {
+		if (!url) {
 			return []
 		}
 
@@ -340,7 +282,8 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 				initialDocuments: [
 					{
 						documentId,
-						url: pdfBlobUrl,
+						url,
+						...(url.startsWith("http") ? {} : { requestOptions: { credentials: "include" } }),
 					},
 				],
 			}),
@@ -356,23 +299,12 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 			createPluginRegistration(InteractionManagerPluginPackage),
 			createPluginRegistration(SelectionPluginPackage),
 		]
-	}, [bookId, pdfBlobUrl])
+	}, [bookId, url])
 
 	if (!url) {
 		return (
 			<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
 				<p className="text-muted-foreground">No PDF URL provided</p>
-			</div>
-		)
-	}
-
-	if (loadError) {
-		return (
-			<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
-				<div className="text-center">
-					<p className="text-destructive font-semibold">Failed to load PDF</p>
-					<p className="mt-2 text-xs text-destructive/80">{loadError}</p>
-				</div>
 			</div>
 		)
 	}
@@ -385,7 +317,7 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, registerApi
 		)
 	}
 
-	if (!pdfBlobUrl || engineLoading || !engine || plugins.length === 0) {
+	if (!url || engineLoading || !engine || plugins.length === 0) {
 		return (
 			<div className="flex h-64 items-center justify-center rounded-lg bg-muted/40">
 				<p className="text-muted-foreground">Loading PDF…</p>

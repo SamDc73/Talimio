@@ -1,12 +1,9 @@
 import json
-import logging
 import uuid
-from collections.abc import AsyncGenerator, Callable
 from typing import Annotated
 
-import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request, status
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, status
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
 from src.auth import CurrentAuth
@@ -28,11 +25,7 @@ from .schemas import (
 )
 
 
-logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/v1/books", tags=["books"])
-
-type BookContentStreamer = Callable[[], AsyncGenerator[bytes]]
 
 
 def get_books_facade(auth: CurrentAuth) -> BooksFacade:
@@ -212,121 +205,14 @@ async def get_book_presigned_url(book_id: uuid.UUID, auth: CurrentAuth) -> BookP
     storage = get_storage_provider(book.storage_provider)
     url = await storage.get_download_url(book.file_path)
 
+    # Local storage returns a filesystem path; the browser must hit our /file route instead.
+    if not url.startswith("http"):
+        url = f"/api/v1/books/{book_id}/file"
+
     return BookPresignedUrlResponse(
         url=url,
         expires_in=3600,
         content_type="application/pdf" if book.file_type == "pdf" else "application/epub+zip",
-    )
-
-
-def _get_media_type(file_type: str) -> str:
-    """Get the appropriate media type for a file type."""
-    if file_type == "epub":
-        return "application/epub+zip"
-    if file_type == "pdf":
-        return "application/pdf"
-    return "application/octet-stream"
-
-
-def _handle_local_file(url: str, book: Book) -> FileResponse:
-    """Handle serving local files."""
-    media_type = _get_media_type(book.file_type)
-
-    return FileResponse(
-        path=url,
-        media_type=media_type,
-        filename=f"{book.title}.{book.file_type}",
-        headers={
-            "Cache-Control": "private, max-age=3600",
-            "Accept-Ranges": "bytes",
-            "Content-Type": media_type,
-        },
-    )
-
-
-async def _handle_range_request(
-    url: str,
-    range_header: str,
-    media_type: str,
-    stream_func: BookContentStreamer,
-) -> StreamingResponse | None:
-    """Handle range requests for partial content."""
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        try:
-            head_response = await client.head(url, follow_redirects=True)
-            content_length = head_response.headers.get("content-length")
-
-            import re
-
-            range_match = re.match(r"bytes=(\d+)-(\d*)", range_header)
-            if range_match and content_length:
-                start = int(range_match.group(1))
-                end = int(range_match.group(2)) if range_match.group(2) else int(content_length) - 1
-
-                headers = {
-                    "Content-Range": f"bytes {start}-{end}/{content_length}",
-                    "Accept-Ranges": "bytes",
-                    "Content-Length": str(end - start + 1),
-                    "Cache-Control": "private, max-age=3600",
-                }
-
-                return StreamingResponse(
-                    stream_func(),
-                    status_code=status.HTTP_206_PARTIAL_CONTENT,
-                    media_type=media_type,
-                    headers=headers,
-                )
-        except (httpx.HTTPError, ValueError):
-            logger.warning("books.range_request.failed")
-    return None
-
-
-@router.get("/{book_id}/content", response_model=None)
-async def stream_book_content(book_id: uuid.UUID, request: Request, auth: CurrentAuth) -> StreamingResponse | FileResponse:
-    """Stream book content through backend to avoid CORS issues."""
-    book = await auth.get_or_404(Book, book_id, "book")
-
-    if not book.file_path:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book file not found")
-
-    storage = get_storage_provider(book.storage_provider)
-    url = await storage.get_download_url(book.file_path)
-
-    if not url.startswith("http"):
-        return _handle_local_file(url, book)
-
-    media_type = _get_media_type(book.file_type)
-    range_header = request.headers.get("range")
-
-    async def stream_content() -> AsyncGenerator[bytes]:
-        """Stream content in chunks to avoid loading entire file in memory."""
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            headers = {}
-            if range_header:
-                headers["Range"] = range_header
-
-            try:
-                async with client.stream("GET", url, headers=headers, follow_redirects=True) as response:
-                    response.raise_for_status()
-                    async for chunk in response.aiter_bytes(chunk_size=8192):
-                        yield chunk
-            except httpx.HTTPError:
-                logger.exception("books.stream.failed")
-                raise
-
-    if range_header:
-        range_response = await _handle_range_request(url, range_header, media_type, stream_content)
-        if range_response:
-            return range_response
-
-    return StreamingResponse(
-        stream_content(),
-        media_type=media_type,
-        headers={
-            "Accept-Ranges": "bytes",
-            "Cache-Control": "private, max-age=3600",
-            "Content-Disposition": f'inline; filename="{book.title}.{book.file_type}"',
-        },
     )
 
 

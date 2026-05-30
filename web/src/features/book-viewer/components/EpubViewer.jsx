@@ -328,6 +328,7 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 
 				const response = await apiClient.raw(url, {
 					absoluteUrl: true,
+					credentials: url.startsWith("http") ? "omit" : "include",
 					headers: { accept: "application/epub+zip, application/octet-stream" },
 				})
 
