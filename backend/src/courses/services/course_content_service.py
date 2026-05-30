@@ -1101,7 +1101,7 @@ class CourseContentService:
             concept = await graph_service.create_concept(
                 domain=course.title,
                 name=node.title,
-                description=self._build_concept_description(node.title, plan.concept_tags_for_index(index)),
+                description=self._concept_description(plan, index, node.title),
                 slug=node.slug,
                 difficulty=difficulty,
                 generate_embedding=False,
@@ -1344,14 +1344,13 @@ class CourseContentService:
 
         return lessons
 
-    def _build_concept_description(self, title: str, tags: list[str]) -> str:
-        """Compose a concise description from title and tags."""
-        clean_title = title.strip()
-        parts = [clean_title] if clean_title else []
-        clean_tags = [tag.strip() for tag in tags if tag.strip()]
-        if clean_tags:
-            parts.append(f"Tags: {', '.join(clean_tags)}")
-        return " — ".join(parts) if parts else clean_title
+    @staticmethod
+    def _concept_description(plan: AdaptiveCourseStructure, index: int, fallback: str) -> str:
+        """Return the planner's lesson description for a concept index, else its title."""
+        for lesson_plan in plan.lessons:
+            if lesson_plan.index == index:
+                return lesson_plan.description
+        return fallback
 
     @staticmethod
     def _normalize_module_name(raw_value: object) -> str | None:

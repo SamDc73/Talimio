@@ -236,7 +236,7 @@ class AdaptiveLessonPlan(BaseModel):
 
     index: int
     title: str | None = Field(default=None, max_length=255)
-    description: str | None = None
+    description: str = Field(min_length=1)
     module: str | None = Field(default=None, max_length=255)
 
     model_config = ConfigDict(extra="forbid")
@@ -246,13 +246,22 @@ class AdaptiveLessonPlan(BaseModel):
     def _normalize_index(cls, value: object) -> int:
         return _coerce_index(value, field="Lesson index")
 
-    @field_validator("title", "description", "module", mode="before")
+    @field_validator("title", "module", mode="before")
     @classmethod
     def _strip_optional_text(cls, value: object) -> str | None:
         if value is None:
             return None
         text = str(value).strip()
         return text or None
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def _strip_required_description(cls, value: object) -> str:
+        text = str(value or "").strip()
+        if not text:
+            msg = "Lesson description must not be empty"
+            raise ValueError(msg)
+        return text
 
 
 class AdaptiveConceptNode(BaseModel):
@@ -444,15 +453,6 @@ class AdaptiveCourseStructure(BaseModel):
                 if node_idx not in lookup:
                     lookup[node_idx] = layer_idx
         return lookup
-
-    def concept_tags_for_index(self, index: int) -> list[str]:
-        """Return the tag list for a node index, if any."""
-        if index < 0:
-            return []
-        tags = self.ai_outline_meta.concept_tags
-        if index >= len(tags):
-            return []
-        return tags[index]
 
 
 class ConceptNode(BaseModel):
