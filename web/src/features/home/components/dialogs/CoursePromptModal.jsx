@@ -251,7 +251,7 @@ function buildFinalPrompt(basePrompt, summaryBlock) {
 	return `${trimmedPrompt}\n\n${summaryBlock}`
 }
 
-function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", defaultAdaptiveEnabled = false }) {
+function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", defaultAdaptiveEnabled = true }) {
 	const [prompt, setPrompt] = useState(defaultPrompt)
 	const [activeStep, setActiveStep] = useState(MODAL_STEPS.PROMPT)
 	const [isGenerating, setIsGenerating] = useState(false)
