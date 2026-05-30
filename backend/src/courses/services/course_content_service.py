@@ -1248,17 +1248,27 @@ class CourseContentService:
             logger.warning("Adaptive plan for course %s produced no lesson payloads", course.id)
             return []
 
-        module_description = (plan.ai_outline_meta.scope or "").strip()
-        if not module_description:
-            module_description = f"Adaptive pathway for {course.title}"
+        module_map: dict[str, RowPayload] = {}
+        for lesson in lessons:
+            module_name = self._normalize_module_name(lesson.pop("module", None)) or "Adaptive Track"
+            module_entry = module_map.get(module_name)
+            if module_entry is None:
+                module_entry: RowPayload = {
+                    "title": module_name,
+                    "description": None,
+                    "lessons": [],
+                }
+                module_map[module_name] = module_entry
+            module_lessons = cast("list[RowPayload]", module_entry["lessons"])
+            module_lessons.append(lesson)
 
-        return [
-            {
-                "title": "Adaptive Track",
-                "description": module_description,
-                "lessons": lessons,
-            }
-        ]
+        if list(module_map) == ["Adaptive Track"]:
+            module_description = (plan.ai_outline_meta.scope or "").strip()
+            if not module_description:
+                module_description = f"Adaptive pathway for {course.title}"
+            module_map["Adaptive Track"]["description"] = module_description
+
+        return list(module_map.values())
 
     def _build_adaptive_lessons_payload(
         self,
@@ -1272,7 +1282,7 @@ class CourseContentService:
         assigned: set[int] = set()
         node_count = len(concepts_by_index)
 
-        for order, lesson_plan in enumerate(plan.lessons):
+        for lesson_plan in plan.lessons:
             node_index = int(lesson_plan.index)
             if node_index < 0 or node_index >= node_count:
                 logger.debug("Skipping adaptive lesson with out-of-range index %s for course %s", node_index, course.id)
@@ -1287,7 +1297,7 @@ class CourseContentService:
                     "concept_id": concept.id,
                     "title": lesson_plan.title or concept.name,
                     "description": lesson_plan.description or concept.description,
-                    "order": order,
+                    "module": lesson_plan.module,
                 }
             )
             assigned.add(node_index)
