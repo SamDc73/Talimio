@@ -75,15 +75,14 @@ export async function createBookFromCourseAttachment(file) {
 
 	await uploadFileToSession(file, uploadSession)
 
-	const formData = new FormData()
-	formData.append("title", getBookTitleFromFile(file))
-	formData.append("tags", "[]")
-	formData.append("file_path", uploadSession.filePath)
-	formData.append("storage_provider", uploadSession.storageProvider)
-	formData.append("file_size", String(file.size))
-	formData.append("process_in_background", "false")
-
-	return api.post("/books", formData)
+	return api.post("/books", {
+		title: getBookTitleFromFile(file),
+		tags: [],
+		filePath: uploadSession.filePath,
+		storageProvider: uploadSession.storageProvider,
+		fileSize: file.size,
+		processInBackground: false,
+	})
 }
 
 export async function fetchCourseById(courseId, signal) {

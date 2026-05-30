@@ -1,8 +1,7 @@
-import json
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
@@ -14,6 +13,7 @@ from src.storage.factory import get_storage_provider
 from .facade import BooksFacade
 from .schemas import (
     BookChapterStatusUpdate,
+    BookCreate,
     BookProgressResponse,
     BookProgressUpdate,
     BookRagStatus,
@@ -50,62 +50,29 @@ async def get_book(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_book(
+    book_data: BookCreate,
     auth: CurrentAuth,
     background_tasks: BackgroundTasks,
     facade: Annotated[BooksFacade, Depends(get_books_facade)],
-    title: Annotated[str, Form(description="Book title")],
-    file_path: Annotated[str, Form(description="Storage key when finalizing a direct upload")],
-    storage_provider: Annotated[str, Form(description="Storage provider when finalizing a direct upload")],
-    author: Annotated[str | None, Form(description="Book author")] = None,
-    subtitle: Annotated[str | None, Form(description="Book subtitle")] = None,
-    description: Annotated[str | None, Form(description="Book description")] = None,
-    isbn: Annotated[str | None, Form(description="ISBN")] = None,
-    language: Annotated[str | None, Form(description="Language code")] = None,
-    publication_year: Annotated[int | None, Form(description="Publication year")] = None,
-    publisher: Annotated[str | None, Form(description="Publisher")] = None,
-    tags: Annotated[str, Form(description="Tags as JSON array string")] = "[]",
-    file_size: Annotated[int | None, Form(description="Uploaded file size in bytes for fast direct finalization")] = None,
-    process_in_background: Annotated[bool, Form(description="Process RAG and tags after upload")] = True,
 ) -> BookResponse:
     """Finalize a direct upload to storage and create a book record."""
-    try:
-        tags_list = json.loads(tags) if tags else []
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid tags format. Expected JSON array.",
-        ) from None
-
-    if not title:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Title is required",
-        )
-
-    filename = file_path.split("/")[-1]
-    file_extension = filename.lower().split(".")[-1]
-    if file_extension not in {"pdf", "epub"}:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only PDF and EPUB files are supported",
-        )
-
+    filename = book_data.file_path.split("/")[-1]
     return await facade.create_book_from_existing_storage(
         user_id=auth.user_id,
         filename=filename,
-        file_path=file_path,
-        storage_provider=storage_provider,
-        title=title,
-        file_size=file_size,
-        author=author,
-        subtitle=subtitle,
-        description=description,
-        isbn=isbn,
-        language=language,
-        publication_year=publication_year,
-        publisher=publisher,
-        tags=tags_list,
-        background_tasks=background_tasks if process_in_background else None,
+        file_path=book_data.file_path,
+        storage_provider=book_data.storage_provider,
+        title=book_data.title,
+        file_size=book_data.file_size,
+        author=book_data.author,
+        subtitle=book_data.subtitle,
+        description=book_data.description,
+        isbn=book_data.isbn,
+        language=book_data.language,
+        publication_year=book_data.publication_year,
+        publisher=book_data.publisher,
+        tags=book_data.tags,
+        background_tasks=background_tasks if book_data.process_in_background else None,
     )
 
 

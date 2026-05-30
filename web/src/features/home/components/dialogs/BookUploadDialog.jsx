@@ -119,16 +119,15 @@ export function BookUploadDialog({ open, onOpenChange, onBookUploaded }) {
 				throw new Error(`Upload failed: ${response.status} ${errorText || response.statusText}`)
 			}
 
-			const formData = new FormData()
-			formData.append("title", bookTitle)
-			formData.append("author", bookAuthor)
-			formData.append("tags", JSON.stringify([]))
-			formData.append("file_path", uploadSession.filePath)
-			formData.append("storage_provider", uploadSession.storageProvider)
-			formData.append("file_size", String(selectedFile.size))
-			formData.append("process_in_background", "true")
-
-			const newBook = await api.post("/books", formData)
+			const newBook = await api.post("/books", {
+				title: bookTitle,
+				author: bookAuthor,
+				tags: [],
+				filePath: uploadSession.filePath,
+				storageProvider: uploadSession.storageProvider,
+				fileSize: selectedFile.size,
+				processInBackground: true,
+			})
 
 			setSelectedFile(null)
 			setBookTitle("")

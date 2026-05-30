@@ -11,6 +11,26 @@ BookRagStatus = Literal["pending", "processing", "completed", "failed"]
 BookLearningStatus = Literal["not_started", "in_progress", "completed"]
 
 
+class BookCreate(BaseModel):
+    """Schema for finalizing a direct upload into a book record."""
+
+    model_config = build_camel_config(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=500)
+    file_path: str = Field(alias="filePath")
+    storage_provider: str = Field(alias="storageProvider")
+    file_size: int | None = Field(default=None, alias="fileSize")
+    author: str | None = Field(default=None, max_length=200)
+    subtitle: str | None = Field(default=None, max_length=500)
+    description: str | None = None
+    isbn: str | None = Field(default=None, max_length=20)
+    language: str | None = Field(default=None, max_length=10)
+    publication_year: int | None = Field(default=None, ge=1000, le=2030, alias="publicationYear")
+    publisher: str | None = Field(default=None, max_length=200)
+    tags: list[str] = Field(default_factory=list)
+    process_in_background: bool = Field(default=True, alias="processInBackground")
+
+
 class BookUpdate(BaseModel):
     """Schema for updating a book."""
 
