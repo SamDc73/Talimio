@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
-from src.exceptions import ConflictError, NotFoundError
+from src.exceptions import NotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -30,17 +30,6 @@ class BookContentService:
         return await self._create_with_session(self._session, data, user_id)
 
     async def _create_with_session(self, session: AsyncSession, data: dict[str, JsonValue], user_id: uuid.UUID) -> Book:
-        existing_book: Book | None = None
-        file_hash = data.get("file_hash")
-        if file_hash:
-            result = await session.execute(select(Book).where(Book.file_hash == file_hash, Book.user_id == user_id))
-            existing_book = result.scalar_one_or_none()
-
-        if existing_book is not None:
-            logger.info("Duplicate book upload rejected", extra={"user_id": str(user_id), "book_id": str(existing_book.id)})
-            message = "This file already exists in your library"
-            raise ConflictError(message)
-
         book = Book(**data, user_id=user_id, created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
         session.add(book)
         await session.flush()
