@@ -399,7 +399,7 @@ Lesson titles SHOULD:
 - Lesson count MUST equal `conceptGraph.nodes` count.
 - Each lesson object must include: `index`, `title`, `description`, and `module`.
 - Lesson `index` MUST reference its concept node index (1:1 mapping).
-- `title`/`description` should mirror the concept's framing so downstream systems can display them without additional normalization.
+- Each lesson's `title` and `description` MUST stay on the same topic as its concept node `title` at the same index; a cleaner or more scannable phrasing is fine, but never substitute a different or narrower subtopic (e.g. concept "Magnesium Bioavailability" must not become lesson "Magnesium Salts").
 
 ## Adaptive mastery rules
 - Use the self-assessment summary to calibrate scope, skip mastered basics, and prioritize weak areas.
