@@ -699,7 +699,7 @@ export function LessonViewer({
 															/>
 														</PracticeRegistryProvider>
 
-														{adaptiveEnabled && lessonCourseId && lesson?.id ? (
+														{adaptiveEnabled && lessonCourseId && lesson?.id && isLastWindow ? (
 															<AdaptiveReviewPanel
 																courseId={lessonCourseId}
 																lessonId={lesson.id}
