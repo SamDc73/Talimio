@@ -9,6 +9,8 @@ from src.config.schema_casing import build_camel_config
 
 BookRagStatus = Literal["pending", "processing", "completed", "failed"]
 BookLearningStatus = Literal["not_started", "in_progress", "completed"]
+BookFileType = Literal["pdf", "epub"]
+MEDIA_TYPES: dict[BookFileType, str] = {"pdf": "application/pdf", "epub": "application/epub+zip"}
 
 
 class BookCreate(BaseModel):
@@ -92,7 +94,7 @@ class BookResponse(BaseModel):
     publication_year: int | None = Field(None, alias="publicationYear")
     publisher: str | None = None
     tags: list[str] = Field(default_factory=list)
-    file_type: str = Field(alias="fileType")
+    file_type: BookFileType = Field(alias="fileType")
 
     @field_validator("tags", mode="before")
     @classmethod

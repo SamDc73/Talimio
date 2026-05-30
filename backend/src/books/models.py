@@ -10,6 +10,7 @@ from src.database.base import Base
 
 
 BookRagStatus = Literal["pending", "processing", "completed", "failed"]
+BookFileType = Literal["pdf", "epub"]
 
 
 class Book(Base):
@@ -30,7 +31,7 @@ class Book(Base):
     isbn: Mapped[str | None] = mapped_column(String(20), nullable=True)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     storage_provider: Mapped[str] = mapped_column(String(20), nullable=False, default="local")
-    file_type: Mapped[str] = mapped_column(String(10), nullable=False)  # pdf, epub
+    file_type: Mapped[BookFileType] = mapped_column(String(10), nullable=False)  # pdf, epub
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)  # in bytes
     total_pages: Mapped[int | None] = mapped_column(Integer, nullable=True)
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)

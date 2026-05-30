@@ -12,6 +12,7 @@ from src.storage.factory import get_storage_provider
 
 from .facade import BooksFacade
 from .schemas import (
+    MEDIA_TYPES,
     BookChapterStatusUpdate,
     BookCreate,
     BookProgressResponse,
@@ -124,7 +125,7 @@ async def serve_book_file(book_id: uuid.UUID, auth: CurrentAuth) -> FileResponse
     if url.startswith("http"):
         return RedirectResponse(url)
 
-    media_type = "application/pdf" if book.file_type == "pdf" else "application/epub+zip"
+    media_type = MEDIA_TYPES[book.file_type]
 
     return FileResponse(
         path=url,
@@ -159,7 +160,7 @@ async def get_book_presigned_url(book_id: uuid.UUID, auth: CurrentAuth) -> BookP
     return BookPresignedUrlResponse(
         url=url,
         expires_in=3600,
-        content_type="application/pdf" if book.file_type == "pdf" else "application/epub+zip",
+        content_type=MEDIA_TYPES[book.file_type],
     )
 
 
