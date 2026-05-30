@@ -118,11 +118,6 @@ class BookResponseBuilder:
         return BookProgressResponse.model_validate(payload)
 
     @staticmethod
-    def build_book_list(books: list[Book]) -> list[BookResponse]:
-        """Convert list of Book models to list of BookResponse."""
-        return [BookResponseBuilder.build_book_response(book) for book in books]
-
-    @staticmethod
     def _convert_toc_to_schema(toc_data: list[dict[str, JsonValue]]) -> list[TableOfContentsItem]:
         """Convert table of contents data to schema objects."""
         result = []

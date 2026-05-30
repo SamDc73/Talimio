@@ -223,17 +223,6 @@ class BookWithProgress(BookResponse):
     progress: BookProgressResponse | None = None
 
 
-class BookListResponse(BaseModel):
-    """Schema for book list response."""
-
-    model_config = build_camel_config()
-
-    items: list[BookResponse]
-    total: int
-    page: int
-    pages: int
-
-
 class BookChapterBase(BaseModel):
     """Base schema for book chapter."""
 

@@ -2,7 +2,7 @@ import json
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, status
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
@@ -14,7 +14,6 @@ from src.storage.factory import get_storage_provider
 from .facade import BooksFacade
 from .schemas import (
     BookChapterStatusUpdate,
-    BookListResponse,
     BookProgressResponse,
     BookProgressUpdate,
     BookRagStatus,
@@ -31,25 +30,6 @@ router = APIRouter(prefix="/api/v1/books", tags=["books"])
 def get_books_facade(auth: CurrentAuth) -> BooksFacade:
     """Provide request-scoped books facade."""
     return BooksFacade(auth.session)
-
-
-@router.get("")
-async def list_books(
-    auth: CurrentAuth,
-    facade: Annotated[BooksFacade, Depends(get_books_facade)],
-    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
-    limit: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
-    search: Annotated[str | None, Query(description="Search in title, author, or description")] = None,
-    tags: Annotated[list[str] | None, Query(description="Filter by tags")] = None,
-) -> BookListResponse:
-    """List all books with pagination and optional filtering."""
-    return await facade.get_paginated_user_books(
-        user_id=auth.user_id,
-        page=page,
-        limit=limit,
-        search=search,
-        tags=tags,
-    )
 
 
 @router.get("/{book_id}")

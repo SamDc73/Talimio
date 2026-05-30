@@ -364,33 +364,6 @@ class CoursesFacade:  # noqa: PLR0904
             message = "Search failed"
             raise CoursesFacadeUpstreamError(message) from error
 
-    async def get_user_courses(self, user_id: uuid.UUID, include_progress: bool = True) -> list[dict[str, object]]:
-        """Get all courses for user, optionally including progress information."""
-        query_service = CourseQueryService(self._session)
-        per_page = 20
-        try:
-            course_responses, _total = await query_service.list_courses(
-                page=1, per_page=per_page, search=None, user_id=user_id
-            )
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError) as error:
-            logger.exception("courses.list_user.failed", extra={"user_id": str(user_id)})
-            message = "Failed to get courses"
-            raise CoursesFacadeUpstreamError(message) from error
-
-        course_dicts: list[dict[str, object]] = []
-        for course_response in course_responses:
-            course_dict = cast("dict[str, object]", course_response.model_dump(mode="json"))
-            if include_progress:
-                try:
-                    progress = await self._progress_service.get_progress(course_response.id, user_id)
-                    course_dict["progress"] = progress
-                except (RuntimeError, ValueError) as error:
-                    logger.warning("Failed to get progress for course %s: %s", course_response.id, error)
-                    course_dict["progress"] = {"completion_percentage": 0, "completed_lessons": {}}
-            course_dicts.append(course_dict)
-
-        return course_dicts
-
     async def get_course_lessons(self, course_id: uuid.UUID, user_id: uuid.UUID) -> list[dict[str, object]]:
         """Get course lessons grouped by modules."""
         query_service = CourseQueryService(self._session)

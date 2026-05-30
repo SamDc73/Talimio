@@ -15,7 +15,6 @@ from src.ai.rag.service import RAGService
 from src.books.models import Book
 from src.books.schemas import (
     BookLearningStatus,
-    BookListResponse,
     BookProgressResponse,
     BookProgressUpdate,
     BookRagStatus,
@@ -78,18 +77,6 @@ def _parse_json_tags(raw_tags: str | None) -> list[str]:
 def _merge_tags(existing_tags: list[str], generated_tags: list[str]) -> list[str]:
     """Merge existing and generated tags while keeping insertion order."""
     return list(dict.fromkeys([*existing_tags, *generated_tags]))
-
-
-def _string_field(payload: dict[str, object], key: str) -> str:
-    """Return a string field from a mixed response payload."""
-    value = payload.get(key)
-    return value if isinstance(value, str) else ""
-
-
-def _string_list_field(payload: dict[str, object], key: str) -> list[str]:
-    """Return a string list field from a mixed response payload."""
-    value = payload.get(key)
-    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
 
 def _apply_completed_chapters(chapters: list[dict[str, JsonValue]], completed_chapters: dict[str, bool]) -> None:
@@ -178,42 +165,6 @@ class BooksFacade:
             )
             message = "Failed to retrieve book"
             raise BooksFacadeInternalError(message) from error
-
-    async def get_paginated_user_books(
-        self,
-        user_id: uuid.UUID,
-        page: int = 1,
-        limit: int = 20,
-        search: str | None = None,
-        tags: list[str] | None = None,
-    ) -> BookListResponse:
-        """List books for a user with filtering and pagination."""
-        books = await self.get_user_books(user_id, include_progress=True)
-
-        if search:
-            search_lower = search.lower()
-            books = [
-                book
-                for book in books
-                if search_lower in _string_field(book, "title").lower()
-                or search_lower in _string_field(book, "author").lower()
-                or search_lower in _string_field(book, "description").lower()
-            ]
-
-        if tags:
-            books = [book for book in books if any(tag in _string_list_field(book, "tags") for tag in tags)]
-
-        total = len(books)
-        start = (page - 1) * limit
-        end = start + limit
-        paginated_books = books[start:end]
-
-        return BookListResponse(
-            items=[BookResponse.model_validate(book) for book in paginated_books],
-            total=total,
-            page=page,
-            pages=(total + limit - 1) // limit,
-        )
 
     async def embed_book_background(self, book_id: uuid.UUID) -> None:
         """Process embeddings for a book in a dedicated background session."""
@@ -547,28 +498,6 @@ class BooksFacade:
                 "Error updating book",
                 extra={"user_id": str(user_id), "book_id": str(book_id), "error": str(error)},
             )
-            raise
-
-    async def get_user_books(self, user_id: uuid.UUID, include_progress: bool = True) -> list[dict[str, object]]:
-        """Get all books for a user."""
-        try:
-            result = await self._session.execute(
-                select(Book).where(Book.user_id == user_id).order_by(Book.created_at.desc())
-            )
-            books = list(result.scalars().all())
-
-            book_dicts: list[dict[str, object]] = []
-            for book in books:
-                book_response = BookResponse.model_validate(book)
-                book_payload = book_response.model_dump()
-                if include_progress:
-                    progress = await self._progress_service.get_progress(book_payload["id"], user_id)
-                    book_payload["progress"] = progress
-                book_dicts.append(book_payload)
-
-            return book_dicts
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-            logger.exception("books.list.failed", extra={"user_id": str(user_id)})
             raise
 
     async def get_book_chapters(self, book_id: uuid.UUID, user_id: uuid.UUID) -> list[BookTocChapterResponse]:
