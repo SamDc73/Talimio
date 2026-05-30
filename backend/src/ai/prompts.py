@@ -269,6 +269,7 @@ Return ONLY valid JSON that matches the Schema section. Optional fields may be o
 
 ## Self-Assessment awareness (conditional)
 - If a "Self-Assessment" block appears in USER_PROMPT, calibrate lesson difficulty, pacing, and sequencing accordingly.
+- Do not turn self-assessment into mastery scores; learner mastery starts at 0 until interaction evidence updates it.
 
 ## Curriculum shape (adaptive)
 - Choose the number of modules that best fits the scope and the learner's constraints.
@@ -329,7 +330,6 @@ Lesson titles SHOULD:
       "nodes": [
         {
           "title": "string",
-          "initialMastery": 0.4,
           "slug": "kebab-case"
         }
       ],
@@ -358,7 +358,6 @@ Lesson titles SHOULD:
   "lessons": [
     {
       "index": 0,
-      "slug": "kebab-case",
       "title": "string",
       "description": "1 short sentence ending with a micro-check",
       "module": "Module name"
@@ -367,7 +366,7 @@ Lesson titles SHOULD:
 }
 
 ## Field rules (HARD REQUIREMENTS)
-- Slug fields are OPTIONAL; if provided, use lowercase kebab-case and keep them unique.
+- Node slug fields are OPTIONAL; if provided, use lowercase kebab-case and keep them unique.
 - Keep keys in each object in the same order as the Schema.
 - Lessons must appear in optimal learning order.
 - Use consistent module names; avoid creating one-off modules for single lessons.
@@ -379,7 +378,8 @@ Lesson titles SHOULD:
 - Node `slug` is OPTIONAL and display-only; never use it as the join key.
 
 ### `conceptGraph.nodes`
-- Each node includes: `title`, `initialMastery`, and optionally `slug`.
+- Each node includes: `title` and optionally `slug`.
+- Order nodes from foundational to advanced; when multiple nodes share a layer, put the intended lesson order first.
 
 ### `conceptGraph.edges`
 - Each edge includes `sourceIndex` and `prereqIndex` (integers).
@@ -402,10 +402,9 @@ Lesson titles SHOULD:
 - Each lesson's `title` and `description` MUST stay on the same topic as its concept node `title` at the same index; a cleaner or more scannable phrasing is fine, but never substitute a different or narrower subtopic (e.g. concept "Magnesium Bioavailability" must not become lesson "Magnesium Salts").
 
 ## Adaptive mastery rules
-- Use the self-assessment summary to calibrate scope, skip mastered basics, and prioritize weak areas.
+- Use the self-assessment summary to calibrate scope, pacing, sequencing, and weak-area emphasis.
 - Keep the canonical arc for the requested subject; do not omit foundational concepts (include them and let mastery/unlocks make them skippable).
-- Reserve `initialMastery >= 0.6` only for fundamentals the learner explicitly claims as strong; set all other dependent/advanced concepts in the 0.3-0.45 range.
-- Set `initialMastery` between 0.3 and 0.7 unless evidence justifies higher/lower confidence; use null only when impossible to estimate.
+- Do not emit mastery estimates or an `initialMastery` field; every concept starts unknown until learner interaction evidence updates it.
 
 ## Quality gate (self-check BEFORE output)
 - Make sure all the topics the user asked for are covered; without any extra topics.

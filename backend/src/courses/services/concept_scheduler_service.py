@@ -51,6 +51,8 @@ LEARNER_PROFILE_SENSITIVITY_DECAY = 0.9
 LEARNER_PROFILE_SENSITIVITY_BOOST = 1.1
 LEARNER_PROFILE_SENSITIVITY_MIN = 0.4
 LEARNER_PROFILE_SENSITIVITY_MAX = 1.6
+_UNKNOWN_DIFFICULTY_RANK = 6
+_UNKNOWN_ORDER_HINT_RANK = 1_000_000
 
 
 class DueConceptEntry(TypedDict):
@@ -114,16 +116,31 @@ class LectorSchedulerService:
                 sigma_map.get(entry["concept"].id, 0.0),
             )
         )
+        locked.sort(key=self._course_structure_sort_key)
         return unlocked + locked
 
-    def _frontier_sort_key(self, entry: FrontierEntry, sigma_value: float) -> tuple[float, str]:
-        """Sort key prioritizing low mastery while penalizing high semantic risk (LECTOR §3.1)."""
+    def _frontier_sort_key(self, entry: FrontierEntry, sigma_value: float) -> tuple[int, float, int, str]:
+        """Sort unseen concepts by course structure; use LECTOR priority after learner evidence exists."""
         concept = entry["concept"]
         identifier = (concept.name or "").strip().lower() or (concept.slug or "").strip().lower()
-        mastery = self._mastery_value(entry["state"])
-        sensitivity = self._semantic_sensitivity(entry["state"])
+        state = entry["state"]
+
+        if state is None or state.exposures <= 0:
+            difficulty, order_hint, _ = self._course_structure_sort_key(entry)
+            return (0, difficulty, order_hint, identifier)
+
+        mastery = self._mastery_value(state)
+        sensitivity = self._semantic_sensitivity(state)
         priority = (1.0 - mastery) - (self._confusion_lambda * sensitivity * sigma_value)
-        return (-priority, identifier)
+        return (1, -priority, 0, identifier)
+
+    @staticmethod
+    def _course_structure_sort_key(entry: FrontierEntry) -> tuple[float, int, str]:
+        concept = entry["concept"]
+        identifier = (concept.name or "").strip().lower() or (concept.slug or "").strip().lower()
+        difficulty = concept.difficulty if concept.difficulty is not None else _UNKNOWN_DIFFICULTY_RANK
+        order_hint = entry["order_hint"] if entry["order_hint"] is not None else _UNKNOWN_ORDER_HINT_RANK
+        return (float(difficulty), order_hint, identifier)
 
     def _mastery_value(self, state: UserConceptState | None) -> float:
         """Extract mastery value from user concept state."""

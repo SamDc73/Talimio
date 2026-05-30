@@ -268,7 +268,6 @@ class AdaptiveConceptNode(BaseModel):
     """Single concept node returned by adaptive course planning."""
 
     title: str = Field(max_length=255)
-    initial_mastery: float | None = Field(default=None, alias="initialMastery")
     slug: str | None = Field(default=None, max_length=200)
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -281,21 +280,6 @@ class AdaptiveConceptNode(BaseModel):
             msg = "Concept title must not be empty"
             raise ValueError(msg)
         return text
-
-    @field_validator("initial_mastery", mode="before")
-    @classmethod
-    def _coerce_initial_mastery(cls, value: object) -> float | None:
-        if value is None or value == "":
-            return None
-        try:
-            mastery = float(_float_input(value))
-        except (TypeError, ValueError) as exc:
-            msg = "initialMastery must be a float between 0.0 and 1.0"
-            raise ValueError(msg) from exc
-        if not 0.0 <= mastery <= 1.0:
-            msg = "initialMastery must be between 0.0 and 1.0"
-            raise ValueError(msg)
-        return mastery
 
     @field_validator("slug", mode="before")
     @classmethod
@@ -378,7 +362,7 @@ class ConfusorCandidate(BaseModel):
 class AdaptiveConceptGraph(BaseModel):
     """Aggregate concept graph payload used to seed ConceptFlow."""
 
-    nodes: list[AdaptiveConceptNode]
+    nodes: list[AdaptiveConceptNode] = Field(min_length=1)
     edges: list[AdaptiveConceptEdge] = Field(default_factory=list)
     layers: list[list[int]] = Field(default_factory=list)
     confusors: list[AdaptiveConfusorSet] = Field(default_factory=list)
@@ -407,6 +391,15 @@ class AdaptiveConceptGraph(BaseModel):
             normalized.append(layer)
         return normalized
 
+    @model_validator(mode="after")
+    def _validate_layers_cover_nodes(self) -> "AdaptiveConceptGraph":
+        expected_indexes = set(range(len(self.nodes)))
+        layer_indexes = [index for layer in self.layers for index in layer]
+        if set(layer_indexes) != expected_indexes or len(layer_indexes) != len(expected_indexes):
+            msg = "layers must cover every concept node index exactly once"
+            raise ValueError(msg)
+        return self
+
 
 class AdaptiveOutlineMeta(BaseModel):
     """Outline metadata required for adaptive courses."""
@@ -425,6 +418,15 @@ class AdaptiveCourseStructure(BaseModel):
     lessons: list[AdaptiveLessonPlan] = Field(default_factory=list)
 
     model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    @model_validator(mode="after")
+    def _validate_lessons_cover_nodes(self) -> "AdaptiveCourseStructure":
+        expected_indexes = set(range(len(self.ai_outline_meta.concept_graph.nodes)))
+        lesson_indexes = [lesson.index for lesson in self.lessons]
+        if set(lesson_indexes) != expected_indexes or len(lesson_indexes) != len(expected_indexes):
+            msg = "lessons must cover every concept node index exactly once"
+            raise ValueError(msg)
+        return self
 
     def layer_index(self) -> dict[int, int]:
         """Map node indices to their layer index for difficulty heuristics."""

@@ -29,7 +29,6 @@ from src.courses.models import (
     CourseConcept,
     CourseDocument,
     Lesson,
-    UserConceptState,
 )
 from src.database.session import async_session_maker
 from src.exceptions import NotFoundError
@@ -1090,8 +1089,10 @@ class CourseContentService:
         concept_graph = plan.ai_outline_meta.concept_graph
 
         layer_lookup = plan.layer_index()
+        lesson_order_by_index: dict[int, int] = {}
+        for order, lesson in enumerate(plan.lessons):
+            lesson_order_by_index.setdefault(int(lesson.index), order)
         concepts_by_index: list[Concept] = []
-        state_rows: list[RowPayload] = []
         course_concept_rows: list[RowPayload] = []
 
         for index, node in enumerate(concept_graph.nodes):
@@ -1111,24 +1112,14 @@ class CourseContentService:
                 {
                     "course_id": course.id,
                     "concept_id": concept.id,
-                    "order_hint": index,
+                    "order_hint": lesson_order_by_index.get(index, index),
                 }
             )
-
-            if node.initial_mastery is not None:
-                state_rows.append(
-                    {
-                        "user_id": course.user_id,
-                        "concept_id": concept.id,
-                        "s_mastery": float(node.initial_mastery),
-                    }
-                )
 
         await self._insert_course_concepts(session=session, rows=course_concept_rows)
 
         await session.flush()
 
-        seeded_state_count = await self._seed_owner_states(session=session, state_rows=state_rows)
         confusor_pair_count = await self._persist_confusors(
             session=session,
             concept_graph=concept_graph,
@@ -1137,9 +1128,8 @@ class CourseContentService:
         )
 
         logger.info(
-            "Adaptive concept seeding for course %s persisted %d user states and %d confusor pairs",
+            "Adaptive concept seeding for course %s persisted %d confusor pairs",
             course.id,
-            seeded_state_count,
             confusor_pair_count,
         )
 
@@ -1182,31 +1172,6 @@ class CourseContentService:
             index_elements=[CourseConcept.course_id, CourseConcept.concept_id]
         )
         await session.execute(stmt)
-
-    async def _seed_owner_states(
-        self,
-        *,
-        session: AsyncSession,
-        state_rows: Sequence[Mapping[str, object]],
-    ) -> int:
-        if not state_rows:
-            return 0
-
-        insert_rows = []
-        for item in state_rows:
-            mastery = item["s_mastery"]
-            insert_rows.append(
-                {
-                    "user_id": item["user_id"],
-                    "concept_id": item["concept_id"],
-                    "s_mastery": float(mastery) if isinstance(mastery, str | int | float) else 0.0,
-                }
-            )
-        stmt = insert(UserConceptState).values(insert_rows).on_conflict_do_nothing(
-            index_elements=[UserConceptState.user_id, UserConceptState.concept_id]
-        )
-        await session.execute(stmt)
-        return len(insert_rows)
 
     async def _persist_confusors(
         self,
