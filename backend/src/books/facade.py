@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.ai.rag.service import RAGService
 from src.books.models import Book
 from src.books.schemas import (
+    MEDIA_TYPES,
+    BookFileType,
     BookLearningStatus,
     BookProgressResponse,
     BookProgressUpdate,
@@ -359,10 +361,14 @@ class BooksFacade:
         storage = get_storage_provider(storage_provider)
 
         file_extension = filename.lower().split(".")[-1]
+        if file_extension not in MEDIA_TYPES:
+            message = "Unsupported book file type"
+            raise ValidationError(message)
+        file_type = cast("BookFileType", file_extension)
         if file_size is None or file_size <= 0:
             message = "file_size is required for direct upload finalization"
             raise ValidationError(message)
-        metadata = BookMetadata(file_type=file_extension)
+        metadata = BookMetadata(file_type=file_type)
         resolved_file_size = file_size
         file_hash = None
 
@@ -382,7 +388,7 @@ class BooksFacade:
             "publication_year": publication_year or metadata.publication_year,
             "publisher": publisher or metadata.publisher,
             "tags": tags or [],
-            "file_type": file_extension,
+            "file_type": file_type,
             "file_size": resolved_file_size,
             "total_pages": metadata.total_pages or 0,
             "file_hash": file_hash,

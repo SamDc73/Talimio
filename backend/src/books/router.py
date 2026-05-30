@@ -131,6 +131,8 @@ async def serve_book_file(book_id: uuid.UUID, auth: CurrentAuth) -> FileResponse
 class BookPresignedUrlResponse(BaseModel):
     """Direct book download URL response."""
 
+    model_config = build_camel_config()
+
     url: str
     expires_in: int
     content_type: str

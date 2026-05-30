@@ -64,12 +64,12 @@ class R2Storage(AbstractStorage):
         return cast(
             "AbstractAsyncContextManager[_S3Client]",
             self._session.client(
-            "s3",
-            endpoint_url=self.endpoint_url,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.secret_access_key,
-            region_name=self.region,
-            config=Config(signature_version="s3v4"),
+                "s3",
+                endpoint_url=self.endpoint_url,
+                aws_access_key_id=self.access_key_id,
+                aws_secret_access_key=self.secret_access_key,
+                region_name=self.region,
+                config=Config(signature_version="s3v4"),
             ),
         )
 
@@ -162,9 +162,9 @@ class R2Storage(AbstractStorage):
             "CORSRules": [
                 {
                     "AllowedHeaders": ["*"],
-                    "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
+                    "AllowedMethods": ["GET", "HEAD", "PUT", "POST", "DELETE"],
                     "AllowedOrigins": ["*"],
-                    "ExposeHeaders": [],
+                    "ExposeHeaders": ["Accept-Ranges", "Content-Range"],
                     "MaxAgeSeconds": 3000,
                 }
             ]

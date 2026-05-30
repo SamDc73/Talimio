@@ -1,18 +1,14 @@
-
-import uuid
-from collections.abc import Mapping
-
-from src.books.models import Book
-
-
 """Book response builder service for consistent response formatting."""
 
 import json
 import logging
+import uuid
+from collections.abc import Mapping
 from typing import cast
 
 from pydantic import JsonValue
 
+from src.books.models import Book
 from src.books.schemas import (
     BookProgressResponse,
     BookResponse,

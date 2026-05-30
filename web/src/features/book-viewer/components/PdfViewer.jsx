@@ -15,7 +15,7 @@ import { Viewport, ViewportPluginPackage } from "@embedpdf/plugin-viewport/react
 import { ZoomMode } from "@embedpdf/plugin-zoom"
 import { useZoom, ZoomPluginPackage } from "@embedpdf/plugin-zoom/react"
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
-import { useBookActions, useBookReadingState, useBookStoreHydrated } from "../hooks/use-book-state"
+import { useBookActions, useBookReadingState, useBookStoreHydrated } from "@/features/book-viewer/hooks/use-book-state"
 
 function ViewerRuntime({
 	documentId,
@@ -186,7 +186,7 @@ function ViewerRuntime({
 	}, [selection])
 
 	return (
-		<Viewport documentId={documentId} className="size-full ">
+		<Viewport documentId={documentId} className="size-full">
 			<Scroller documentId={documentId} renderPage={renderPage} />
 		</Viewport>
 	)
@@ -320,12 +320,12 @@ function PdfViewer({ url, onTextSelection: _onTextSelection, bookId, ref }) {
 
 								return (
 									<GlobalPointerProvider documentId={activeDocumentId}>
-										<div className="flex size-full  justify-center" data-selection-zone="true">
-							<ViewerRuntime
-								documentId={activeDocumentId}
-								bookId={bookId}
-								apiRef={ref}
-								getBookReadingState={(id) => (id === bookId ? readingState : null)}
+										<div className="flex size-full justify-center" data-selection-zone="true">
+											<ViewerRuntime
+												documentId={activeDocumentId}
+												bookId={bookId}
+												apiRef={ref}
+												getBookReadingState={(id) => (id === bookId ? readingState : null)}
 												updateBookReadingState={updateBookReadingState}
 												hasRestoredPage={hasRestoredPage}
 												onMarkPageRestored={markPageRestored}

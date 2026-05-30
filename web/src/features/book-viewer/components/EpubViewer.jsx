@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ReactReader } from "react-reader"
+import { useBookActions, useBookReadingState, useBookZoomLevel } from "@/features/book-viewer/hooks/use-book-state"
 import { api as apiClient } from "@/lib/apiClient"
 import logger from "@/lib/logger"
-import { useBookActions, useBookReadingState, useBookZoomLevel } from "../hooks/use-book-state"
 
 function EpubViewer({ url, bookId, onProgressUpdate }) {
 	const [location, setLocation] = useState(null)
@@ -385,7 +385,7 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 			<div className="h-full flex items-center justify-center bg-background">
 				<div className="text-center">
 					<div className="mb-4">
-						<div className="inline-block size-8  animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+						<div className="inline-block size-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
 					</div>
 					<p className="text-muted-foreground">Loading EPUB...</p>
 				</div>
