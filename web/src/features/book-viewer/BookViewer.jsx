@@ -67,10 +67,10 @@ function BookViewerContent() {
 		// Prevent background refetches and retry storms causing 429
 		refetchOnWindowFocus: false,
 		retry: false,
-		// Auto-poll while backend metadata extraction is still in flight.
-		// GET /books/{id} schedules a background extraction when total_pages is 0,
-		// so a short poll lets the sidebar/TOC populate the moment it finishes.
-		refetchInterval: (query) => (query.state.data?.totalPages ? false : 3000),
+		// Metadata extraction runs once at upload. Briefly poll so the sidebar/TOC
+		// populate the moment it finishes, but stop once total_pages arrives or after
+		// ~1 min so a book without extractable page count never polls forever.
+		refetchInterval: (query) => (query.state.data?.totalPages || query.state.dataUpdateCount >= 20 ? false : 3000),
 	})
 
 	const handleZoomIn = () => {

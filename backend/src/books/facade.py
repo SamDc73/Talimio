@@ -141,18 +141,10 @@ class BooksFacade:
         self,
         book_id: uuid.UUID,
         user_id: uuid.UUID,
-        background_tasks: BackgroundTasks | None = None,
     ) -> BookWithProgress:
-        """Get a single book with progress as a typed response.
-
-        When ``background_tasks`` is provided and the book has no ``total_pages``,
-        schedule a one-shot metadata extraction so legacy books (uploaded before
-        commit ``fe92e20``) self-heal on the next view.
-        """
+        """Get a single book with progress as a typed response."""
         try:
             book = await self._require_owned_book(book_id=book_id, user_id=user_id, operation="get_book")
-            if background_tasks is not None and not book.total_pages and book.file_path:
-                background_tasks.add_task(self.extract_book_metadata_background, book_id)
             progress_payload = await self._progress_service.get_progress(book_id, user_id)
             progress = BookResponseBuilder.build_progress_response(progress_payload, book_id) if progress_payload else None
             return BookResponseBuilder.build_book_with_progress(book, progress)
@@ -418,6 +410,7 @@ class BooksFacade:
 
         if background_tasks is not None:
             await self._session.commit()
+            background_tasks.add_task(self.extract_book_metadata_background, book_id)
             background_tasks.add_task(self.embed_book_background, book_id)
             background_tasks.add_task(self.auto_tag_book_background, book_id, user_id)
 
