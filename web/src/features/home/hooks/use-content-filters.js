@@ -19,7 +19,14 @@ export const useContentFilters = () => {
 		setActiveFilter("all")
 		setActiveSort("last-accessed")
 		setSortDirection("desc")
+		setArchiveFilter("active")
 		setTagFilter("")
+		setShowAll(false)
+	}
+
+	const updateArchiveFilter = (value) => {
+		setArchiveFilter(value)
+		setShowAll(false)
 	}
 
 	const getFilteredAndSortedContent = (contentItems) => {
@@ -29,13 +36,6 @@ export const useContentFilters = () => {
 				if (activeFilter === "all") return true
 				if (activeFilter === "course") return item.type === "course"
 				return item.type === activeFilter
-			})
-			.filter((item) => {
-				// Apply archive filter
-				const isArchived = Boolean(item.archived)
-				if (archiveFilter === "active") return !isArchived
-				if (archiveFilter === "archived") return isArchived
-				return true // "all" shows both archived and active
 			})
 			.filter((item) => {
 				if (!searchQuery) return true
@@ -102,7 +102,7 @@ export const useContentFilters = () => {
 		sortDirection,
 		setSortDirection,
 		archiveFilter,
-		setArchiveFilter,
+		setArchiveFilter: updateArchiveFilter,
 		tagFilter,
 		setTagFilter,
 		showAll,

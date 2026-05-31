@@ -11,7 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
-from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
+from src.content.schemas import ContentListResponse, ContentStatusFilter, ContentType, normalize_content_type
 from src.content.services.content_transform_service import ContentProjectionRow, ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
 from src.courses.models import Course, CourseConcept, UserConceptState
@@ -43,7 +43,7 @@ class ContentService:
         content_type: ContentType | None = None,
         page: int = 1,
         page_size: int = 20,
-        include_archived: bool = False,
+        content_status: ContentStatusFilter = "active",
     ) -> ContentListResponse:
         """
         Ultra-fast content listing using raw SQL queries.
@@ -60,7 +60,7 @@ class ContentService:
         canonical_content_type = normalize_content_type(content_type) if content_type is not None else None
 
         session = self._session
-        queries = QueryBuilderService.build_content_queries(canonical_content_type, search, include_archived, user_id)
+        queries = QueryBuilderService.build_content_queries(canonical_content_type, search, content_status, user_id)
 
         if not queries:
             return ContentListResponse(items=[], total=0, page=page, per_page=page_size)

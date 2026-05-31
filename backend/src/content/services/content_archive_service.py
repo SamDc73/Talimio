@@ -7,9 +7,7 @@ from datetime import UTC, datetime
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
-from src.content.services.content_transform_service import ContentTransformService
-from src.content.services.query_builder_service import QueryBuilderService
+from src.content.schemas import ContentType, normalize_content_type
 from src.exceptions import NotFoundError
 
 
@@ -110,70 +108,3 @@ class ContentArchiveService:
             logger.warning("content.archive.not_found", extra={"content_type": content_type.value, "content_id": str(content_id), "user_id": str(user_id)})
             raise NotFoundError(content_type.value, str(content_id))
         logger.info("content.unarchive.succeeded", extra={"content_type": content_type.value, "content_id": str(content_id), "user_id": str(user_id)})
-
-    @staticmethod
-    async def list_archived_content(
-        session: AsyncSession,
-        search: str | None = None,
-        content_type: ContentType | None = None,
-        page: int = 1,
-        page_size: int = 20,
-        current_user_id: uuid.UUID | None = None,
-    ) -> ContentListResponse:
-        """
-        List only archived content across different types.
-
-        Similar to list_content_fast but filters for archived = true.
-        """
-        from src.content.services.content_service import ContentService
-
-        offset = (page - 1) * page_size
-        search_term = f"%{search}%" if search else None
-
-        # Construct the combined query with archived filter
-        if content_type:
-            canonical_content_type = normalize_content_type(content_type)
-
-            if canonical_content_type == ContentType.VIDEO:
-                combined_query = QueryBuilderService.get_video_query(
-                    search,
-                    archived_only=True,
-                    user_id=current_user_id,
-                )
-            elif canonical_content_type == ContentType.BOOK:
-                combined_query = QueryBuilderService.get_books_query(
-                    search, archived_only=True, user_id=current_user_id
-                )
-            elif canonical_content_type == ContentType.COURSE:
-                combined_query = QueryBuilderService.get_courses_query(
-                    search, archived_only=True, include_archived=False, user_id=current_user_id
-                )
-            else:
-                msg = f"Unsupported content type: {content_type}"
-                raise ValueError(msg)
-        else:
-            # Union all content types with archived filter
-            combined_query = f"""
-                {QueryBuilderService.get_video_query(search, archived_only=True, user_id=current_user_id)}
-                UNION ALL
-                {QueryBuilderService.get_books_query(search, archived_only=True, user_id=current_user_id)}
-                UNION ALL
-                {QueryBuilderService.get_courses_query(search, archived_only=True, include_archived=False, user_id=current_user_id)}
-            """
-
-        # Get total count and paginated results
-        total = await QueryBuilderService.get_total_count(session, combined_query, search_term, current_user_id)
-        service = ContentService(session)
-        rows = await service.get_paginated_results(
-            session, combined_query, search_term, page_size, offset, current_user_id
-        )
-
-        # Transform rows to content items
-        items = ContentTransformService.transform_rows_to_items(rows)
-
-        return ContentListResponse(
-            items=items,
-            total=total,
-            page=page,
-            per_page=page_size,
-        )

@@ -51,7 +51,6 @@ export default function HomePage() {
 		handleCourseCreated,
 		handleCardClick,
 		handleDeleteItem,
-		handleArchiveItem,
 		handleTagsUpdated,
 		handleBookUploaded,
 		handleVideoAdded,
@@ -82,7 +81,6 @@ export default function HomePage() {
 			pinned={pinning.pins[item.type]?.includes(item.id)}
 			onTogglePin={() => pinning.togglePin(item.type, item.id)}
 			onDelete={handleDeleteItem}
-			onArchive={handleArchiveItem}
 			onTagsUpdated={handleTagsUpdated}
 			onClick={() => handleCardClick(item)}
 		/>
@@ -176,6 +174,7 @@ export default function HomePage() {
 								filters.setActiveFilter("all")
 								filters.setActiveSort("last-accessed")
 								filters.setSortDirection("desc")
+								filters.setArchiveFilter("active")
 								filters.setTagFilter("")
 							}}
 						/>

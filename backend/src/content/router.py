@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request, Response, status
 
 from src.auth import CurrentAuth
-from src.content.schemas import ContentListResponse, ContentType, normalize_content_type
+from src.content.schemas import ContentListResponse, ContentStatusFilter, ContentType, normalize_content_type
 from src.content.services.content_service import ContentService
 
 
@@ -20,7 +20,10 @@ async def get_all_content(
     content_type: Annotated[ContentType | None, Query(description="Filter by content type")] = None,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
     page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
-    include_archived: Annotated[bool, Query(description="Include archived content")] = False,
+    content_status: Annotated[
+        ContentStatusFilter,
+        Query(alias="status", description="Filter by content lifecycle status"),
+    ] = "active",
 ) -> ContentListResponse:
     """
     List all content across different types (videos, books, courses).
@@ -36,7 +39,7 @@ async def get_all_content(
         content_type=content_type,
         page=page,
         page_size=page_size,
-        include_archived=include_archived,
+        content_status=content_status,
     )
 
 

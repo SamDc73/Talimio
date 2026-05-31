@@ -1,5 +1,4 @@
-import { useEffect } from "react"
-import { useContentList, useInvalidateContent } from "./use-content-queries"
+import { useContentList } from "./use-content-queries"
 
 /**
  * Content Data Hook (using React Query per state-management.md)
@@ -11,28 +10,10 @@ export function useContentData(filters, _pinning) {
 	// Use React Query for server data
 	const { data, isLoading, error, refetch, hasMoreContent, loadRemainingContent } = useContentList(filters)
 
-	// Get invalidate function for manual refresh
-	const invalidateContent = useInvalidateContent()
-
 	// Extract data with defaults
 	const contentItems = data?.items || []
 	const filterOptions = data?.filterOptions || []
 	const sortOptions = data?.sortOptions || []
-
-	// Listen for events that require refresh
-	useEffect(() => {
-		const handleContentUnarchived = () => {
-			// Invalidate queries to refetch
-			invalidateContent()
-		}
-
-		// Only listen for unarchive (delete/archive handled by mutations)
-		window.addEventListener("contentUnarchived", handleContentUnarchived)
-
-		return () => {
-			window.removeEventListener("contentUnarchived", handleContentUnarchived)
-		}
-	}, [invalidateContent])
 
 	return {
 		contentItems,

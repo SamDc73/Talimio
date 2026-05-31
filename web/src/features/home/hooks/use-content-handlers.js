@@ -64,13 +64,6 @@ export function useContentHandlers({ filters, pinning, loadContentData }) {
 		// - Notifications
 	}
 
-	// Event handler: user requested archive
-	const handleArchiveItem = async () => {
-		// Store handles archiving
-		// Trigger data refresh for React Query
-		await loadContentData()
-	}
-
 	// Event handler: user updated tags
 	const handleTagsUpdated = async (itemId, _contentType, newTags) => {
 		patchContentItemInCache(queryClient, itemId, (item) => ({ ...item, tags: newTags }))
@@ -100,7 +93,6 @@ export function useContentHandlers({ filters, pinning, loadContentData }) {
 		handleCourseCreated,
 		handleCardClick,
 		handleDeleteItem,
-		handleArchiveItem,
 		handleTagsUpdated,
 		handleBookUploaded,
 		handleVideoAdded,

@@ -23,7 +23,11 @@ export default function FilterBadges({
 	onResetAll,
 }) {
 	const hasActiveFilters =
-		activeFilter !== "all" || activeSort !== "last-accessed" || sortDirection !== "desc" || tagFilter
+		activeFilter !== "all" ||
+		archiveFilter !== "active" ||
+		activeSort !== "last-accessed" ||
+		sortDirection !== "desc" ||
+		tagFilter
 
 	return (
 		<motion.div

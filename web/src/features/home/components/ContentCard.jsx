@@ -21,7 +21,7 @@ function formatDuration(seconds) {
 	return `${minutes}m`
 }
 
-function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpdated, index, onClick }) {
+function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index, onClick }) {
 	const [hover, setHover] = useState(false)
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 	const [showTagEditModal, setShowTagEditModal] = useState(false)
@@ -31,6 +31,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 	const archiveContentMutation = useArchiveContent()
 
 	const progressValue = item.progress ?? 0
+	const isArchived = item.status === "archived"
 
 	const handleDeleteClick = () => {
 		setShowDeleteConfirm(true)
@@ -40,7 +41,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 		if (action === "Pin") return pinned ? "Unpin" : "Pin"
 		if (action === "Archive") {
 			if (archiveContentMutation.isPending) return "Processing..."
-			return item.archived ? "Unarchive" : "Archive"
+			return isArchived ? "Unarchive" : "Archive"
 		}
 		return action
 	}
@@ -68,13 +69,8 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onArchive, onTagsUpd
 		// Use React Query mutation
 		archiveContentMutation.mutate({
 			item,
-			archive: !item.archived,
+			archive: !isArchived,
 		})
-
-		// Notify parent if provided
-		if (onArchive) {
-			onArchive(item.id, item.type, !item.archived)
-		}
 	}
 
 	const handleEditTags = () => {

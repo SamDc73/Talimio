@@ -23,7 +23,8 @@ def normalize_content_type(content_type: ContentType) -> ContentType:
     return content_type
 
 
-ContentItemStatus = Literal["active", "archived", "draft"]
+ContentItemStatus = Literal["active", "archived"]
+ContentStatusFilter = Literal["active", "archived", "all"]
 
 
 class ProgressData(BaseModel):

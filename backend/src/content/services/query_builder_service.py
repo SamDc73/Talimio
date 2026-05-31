@@ -12,7 +12,7 @@ import logging
 
 from sqlalchemy import column, func, select, text
 
-from src.content.schemas import ContentType
+from src.content.schemas import ContentStatusFilter, ContentType
 
 
 logger = logging.getLogger(__name__)
@@ -47,39 +47,36 @@ class QueryBuilderService:
     def build_content_queries(
         content_type: ContentType | None,
         search: str | None,
-        include_archived: bool = False,
+        content_status: ContentStatusFilter = "active",
         user_id: uuid.UUID | None = None,
     ) -> list[str]:
         """Build SQL queries for different content types."""
         queries: list[str] = []
 
         if not content_type or content_type == ContentType.VIDEO:
-            queries.append(QueryBuilderService._get_video_query(search, include_archived, user_id))
+            queries.append(QueryBuilderService._get_video_query(search, content_status, user_id))
 
         if not content_type or content_type == ContentType.BOOK:
-            queries.append(QueryBuilderService._get_book_query(search, include_archived, user_id))
+            queries.append(QueryBuilderService._get_book_query(search, content_status, user_id))
 
         if not content_type or content_type == ContentType.COURSE:
-            queries.append(
-                QueryBuilderService.get_courses_query(
-                    search, archived_only=False, include_archived=include_archived, user_id=user_id
-                )
-            )
+            queries.append(QueryBuilderService.get_courses_query(search, content_status=content_status, user_id=user_id))
 
         return queries
 
     @staticmethod
-    def _get_video_query(search: str | None, include_archived: bool = False, user_id: uuid.UUID | None = None) -> str:
+    def _get_video_query(
+        search: str | None,
+        content_status: ContentStatusFilter = "active",
+        user_id: uuid.UUID | None = None,
+    ) -> str:
         """Get SQL query for videos."""
-        return QueryBuilderService.get_video_query(
-            search, archived_only=False, include_archived=include_archived, user_id=user_id
-        )
+        return QueryBuilderService.get_video_query(search, content_status=content_status, user_id=user_id)
 
     @staticmethod
     def get_video_query(
         search: str | None,
-        archived_only: bool = False,
-        include_archived: bool = False,
+        content_status: ContentStatusFilter = "active",
         user_id: uuid.UUID | None = None,
     ) -> str:
         """Get SQL query for videos before page-level progress enrichment."""
@@ -106,10 +103,10 @@ class QueryBuilderService:
 
         # Build WHERE clause
         where_conditions = []
-        if archived_only:
-            where_conditions.append("v.archived = true")
-        elif not include_archived:
+        if content_status == "active":
             where_conditions.append("(v.archived = false OR v.archived IS NULL)")
+        elif content_status == "archived":
+            where_conditions.append("v.archived = true")
 
         if search:
             where_conditions.append("(v.title ILIKE :search OR v.channel ILIKE :search)")
@@ -124,15 +121,19 @@ class QueryBuilderService:
         return query
 
     @staticmethod
-    def _get_book_query(search: str | None, include_archived: bool = False, user_id: uuid.UUID | None = None) -> str:
+    def _get_book_query(
+        search: str | None,
+        content_status: ContentStatusFilter = "active",
+        user_id: uuid.UUID | None = None,
+    ) -> str:
         """Get SQL query for books."""
-        return QueryBuilderService.get_books_query(
-            search, archived_only=False, include_archived=include_archived, user_id=user_id
-        )
+        return QueryBuilderService.get_books_query(search, content_status=content_status, user_id=user_id)
 
     @staticmethod
     def get_books_query(
-        search: str | None, archived_only: bool = False, include_archived: bool = False, user_id: uuid.UUID | None = None
+        search: str | None,
+        content_status: ContentStatusFilter = "active",
+        user_id: uuid.UUID | None = None,
     ) -> str:
         """Get SQL query for books before page-level progress enrichment."""
         query = """
@@ -162,11 +163,10 @@ class QueryBuilderService:
         if user_id:
             where_conditions.append("b.user_id = :user_id")
 
-        if archived_only:
-            where_conditions.append("b.archived = true")
-        elif not include_archived:
+        if content_status == "active":
             where_conditions.append("(b.archived = false OR b.archived IS NULL)")
-        # If include_archived is True, don't add any archive filter (show all)
+        elif content_status == "archived":
+            where_conditions.append("b.archived = true")
 
         if search:
             where_conditions.append("(b.title ILIKE :search OR b.author ILIKE :search)")
@@ -179,8 +179,7 @@ class QueryBuilderService:
     @staticmethod
     def get_courses_query(
         search: str | None,
-        archived_only: bool = False,
-        include_archived: bool = False,
+        content_status: ContentStatusFilter = "active",
         user_id: uuid.UUID | None = None,
     ) -> str:
         """Get SQL query for courses before page-level progress enrichment."""
@@ -218,10 +217,10 @@ class QueryBuilderService:
         if user_id:
             where_conditions.append("c.user_id = :user_id")
 
-        if archived_only:
-            where_conditions.append("c.archived = true")
-        elif not include_archived:
+        if content_status == "active":
             where_conditions.append("(c.archived = false OR c.archived IS NULL)")
+        elif content_status == "archived":
+            where_conditions.append("c.archived = true")
 
         if search:
             where_conditions.append("(c.title ILIKE :search OR c.description ILIKE :search)")

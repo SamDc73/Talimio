@@ -13,21 +13,26 @@ import { contentKeys, patchContentItemInCache } from "@/lib/content-query-cache"
 
 const DASHBOARD_CONTENT_PAGE_SIZE = 100
 
-const buildContentListUrl = ({ includeArchived, page }) => {
+const contentStatusByArchiveFilter = {
+	active: "active",
+	archived: "archived",
+	all: "all",
+}
+
+const getContentStatus = (archiveFilter) => contentStatusByArchiveFilter[archiveFilter] || "active"
+
+const buildContentListUrl = ({ page, status }) => {
 	const params = new URLSearchParams({
 		page: String(page),
 		page_size: String(DASHBOARD_CONTENT_PAGE_SIZE),
+		status,
 	})
-
-	if (includeArchived) {
-		params.set("include_archived", "true")
-	}
 
 	return `/content?${params.toString()}`
 }
 
-const fetchContentPage = (includeArchived, page) => {
-	return api.get(buildContentListUrl({ includeArchived, page }))
+const fetchContentPage = (contentStatus, page) => {
+	return api.get(buildContentListUrl({ page, status: contentStatus }))
 }
 
 const getProgressPercentage = (progress) => {
@@ -48,56 +53,79 @@ const removeItemFromCache = (old, itemId) => {
 	}
 }
 
-const updateItemArchiveStatus = (old, itemId, archive) => {
+const updateItemStatus = (old, itemId, status) => {
 	if (!old) return old
 	return {
 		...old,
-		items: old.items?.map((item) =>
-			item.id === itemId || item.uuid === itemId ? { ...item, archived: archive } : item
-		),
+		items: old.items?.map((item) => (item.id === itemId || item.uuid === itemId ? { ...item, status } : item)),
 	}
 }
 
-const scheduleArchiveRemoval = (queryClient, itemId) => {
-	setTimeout(() => {
-		queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => removeItemFromCache(old, itemId))
-	}, 300)
+const removeItemAndUpdateTotal = (old, itemId) => {
+	if (!old) return old
+	const items = old.items?.filter((item) => !(item.id === itemId || item.uuid === itemId))
+	return {
+		...old,
+		items,
+		total: typeof old.total === "number" ? Math.max(old.total - 1, 0) : old.total,
+	}
 }
+
+const updateArchiveStatusInCaches = (queryClient, itemId, status) => {
+	queryClient.getQueriesData({ queryKey: contentKeys.all }).forEach(([queryKey, data]) => {
+		const filters = queryKey[2]
+		const cachedStatus = filters?.status
+
+		if (cachedStatus === "all") {
+			queryClient.setQueryData(queryKey, updateItemStatus(data, itemId, status))
+			return
+		}
+
+		if (cachedStatus === status) {
+			queryClient.setQueryData(queryKey, updateItemStatus(data, itemId, status))
+			return
+		}
+
+		if (cachedStatus === "active" || cachedStatus === "archived") {
+			queryClient.setQueryData(queryKey, removeItemAndUpdateTotal(data, itemId))
+		}
+	})
+}
+
+const transformContentItems = (items) =>
+	items.map((item) => ({
+		id: item.id,
+		type: item.type === "youtube" ? "video" : item.type,
+		title: item.title,
+		description: item.description,
+		status: item.status,
+		lastAccessedDate: item.updatedAt,
+		createdDate: item.createdAt,
+		progress: getProgressPercentage(item.progress),
+		tags: item.tags || [],
+		...(item.type === "youtube" && {
+			channel: item.channel,
+			duration: item.length,
+		}),
+		...(item.type === "book" && {
+			author: item.author,
+			pageCount: item.pageCount || item.page_count || item.totalPages,
+			currentPage: item.currentPage,
+			tocProgress: item.tocProgress || {},
+		}),
+		...(item.type === "course" && {
+			lessonCount: item.lessonCount,
+			completedLessons: item.completedLessons,
+		}),
+	}))
 
 /**
  * Fetch content list with proper caching
  */
 export function useContentList(filters = {}) {
 	const queryClient = useQueryClient()
-	const includeArchived = filters.archiveFilter === "archived" || filters.archiveFilter === "all"
-	const queryKey = contentKeys.list({ includeArchived })
-
-	const transformContentItems = (items) =>
-		items.map((item) => ({
-			id: item.id,
-			type: item.type === "youtube" ? "video" : item.type,
-			title: item.title,
-			description: item.description,
-			lastAccessedDate: item.lastAccessedDate,
-			createdDate: item.createdDate,
-			progress: getProgressPercentage(item.progress),
-			tags: item.tags || [],
-			archived: item.archived || false,
-			...(item.type === "youtube" && {
-				channel: item.channel,
-				duration: item.length,
-			}),
-			...(item.type === "book" && {
-				author: item.author,
-				pageCount: item.pageCount || item.page_count || item.totalPages,
-				currentPage: item.currentPage,
-				tocProgress: item.tocProgress || {},
-			}),
-			...(item.type === "course" && {
-				lessonCount: item.lessonCount,
-				completedLessons: item.completedLessons,
-			}),
-		}))
+	const contentStatus = getContentStatus(filters.archiveFilter)
+	const queryKey = contentKeys.list({ status: contentStatus })
 
 	const loadRemainingContent = async () => {
 		const currentData = queryClient.getQueryData(queryKey)
@@ -110,7 +138,7 @@ export function useContentList(filters = {}) {
 		const totalPages = Math.ceil(currentData.total / perPage)
 		const remainingPageNumbers = Array.from({ length: totalPages - loadedPages }, (_, index) => loadedPages + index + 1)
 		const remainingPages = await Promise.all(
-			remainingPageNumbers.map((pageNumber) => fetchContentPage(includeArchived, pageNumber))
+			remainingPageNumbers.map((pageNumber) => fetchContentPage(contentStatus, pageNumber))
 		)
 		const remainingItems = transformContentItems(remainingPages.flatMap((pageData) => pageData.items || []))
 
@@ -124,7 +152,7 @@ export function useContentList(filters = {}) {
 	const query = useQuery({
 		queryKey,
 		queryFn: async () => {
-			const contentPage = await fetchContentPage(includeArchived, 1)
+			const contentPage = await fetchContentPage(contentStatus, 1)
 			const responseItems = contentPage.items || []
 
 			const data = transformContentItems(responseItems)
@@ -158,9 +186,12 @@ export function useContentList(filters = {}) {
 	})
 
 	return {
-		...query,
+		data: query.data,
+		error: query.error,
 		hasMoreContent: Boolean(query.data?.items && query.data.items.length < query.data.total),
+		isLoading: query.isLoading,
 		loadRemainingContent,
+		refetch: query.refetch,
 	}
 }
 
@@ -234,8 +265,9 @@ export function useArchiveContent() {
 				queryKey: contentKeys.all,
 			})
 
-			// Update the item's archived status
-			queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => updateItemArchiveStatus(old, item.id, archive))
+			const status = archive ? "archived" : "active"
+
+			updateArchiveStatusInCaches(queryClient, item.id, status)
 
 			return { previousContent }
 		},
@@ -249,26 +281,8 @@ export function useArchiveContent() {
 			}
 		},
 
-		// Success notification
-		onSuccess: ({ item, archive }) => {
-			// Emit event
-			window.dispatchEvent(
-				new CustomEvent(archive ? "contentArchived" : "contentUnarchived", {
-					detail: { itemId: item.id, itemType: item.type },
-				})
-			)
-
-			// If archiving, remove from view after animation
-			if (archive) {
-				scheduleArchiveRemoval(queryClient, item.id)
-			}
-
-			// For archive/unarchive, we can safely invalidate to get the latest state
-			// This is different from delete where invalidation can resurrect deleted items
-			if (!archive) {
-				// When unarchiving, invalidate to ensure we get the item back in the list
-				queryClient.invalidateQueries({ queryKey: contentKeys.all })
-			}
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: contentKeys.all })
 		},
 	})
 }
@@ -309,15 +323,4 @@ export function useUpdateContentTags() {
 			}
 		},
 	})
-}
-
-/**
- * Invalidate content queries (for manual refresh)
- */
-export function useInvalidateContent() {
-	const queryClient = useQueryClient()
-
-	return () => {
-		queryClient.invalidateQueries({ queryKey: contentKeys.all })
-	}
 }
