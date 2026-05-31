@@ -147,6 +147,7 @@ class CourseOutlineInfo(BaseModel):
     slug: str | None = None
     title: str = Field(max_length=200)
     description: str | None = None
+    tags: list[str] = Field(default_factory=list)
     setup_commands: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
@@ -167,6 +168,11 @@ class CourseOutlineInfo(BaseModel):
             return None
         text = str(value).strip()
         return text or None
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _normalize_tags(cls, value: object) -> list[str]:
+        return _coerce_slug_list(value, field="Course tags")
 
     @field_validator("setup_commands", mode="before")
     @classmethod
@@ -214,9 +220,15 @@ class AdaptiveCourseMeta(BaseModel):
     slug: str | None = None
     title: str = Field(max_length=200)
     description: str | None = None
+    tags: list[str] = Field(default_factory=list)
     setup_commands: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _normalize_tags(cls, value: object) -> list[str]:
+        return _coerce_slug_list(value, field="Course tags")
 
 
 def _coerce_index(value: object, *, field: str) -> int:

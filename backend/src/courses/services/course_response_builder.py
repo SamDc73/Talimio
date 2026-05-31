@@ -36,6 +36,18 @@ def compute_module_id(course_id: uuid.UUID, module_name: str | None) -> uuid.UUI
     return uuid.uuid5(uuid.NAMESPACE_URL, f"course-module:{course_id}:{module_key}")
 
 
+def _parse_course_tags(raw_tags: str | None) -> list[str]:
+    if not raw_tags:
+        return []
+    try:
+        tags = json.loads(raw_tags)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    if not isinstance(tags, list):
+        return []
+    return [tag for tag in tags if isinstance(tag, str)]
+
+
 class CourseResponseBuilder:
     """Service for building course response objects."""
 
@@ -54,7 +66,7 @@ class CourseResponseBuilder:
             id=course.id,
             title=course.title,
             description=course.description,
-            tags=course.tags or "[]",
+            tags=_parse_course_tags(course.tags),
             setup_commands=setup_commands,
             archived=course.archived,
             user_id=course.user_id,
@@ -78,7 +90,7 @@ class CourseResponseBuilder:
                     id=course.id,
                     title=course.title,
                     description=course.description,
-                    tags=course.tags or "[]",
+                    tags=_parse_course_tags(course.tags),
                     setup_commands=setup_commands,
                     archived=course.archived,
                     user_id=course.user_id,

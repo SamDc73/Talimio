@@ -5,7 +5,7 @@ All AI prompts are defined here for consistency and maintainability.
 
 # Content Tagging Prompts
 CONTENT_TAGGING_PROMPT = """You are an expert educator and content classifier.
-Given the title and preview of educational content (book, video, or course), generate 3-7 highly relevant subject-based tags with confidence scores.
+Given the title and preview of educational content (book or video), generate 3-7 highly relevant subject-based tags with confidence scores.
 
 Rules:
 - Tags should be lowercase, hyphenated (e.g., "web-development", "machine-learning")
@@ -219,6 +219,7 @@ Lesson titles SHOULD:
     "slug": "kebab-case",
     "title": "string",
     "description": "string",
+    "tags": ["lowercase-hyphen-tag"],
     "setup_commands": []
   },
   "lessons": [
@@ -233,6 +234,7 @@ Lesson titles SHOULD:
 
 ## Field rules (HARD REQUIREMENTS)
 - Slug fields are OPTIONAL; if provided, use lowercase kebab-case and keep them unique.
+- Tags must be 3-7 short subject tags, lowercase-hyphen strings, with no meta tags like "course" or "tutorial".
 - Keep keys in each object in the same order as the Schema.
 - Lessons must appear in optimal learning order.
 - Use consistent module names; avoid creating one-off modules for single lessons.
@@ -322,6 +324,7 @@ Lesson titles SHOULD:
     "slug": "kebab-case",
     "title": "string",
     "description": "string",
+    "tags": ["lowercase-hyphen-tag"],
     "setup_commands": []
   },
   "ai_outline_meta": {
@@ -367,6 +370,7 @@ Lesson titles SHOULD:
 
 ## Field rules (HARD REQUIREMENTS)
 - Node slug fields are OPTIONAL; if provided, use lowercase kebab-case and keep them unique.
+- Tags must be 3-7 short subject tags, lowercase-hyphen strings, with no meta tags like "course" or "tutorial".
 - Keep keys in each object in the same order as the Schema.
 - Lessons must appear in optimal learning order.
 - Use consistent module names; avoid creating one-off modules for single lessons.

@@ -25,6 +25,15 @@ from .schemas import TaggingResponse, TagWithConfidence
 
 logger = logging.getLogger(__name__)
 VALID_CONTENT_TYPES = {"book", "video", "course"}
+LLM_TAGGABLE_CONTENT_TYPES = {"book", "video"}
+
+
+def _validate_llm_content_type(content_type: str) -> None:
+    if content_type in LLM_TAGGABLE_CONTENT_TYPES:
+        return
+    options = ", ".join(sorted(LLM_TAGGABLE_CONTENT_TYPES))
+    message = f"Auto-tagging only supports: {options}"
+    raise ValidationError(message)
 
 
 class GeneratedTag(TypedDict):
@@ -120,7 +129,7 @@ class TaggingService:
 
         Args:
             content_id: ID of the content to tag
-            content_type: Type of content (book, video, course)
+            content_type: Type of content (book or video)
             user_id: User ID for personalized tagging
             title: Title of the content
             content_preview: Preview text for tag generation
@@ -130,6 +139,7 @@ class TaggingService:
             List of generated tag names
         """
         try:
+            _validate_llm_content_type(content_type)
             # Generate tags with confidence using the standard LiteLLM path
             tags_with_confidence = await self._generate_tags_llm(title, content_preview)
 
@@ -169,10 +179,11 @@ class TaggingService:
         self,
         content_preview: str,
         _user_id: uuid.UUID,
-        _content_type: str,
+        content_type: str,
         title: str = "",
     ) -> list[str]:
         """Suggest tags for content using the LiteLLM structured path."""
+        _validate_llm_content_type(content_type)
         tags_with_confidence = await self._generate_tags_llm(title, content_preview)
         return [item["tag"] for item in tags_with_confidence]
 
@@ -231,7 +242,7 @@ class TaggingService:
                     }
                 )
                 successful += 1
-            except (RuntimeError, TypeError, ValueError) as exc:
+            except (ValidationError, RuntimeError, TypeError, ValueError) as exc:
                 results.append(
                     {
                         "content_id": str(item.get("content_id", "")),
@@ -462,10 +473,7 @@ async def update_content_tags_json(
     tags: list[str],
     user_id: uuid.UUID,
 ) -> None:
-    """Update the tags_json field for a content item.
-
-    This is a utility function to maintain backward compatibility
-    with the existing tags_json fields in Book, Video, and Course models.
+    """Update the denormalized tag JSON for manual tag edits.
 
     Args:
         session: Database session

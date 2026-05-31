@@ -141,7 +141,7 @@ class CourseBase(BaseModel):
 
     title: str = Field(description="Course title", max_length=200)
     description: str = Field("", description="Course description")
-    tags: str = Field("[]", description="Course tags as JSON string")
+    tags: list[str] = Field(default_factory=list, description="Course tags")
     archived: bool = Field(default=False, description="Whether the course is archived")
     setup_commands: list[str] = Field(default_factory=list, description="Commands to run once per course sandbox")
     adaptive_enabled: bool = Field(default=False, description="Whether adaptive concept scheduling is enabled")
@@ -192,7 +192,7 @@ class CourseUpdate(BaseModel):
 
     title: str | None = Field(None, description="Course title", max_length=200)
     description: str | None = Field(None, description="Course description")
-    tags: str | None = Field(None, description="Course tags as JSON string")
+    tags: list[str] | None = Field(None, description="Course tags")
     archived: bool | None = Field(None, description="Whether the course is archived")
     adaptive_enabled: bool | None = Field(None, description="Enable or disable adaptive scheduling")
 

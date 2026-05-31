@@ -262,9 +262,6 @@ class CoursesFacade:  # noqa: PLR0904
             message = "Failed to create course"
             raise CoursesFacadeUpstreamError(message) from error
 
-    # NOTE: Auto-tagging removed - now handled by CourseContentService via BaseContentService pipeline
-    # Tagging happens automatically during course creation/updates, no manual intervention needed
-
     async def generate_ai_course(
         self,
         topic: str,

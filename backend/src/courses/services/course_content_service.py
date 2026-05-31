@@ -13,7 +13,7 @@ from typing import cast
 
 from fastapi import BackgroundTasks, UploadFile
 from opentelemetry import trace
-from sqlalchemy import select, text, update
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -212,7 +212,6 @@ class CourseContentService:
                     await self._handle_post_creation(
                         session=session,
                         course=course,
-                        user_id=user_id,
                         background_tasks=None,
                     )
                     await session.commit()
@@ -372,6 +371,7 @@ class CourseContentService:
         )
         session_data["title"] = adaptive_structure.course.title
         session_data["description"] = adaptive_structure.ai_outline_meta.scope
+        session_data["tags"] = adaptive_structure.course.tags
         session_data["setup_commands"] = adaptive_structure.course.setup_commands
         return adaptive_structure
 
@@ -748,21 +748,15 @@ class CourseContentService:
         *,
         session: AsyncSession,
         course: Course,
-        user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None,
     ) -> None:
-        """Kick off background work for embeddings and tagging."""
+        """Kick off background work for adaptive embeddings."""
         if course.adaptive_enabled:
             await self._handle_adaptive_embeddings(
                 session=session,
                 course_id=course.id,
                 background_tasks=background_tasks,
             )
-
-        if background_tasks is not None:
-            background_tasks.add_task(self._run_background_auto_tagging, course.id, user_id)
-        else:
-            await self._auto_tag_course(session, course, user_id)
 
     async def _handle_adaptive_embeddings(
         self,
@@ -810,19 +804,6 @@ class CourseContentService:
         except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError):
             logger.exception("courses.background_embedding.failed", extra={"course_id": str(course_id)})
 
-    async def _run_background_auto_tagging(self, course_id: uuid.UUID, user_id: uuid.UUID) -> None:
-        """Run auto-tagging in a new session after the response is sent."""
-        try:
-            async with async_session_maker() as tagging_session:
-                course = await tagging_session.get(Course, course_id)
-                if course is None:
-                    logger.warning("Skipping auto-tagging for missing course %s", course_id)
-                    return
-                await self._auto_tag_course(tagging_session, course, user_id)
-                await tagging_session.commit()
-        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError):
-            logger.exception("courses.background_tagging.failed", extra={"course_id": str(course_id)})
-
     async def update_course(
         self,
         course_id: uuid.UUID,
@@ -868,81 +849,6 @@ class CourseContentService:
         await session.flush()
         await session.refresh(course)
         return course
-
-    async def _auto_tag_course(self, session: AsyncSession, course: Course, user_id: uuid.UUID) -> list[str]:
-        """Generate and persist tags for a course.
-
-        Uses SQLAlchemy Core UPDATE to avoid ORM stale update errors when the row
-        is concurrently deleted/updated while keeping commit/rollback ownership
-        in the caller.
-        """
-        course_id_str = str(course.id)
-        try:
-            from src.tagging.processors.course_processor import process_course_for_tagging
-            from src.tagging.service import TaggingService
-
-            # Re-extract content from DB by id to ensure the course still exists
-            content_data = await process_course_for_tagging(course.id, user_id, session)
-            if not content_data:
-                logger.info("Skipping auto-tagging for missing/empty course %s", course_id_str)
-                return []
-
-            tagging_service = TaggingService(session)
-            tags = await tagging_service.tag_content(
-                content_id=course.id,
-                content_type="course",
-                user_id=user_id,
-                title=content_data.get("title", ""),
-                content_preview=content_data.get("content_preview", ""),
-            )
-
-            if not tags:
-                return []
-
-            # Double-check existence to avoid orphan tag associations if the course disappeared after tag generation.
-            exists_result = await session.execute(select(Course.id).where(Course.id == course.id))
-            if exists_result.scalar_one_or_none() is None:
-                await session.execute(
-                    text(
-                        """
-                        DELETE FROM tag_associations
-                        WHERE content_id = :content_id
-                          AND content_type = 'course'
-                          AND user_id = :user_id
-                        """
-                    ),
-                    {"content_id": str(course.id), "user_id": str(user_id)},
-                )
-                await session.flush()
-                logger.info("Skipping tag persist for deleted course %s", course_id_str)
-                return []
-
-            # Persist tags via a Core UPDATE to avoid ORM StaleDataError on flush
-            update_stmt = update(Course).where(Course.id == course.id).values(tags=json.dumps(tags))
-            upd_result = await session.execute(update_stmt)
-
-            # If the row vanished between the existence check and UPDATE, drop tag associations from this run.
-            if getattr(upd_result, "rowcount", 0) == 0:
-                await session.execute(
-                    text(
-                        """
-                        DELETE FROM tag_associations
-                        WHERE content_id = :content_id
-                          AND content_type = 'course'
-                          AND user_id = :user_id
-                        """
-                    ),
-                    {"content_id": str(course.id), "user_id": str(user_id)},
-                )
-                await session.flush()
-                logger.info("Course %s disappeared before update; tags not saved", course_id_str)
-                return []
-
-            await session.flush()
-            return tags
-        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError):
-            logger.exception("courses.auto_tagging.failed", extra={"course_id": str(course_id_str)})
-            return []
 
     async def _insert_lessons(
         self,
@@ -1441,7 +1347,7 @@ class CourseContentService:
         result: MutableCoursePayload = {
             "title": title,
             "description": description,
-            "tags": [],
+            "tags": course_meta.tags,
             "setup_commands": course_meta.setup_commands,
             "modules": modules,
         }
