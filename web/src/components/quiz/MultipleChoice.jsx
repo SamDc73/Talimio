@@ -142,7 +142,7 @@ export function MultipleChoice({
 								checked={isSelected}
 								onChange={() => handleOptionChange(index)}
 								disabled={hasFeedback}
-								className="mt-1 text-primary focus:ring-ring focus:ring-2 focus:ring-offset-0 border-input"
+								className="mt-1 text-primary focus:outline-none focus:ring-0 border-input"
 							/>
 							<QuizMarkdown content={option} className="flex-1 text-sm/relaxed  [&_p]:m-0" />
 							{hasFeedback && isCorrectOption && (
