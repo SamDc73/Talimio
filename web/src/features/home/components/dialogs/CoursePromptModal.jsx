@@ -2,15 +2,17 @@
  * Course Prompt Modal - Updated for unified course API with self-assessment flow
  */
 
+import { useQuery } from "@tanstack/react-query"
 import { AnimatePresence, motion } from "framer-motion"
 import { BookOpen, Check, FileText, Image, Loader2, Paperclip, RotateCcw, Sparkles, X, Zap } from "lucide-react"
-import { useEffect, useId, useRef, useState } from "react"
-import { createBookFromCourseAttachment, useCourseService } from "@/api/courseApi"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { createBookFromCourseAttachment, fetchCourseById, useCourseService } from "@/api/courseApi"
 import { Button } from "@/components/Button"
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/Dialog"
 import { Input } from "@/components/Input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/Tooltip"
 import { DialogIconHeader } from "@/features/home/components/dialogs/DialogIconHeader"
+import { MercuryForgeLoader } from "@/features/home/components/dialogs/MercuryForgeLoader"
 import SelfAssessmentDialog from "@/features/home/components/dialogs/SelfAssessmentDialog"
 import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
@@ -85,10 +87,11 @@ const IDLE_CHIP = "text-muted-foreground hover:bg-muted/40 hover:text-foreground
 const DISABLED_CHIP = "disabled:opacity-50 disabled:cursor-not-allowed"
 const COURSE_PRIMARY_ACTION_CLASS_NAME =
 	"min-w-3xl bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
-const COURSE_LOADING_OVERLAY_CLASS_NAME =
-	"absolute inset-0 top-12 z-20 flex items-center justify-center rounded-lg border border-(--color-course)/10 bg-card/95 shadow-sm backdrop-blur-sm"
-const COURSE_ERROR_OVERLAY_CLASS_NAME =
-	"absolute inset-0 top-12 z-20 flex flex-col items-center justify-center rounded-lg border border-destructive/20 bg-card/95 shadow-sm backdrop-blur-sm"
+// Solid bg-background matches the DialogContent surface exactly, so the overlay
+// reads as the dialog quietly shifting into a waiting state rather than a boxed
+// panel floating over a bleeding-through form.
+const COURSE_OVERLAY_CLASS_NAME =
+	"absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 rounded-lg bg-background"
 
 function CourseOptionSwitch({ checked, disabled }) {
 	return (
@@ -251,6 +254,10 @@ function buildFinalPrompt(basePrompt, summaryBlock) {
 	return `${trimmedPrompt}\n\n${summaryBlock}`
 }
 
+// Generation is async on the backend; give it a generous ceiling before we
+// surface the funny error + Try again, so a wedged job never traps the user.
+const COURSE_GENERATION_TIMEOUT_MS = 3 * 60 * 1000
+
 function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", defaultAdaptiveEnabled = true }) {
 	const [prompt, setPrompt] = useState(defaultPrompt)
 	const [activeStep, setActiveStep] = useState(MODAL_STEPS.PROMPT)
@@ -263,6 +270,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const [messageIndex, setMessageIndex] = useState(0)
 	const [showInitial, setShowInitial] = useState(true)
 	const [errorIndex, setErrorIndex] = useState(0)
+	const [pendingCourseId, setPendingCourseId] = useState(null)
 	const fileInputRef = useRef(null)
 	const promptInputRef = useRef(null)
 	const attachmentSequenceRef = useRef(0)
@@ -300,8 +308,10 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		return () => clearInterval(interval)
 	}, [isGenerating])
 
-	const resetForm = () => {
+	const resetForm = useCallback(() => {
 		setPrompt("")
+		setIsGenerating(false)
+		setPendingCourseId(null)
 		setError("")
 		setAdaptiveEnabled(Boolean(defaultAdaptiveEnabled))
 		setActiveStep(MODAL_STEPS.PROMPT)
@@ -315,15 +325,18 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		if (fileInputRef.current) {
 			fileInputRef.current.value = ""
 		}
-	}
+	}, [defaultAdaptiveEnabled])
 
-	const closeModal = (force = false) => {
-		if (!force && isGenerating) {
-			return
-		}
-		resetForm()
-		onClose()
-	}
+	const closeModal = useCallback(
+		(force = false) => {
+			if (!force && isGenerating) {
+				return
+			}
+			resetForm()
+			onClose()
+		},
+		[isGenerating, resetForm, onClose]
+	)
 
 	const handleOpenChange = (open) => {
 		if (!open) {
@@ -335,6 +348,49 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		event.preventDefault()
 		promptInputRef.current?.focus()
 	}
+
+	const failGeneration = useCallback((message) => {
+		setPendingCourseId(null)
+		setIsGenerating(false)
+		// eslint-disable-next-line sonarjs/pseudo-random -- display humor, not security sensitive
+		setErrorIndex(Math.floor(Math.random() * EXISTENTIAL_ERRORS.length))
+		setError(message)
+		setActiveStep(MODAL_STEPS.PROMPT)
+	}, [])
+
+	// Poll the freshly-created course until generation finishes. Sharing the
+	// ["course", id] query key seeds the cache the course page reads, so the
+	// outline shows immediately on navigation (no manual refresh needed).
+	const { data: pendingCourse } = useQuery({
+		queryKey: ["course", pendingCourseId],
+		queryFn: ({ signal }) => fetchCourseById(pendingCourseId, signal),
+		enabled: Boolean(pendingCourseId),
+		refetchInterval: (query) => {
+			const status = query.state.data?.generationStatus
+			return status === "ready" || status === "failed" ? false : 1500
+		},
+	})
+
+	useEffect(() => {
+		const status = pendingCourse?.generationStatus
+		if (status === "ready") {
+			setPendingCourseId(null)
+			onSuccess?.(pendingCourse)
+			closeModal(true)
+		} else if (status === "failed") {
+			failGeneration("We couldn't finish generating this course. Please try again.")
+		}
+	}, [pendingCourse, onSuccess, closeModal, failGeneration])
+
+	useEffect(() => {
+		if (!pendingCourseId) {
+			return
+		}
+		const timeoutId = setTimeout(() => {
+			failGeneration("This is taking longer than expected. Please try again.")
+		}, COURSE_GENERATION_TIMEOUT_MS)
+		return () => clearTimeout(timeoutId)
+	}, [pendingCourseId, failGeneration])
 
 	const addAttachments = (files) => {
 		const nextFiles = [...(files || [])].map((file) => normalizeAttachmentFile(file)).filter(Boolean)
@@ -555,10 +611,14 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			})
 
 			if (response?.id) {
-				if (onSuccess) {
-					onSuccess(response)
+				// Backend returns a "generating" shell immediately; keep the dialog
+				// open with the funny messages and poll until generation finishes.
+				if (response.generationStatus === "ready") {
+					onSuccess?.(response)
+					closeModal(true)
+				} else {
+					setPendingCourseId(response.id)
 				}
-				closeModal(true)
 				return
 			}
 
@@ -568,7 +628,6 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			setErrorIndex(Math.floor(Math.random() * EXISTENTIAL_ERRORS.length))
 			setError(creationError?.message || "Failed to create course. Please try again.")
 			setActiveStep(MODAL_STEPS.PROMPT)
-		} finally {
 			setIsGenerating(false)
 		}
 	}
@@ -898,20 +957,9 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 								animate={{ opacity: 1 }}
 								exit={{ opacity: 0 }}
 								transition={{ duration: 0.3 }}
-								className={COURSE_LOADING_OVERLAY_CLASS_NAME}
+								className={COURSE_OVERLAY_CLASS_NAME}
 							>
-								<AnimatePresence mode="wait">
-									<motion.div
-										key={showInitial ? "initial" : messageIndex}
-										initial={{ opacity: 0 }}
-										animate={{ opacity: 1 }}
-										exit={{ opacity: 0 }}
-										transition={{ duration: 0.5, ease: "easeInOut" }}
-										className="text-base text-center px-8"
-									>
-										{showInitial ? "Loading..." : EXISTENTIAL_MESSAGES[messageIndex]}
-									</motion.div>
-								</AnimatePresence>
+								<MercuryForgeLoader message={showInitial ? "Loading..." : EXISTENTIAL_MESSAGES[messageIndex]} />
 							</motion.div>
 						)}
 					</AnimatePresence>
@@ -923,7 +971,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 								animate={{ opacity: 1 }}
 								exit={{ opacity: 0 }}
 								transition={{ duration: 0.3 }}
-								className={COURSE_ERROR_OVERLAY_CLASS_NAME}
+								className={COURSE_OVERLAY_CLASS_NAME}
 							>
 								<AnimatePresence mode="wait">
 									<motion.div

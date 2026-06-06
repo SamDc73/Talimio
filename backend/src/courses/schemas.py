@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from src.config.schema_casing import to_camel
+from src.courses.models import CourseGenerationStatus
 
 
 _CAMEL_CONFIG = {"alias_generator": to_camel, "populate_by_name": True}
@@ -215,6 +216,9 @@ class CourseResponse(CourseBase):
 
     id: uuid.UUID = Field(description="Course ID")
     user_id: uuid.UUID | None = Field(None, description="Owner user ID")
+    generation_status: CourseGenerationStatus = Field(
+        "ready", description="Course generation lifecycle status"
+    )
     created_at: datetime = Field(description="Course creation timestamp")
     updated_at: datetime = Field(description="Course last update timestamp")
     modules: list[ModuleResponse] = Field(default_factory=list, description="Course modules")

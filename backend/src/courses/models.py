@@ -40,6 +40,7 @@ _DEFAULT_LEARNER_PROFILE = {
 
 CourseDocumentStatus = Literal["pending", "processing", "embedded", "failed"]
 LearningQuestionStatus = Literal["active", "answered", "expired"]
+CourseGenerationStatus = Literal["generating", "ready", "failed"]
 
 
 class Course(Base):
@@ -55,6 +56,12 @@ class Course(Base):
     setup_commands: Mapped[str | None] = mapped_column(Text, nullable=True)
     adaptive_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    generation_status: Mapped[CourseGenerationStatus] = mapped_column(
+        String(20),
+        nullable=False,
+        default="ready",
+        server_default=text("'ready'"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

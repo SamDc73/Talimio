@@ -111,6 +111,7 @@ class CourseContentService:
         course = self._build_draft_course(session_data=session_data, user_id=user_id, is_adaptive=is_adaptive)
         if not course.title or course.title == "Draft course":
             course.title = f"Generating: {prompt_text[:30]}..." if prompt_text else "Generating course..."
+        course.generation_status = "generating"
 
         session.add(course)
         await session.flush()
@@ -214,6 +215,7 @@ class CourseContentService:
                         course=course,
                         background_tasks=None,
                     )
+                    course.generation_status = "ready"
                     await session.commit()
                     span.set_attribute("app.course_module_count", module_count)
                     span.set_attribute("app.course_lesson_count", lesson_count)
@@ -237,8 +239,25 @@ class CourseContentService:
                             "lesson_count": lesson_count,
                         },
                     )
+                    await self._mark_generation_failed(course_id)
                     if raise_errors:
                         raise
+
+    async def _mark_generation_failed(self, course_id: uuid.UUID) -> None:
+        """Best-effort flip of a course to the failed generation status.
+
+        Uses a fresh session so it works even after the generation session's
+        transaction was aborted by the error above.
+        """
+        try:
+            async with async_session_maker() as session:
+                course = await session.get(Course, course_id)
+                if course is None:
+                    return
+                course.generation_status = "failed"
+                await session.commit()
+        except SQLAlchemyError:
+            logger.exception("courses.generation.mark_failed_error", extra={"course_id": str(course_id)})
 
     async def _build_and_persist_generated_course(
         self,

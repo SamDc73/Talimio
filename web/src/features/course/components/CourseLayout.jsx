@@ -38,8 +38,7 @@ export default function CourseLayout() {
 	const { lessonId } = useParams()
 
 	// Course context is only loaded when this layout is rendered
-	const { courseId, courseName, modules, adaptiveEnabled, adaptiveProgressPct, isLoading, isGeneratingCourse } =
-		useCourseContext()
+	const { courseId, courseName, modules, adaptiveEnabled, adaptiveProgressPct, isLoading } = useCourseContext()
 
 	const mode = getModeFromPath(pathname, courseId)
 
@@ -83,8 +82,8 @@ export default function CourseLayout() {
 
 	const contentClasses = cn("flex flex-1 pt-16 pb-8 transition-all duration-300 ease-in-out", isOpen ? "ml-80" : "ml-0")
 
-	if (isLoading || isGeneratingCourse) {
-		return <FullPageLoader message={isGeneratingCourse ? "Generating your course..." : "Loading your course..."} />
+	if (isLoading) {
+		return <FullPageLoader message="Loading your course..." />
 	}
 
 	return (
