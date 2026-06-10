@@ -27,7 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
 from src.jobs import QUEUE_PEDAGOGY, defer_job, pedagogy_queueing_lock
-from src.memory.pedagogy_models import PedagogyWatermark, StudentCard, TeachingEvent
+from src.memory.notes_search import EMBEDDING_FAILURE_ERROR_TYPES
+from src.memory.pedagogy_models import PedagogicalNote, PedagogyWatermark, StudentCard, TeachingEvent
 from src.memory.pedagogy_service import TEACHING_PROFILE_FIELDS, upsert_course_teaching_profile
 from src.memory.prompts import PEDAGOGY_UPDATER_SYSTEM_PROMPT
 from src.memory.student_card import card_replace, card_rethink, lock_card
@@ -40,6 +41,7 @@ EVIDENCE_TRIGGER_THRESHOLD = 10
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _EVIDENCE_BATCH_LIMIT = 50
+_NOTE_VERBATIM_QUOTE_MAX_CHARS = 300
 
 _FACET_SIGNAL_FIELDS = (
     "pace_signal",
@@ -61,10 +63,24 @@ class FeedbackFacets(BaseModel):
     event_index: int = Field(ge=0, description="Index of the critique in the payload's critiques list.")
     pace_signal: str = Field(description="Pacing signal, e.g. 'slower'; empty string when absent.")
     modality_signal: str = Field(description="Modality signal, e.g. 'more diagrams'; empty string when absent.")
-    example_style_signal: str = Field(description="Example-style signal, e.g. 'worked examples first'; empty when absent.")
+    example_style_signal: str = Field(
+        description="Example-style signal, e.g. 'worked examples first'; empty when absent."
+    )
     quiz_density_signal: str = Field(description="Quiz-density signal, e.g. 'fewer quizzes'; empty string when absent.")
     tone_signal: str = Field(description="Tone signal, e.g. 'less chatty'; empty string when absent.")
     strategy_request_signal: str = Field(description="Requested teaching strategy; empty string when absent.")
+    note: str = Field(
+        description=(
+            "Distilled retrieval-worthy pedagogical fact from this critique, 1-2 sentences; "
+            "empty string when nothing is worth keeping long-term."
+        )
+    )
+    scene_trace: str = Field(
+        description=(
+            "One line describing when/how the note was learned, with an absolute date "
+            "(e.g. 'Critiqued the recursion lesson on 2026-06-10'); empty string when note is empty."
+        )
+    )
 
 
 class TeachingProfileUpdate(BaseModel):
@@ -88,6 +104,8 @@ class FacetExtraction(BaseModel):
 _FACET_EXTRACTION_SYSTEM_PROMPT = """You extract typed pedagogical signals from raw lesson critiques on Talimio, a learning platform. You are a maintenance pass, not the assistant: never answer the learner, only classify their critiques.
 
 Emit one facets entry per critique, keyed by its event_index from the payload. Every signal field is a short reusable phrase, e.g. pace_signal "slower", modality_signal "more diagrams", example_style_signal "worked examples first", quiz_density_signal "fewer quizzes", tone_signal "less chatty", strategy_request_signal "step-by-step derivations". Use the empty string when the critique carries no such signal; never guess.
+
+Each facets entry also carries note and scene_trace. note is a distilled retrieval-worthy pedagogical fact (1-2 sentences) future lesson generation should be able to find, e.g. "Prefers labelled diagrams over prose when a concept has spatial structure." Use the empty string when the critique carries nothing worth keeping long-term — most routine critiques do not. scene_trace is one line saying when/how the note was learned with an absolute date from the critique's created_at, e.g. "Critiqued the recursion lesson on 2026-06-10"; empty string whenever note is empty.
 
 Also emit profile_update: durable course-level teaching preferences this batch clearly supports (pace_preference, example_style, quiz_density_preference, visual_preference, video_preference, tone_preference). Each value is a short reusable phrase; use the empty string for no change. Only set a field the critiques state clearly and durably; an invented preference is the worst failure."""
 
@@ -178,6 +196,9 @@ async def process_pedagogy_update(user_id: uuid.UUID, course_id: uuid.UUID) -> i
             extraction = await _extract_facets(user_id=user_id, pending_events=pending_facets)
             await _apply_facet_extraction(
                 session, course_id=course_id, pending_events=pending_facets, extraction=extraction
+            )
+            await _write_pedagogical_notes(
+                session, user_id=user_id, course_id=course_id, pending_events=pending_facets, extraction=extraction
             )
 
         card = await lock_card(session, user_id=user_id, course_id=course_id)
@@ -348,6 +369,53 @@ async def _apply_facet_extraction(
         await upsert_course_teaching_profile(session, course_id=course_id, source="inferred", **profile_fields)
 
 
+async def _write_pedagogical_notes(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    course_id: uuid.UUID,
+    pending_events: list[LessonFeedbackEvent],
+    extraction: FacetExtraction,
+) -> None:
+    """Insert one retrieval note per critique the extraction found worth keeping.
+
+    Notes commit in the same transaction as the rest of the pass. Embeddings are
+    computed inline but best-effort: a failed embedding stores the note with
+    embedding NULL (the lexical leg still finds it) and never fails the job.
+    """
+    for facets in extraction.facets:
+        note_text = facets.note.strip()
+        if not note_text or not 0 <= facets.event_index < len(pending_events):
+            continue
+        event = pending_events[facets.event_index]
+        session.add(
+            PedagogicalNote(
+                user_id=user_id,
+                course_id=course_id,
+                note=note_text,
+                scene_trace=facets.scene_trace.strip(),
+                verbatim_quote=event.critique_text[:_NOTE_VERBATIM_QUOTE_MAX_CHARS],
+                source_kind="lesson_feedback_event",
+                source_id=event.id,
+                occurred_at=event.created_at,
+                embedding=await _embed_note_text(note_text),
+            )
+        )
+    await session.flush()
+
+
+async def _embed_note_text(note_text: str) -> list[float] | None:
+    """Embed one note inline; embedding failure must never fail the consolidation job."""
+    from src.ai.rag.embeddings import VectorRAG
+    from src.ai.rag.exceptions import RagUnavailableError
+
+    try:
+        return await VectorRAG().generate_embedding(note_text)
+    except (RagUnavailableError, *EMBEDDING_FAILURE_ERROR_TYPES):
+        logger.warning("pedagogy.updater.note_embedding_failed", exc_info=True)
+        return None
+
+
 STUDENT_CARD_REPLACE_TOOL_SCHEMA: dict[str, object] = {
     "type": "function",
     "function": {
@@ -422,8 +490,12 @@ def _build_card_edit_tools(session: AsyncSession, card: StudentCard) -> list[Fun
         return "edits recorded"
 
     return [
-        FunctionToolDefinition(schema=STUDENT_CARD_REPLACE_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_replace)),
-        FunctionToolDefinition(schema=STUDENT_CARD_RETHINK_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_rethink)),
+        FunctionToolDefinition(
+            schema=STUDENT_CARD_REPLACE_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_replace)
+        ),
+        FunctionToolDefinition(
+            schema=STUDENT_CARD_RETHINK_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_rethink)
+        ),
         FunctionToolDefinition(schema=STUDENT_CARD_FINISH_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_finish)),
     ]
 
@@ -444,9 +516,7 @@ def _build_card_session_payload(
                 "created_at": str(event.created_at),
                 "critique_text": event.critique_text,
                 "apply_across_course": event.apply_across_course,
-                "facets": {
-                    name: getattr(event, name) for name in _FACET_SIGNAL_FIELDS if getattr(event, name)
-                },
+                "facets": {name: getattr(event, name) for name in _FACET_SIGNAL_FIELDS if getattr(event, name)},
             }
             for event in new_feedback
         ],

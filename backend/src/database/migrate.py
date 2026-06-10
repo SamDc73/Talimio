@@ -16,6 +16,7 @@ _MIGRATION_LOCK_KEY = "schema_migrations"
 _VECTOR_SCHEMA_COLUMNS = (
     ("rag_document_chunks", "embedding", "RAG_EMBEDDING_OUTPUT_DIM"),
     ("concepts", "embedding", "RAG_EMBEDDING_OUTPUT_DIM"),
+    ("pedagogical_notes", "embedding", "RAG_EMBEDDING_OUTPUT_DIM"),
 )
 
 
@@ -45,6 +46,7 @@ def _build_expected_vector_dimensions(settings: Settings | None = None) -> dict[
     return {
         ("rag_document_chunks", "embedding"): rag_dim,
         ("concepts", "embedding"): rag_dim,
+        ("pedagogical_notes", "embedding"): rag_dim,
     }
 
 
