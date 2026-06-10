@@ -2,6 +2,7 @@ import { MDXProvider } from "@mdx-js/react"
 import { FillInTheBlank } from "@/components/quiz/FillInTheBlank"
 import { FreeForm } from "@/components/quiz/FreeForm"
 import { MultipleChoice } from "@/components/quiz/MultipleChoice"
+import { Figure } from "@/features/course/components/Figure"
 import { useMdxCompile } from "@/features/course/hooks/use-mdx-compile"
 import { JXGBoardPractice } from "./JXGBoardPractice"
 import { LatexExpressionPractice } from "./LatexExpressionPractice"
@@ -15,6 +16,9 @@ const MDX_COMPONENTS = {
 	MultipleChoice: MultipleChoice,
 	FillInTheBlank: FillInTheBlank,
 	FreeForm: FreeForm,
+
+	// Vision-verified lesson figure
+	Figure: Figure,
 
 	// Style headings
 	h1: (props) => <h1 className="text-3xl font-bold mb-6 mt-8 text-foreground" {...props} />,
