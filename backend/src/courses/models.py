@@ -232,6 +232,14 @@ class LessonFeedbackEvent(Base):
     )
     critique_text: Mapped[str] = mapped_column(Text, nullable=False)
     apply_across_course: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Typed facets extracted by the pedagogical updater; raw critique stays canonical.
+    pace_signal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    modality_signal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    example_style_signal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    quiz_density_signal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tone_signal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    strategy_request_signal: Mapped[str | None] = mapped_column(Text, nullable=True)
+    facets_extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
