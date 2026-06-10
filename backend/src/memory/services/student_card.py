@@ -21,7 +21,7 @@ from pydantic import JsonValue
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.memory.pedagogy_models import StudentCard, StudentCardRevision
+from src.memory.models import StudentCard, StudentCardRevision
 
 
 SECTION_HEADERS = (

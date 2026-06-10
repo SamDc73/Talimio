@@ -3,7 +3,7 @@
 Application code defers a job (same transaction as the user-turn write); the
 worker replays unprocessed user turns from conversation history, asks the
 maintenance model for slot operations, and commits them deterministically
-through :mod:`src.memory.service`. The per-user watermark plus the queueing
+through :mod:`src.memory.services.profile_service`. The per-user watermark plus the queueing
 lock make redelivery idempotent; the LLM only proposes, app code commits.
 """
 
@@ -28,8 +28,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.jobs import QUEUE_MEMORY, defer_job, memory_queueing_lock
 from src.memory.models import UserMemoryWatermark
 from src.memory.prompts import MAINTENANCE_SYSTEM_PROMPT
-from src.memory.service import SlotEvidence, clear_slot, get_active_slots, record_skip_event, set_slot
-from src.memory.slots import is_known_slot
+from src.memory.services.profile_service import SlotEvidence, clear_slot, get_active_slots, record_skip_event, set_slot
+from src.memory.services.profile_slots import is_known_slot
 
 
 logger = logging.getLogger(__name__)
@@ -273,7 +273,7 @@ async def _record_course_preference(
         logger.info("memory.maintenance.course_note_without_course_context")
         return
 
-    from src.memory.teaching_events import record_teaching_event
+    from src.memory.services.teaching_events import record_teaching_event
 
     await record_teaching_event(
         session,

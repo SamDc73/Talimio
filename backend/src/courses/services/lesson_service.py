@@ -45,7 +45,7 @@ from src.courses.services.inline_question_materializer import InlineQuestionMate
 from src.courses.services.lesson_version_service import LessonVersionService
 from src.courses.services.lesson_window_service import LessonWindowService
 from src.exceptions import ConflictError, NotFoundError, UpstreamUnavailableError, ValidationError
-from src.memory.teaching_events import record_teaching_event
+from src.memory import record_teaching_event
 
 
 logger = logging.getLogger(__name__)

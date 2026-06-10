@@ -1699,7 +1699,7 @@ class LLMClient:
         try:
             from sqlalchemy.exc import SQLAlchemyError
 
-            from src.memory.service import build_memory_context
+            from src.memory import build_memory_context
         except ImportError as error:
             self._logger.warning("Failed to import profile memory for user %s: %s", user_id, error)
             return ""
@@ -1716,7 +1716,7 @@ class LLMClient:
         try:
             from sqlalchemy.exc import SQLAlchemyError
 
-            from src.memory.pedagogy_service import build_pedagogy_context
+            from src.memory import build_pedagogy_context
         except ImportError as error:
             self._logger.warning("Failed to import pedagogy memory for course %s: %s", course_id, error)
             return ""
