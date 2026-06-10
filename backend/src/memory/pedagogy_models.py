@@ -3,8 +3,9 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PG_UUID
+from pydantic import JsonValue
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.base import Base
@@ -44,4 +45,51 @@ class CourseTeachingProfile(Base):
         nullable=False,
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class TeachingEvent(Base):
+    """Append-only pedagogical evidence: what was shown and how the learner responded."""
+
+    __tablename__ = "teaching_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('lesson_version_shown', 'check_answered', 'lesson_regenerated', "
+            "'lesson_completed', 'delayed_outcome')",
+            name="event_type_allowed",
+        ),
+        Index("teaching_events_user_id_course_id_occurred_at_idx", "user_id", "course_id", "occurred_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Intentionally no FKs below: events must survive lesson/version deletion as evidence.
+    lesson_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    lesson_version_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    concept_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    strategy_label: Mapped[str | None] = mapped_column(Text, nullable=True)
+    window_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    hints_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    details: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
     )

@@ -44,6 +44,7 @@ from src.courses.services.inline_question_materializer import InlineQuestionMate
 from src.courses.services.lesson_version_service import LessonVersionService
 from src.courses.services.lesson_window_service import LessonWindowService
 from src.exceptions import ConflictError, NotFoundError, UpstreamUnavailableError, ValidationError
+from src.memory.teaching_events import record_teaching_event
 
 
 logger = logging.getLogger(__name__)
@@ -1171,6 +1172,17 @@ class LessonService:
             message = "Unable to generate lesson content. Please try again."
             raise UpstreamUnavailableError(message, feature_area="courses") from exc
 
+        await record_teaching_event(
+            self.session,
+            user_id=course.user_id,
+            course_id=course.id,
+            event_type="lesson_version_shown",
+            lesson_id=lesson.id,
+            lesson_version_id=selected_version.id,
+            concept_id=lesson.concept_id,
+            strategy_label=selected_version.version_kind,
+            window_count=len(selected_windows) if selected_windows else None,
+        )
         await self.session.refresh(lesson)
         available_versions = await lesson_version_service.list_versions(lesson=lesson)
         next_pass = await self._build_next_pass_response(
@@ -1253,6 +1265,21 @@ class LessonService:
             )
             self.session.add(feedback_event)
             await self.session.flush()
+            await record_teaching_event(
+                self.session,
+                user_id=course.user_id,
+                course_id=course.id,
+                event_type="lesson_regenerated",
+                lesson_id=lesson.id,
+                lesson_version_id=selected_version.id,
+                concept_id=lesson.concept_id,
+                strategy_label="regeneration",
+                outcome="regenerated",
+                details={
+                    "apply_across_course": apply_across_course,
+                    "critique_chars": len(trimmed_critique),
+                },
+            )
             selected_windows = await lesson_window_service.rebuild_windows(lesson_version=selected_version)
             await self.session.refresh(lesson)
         except ValueError as exc:
