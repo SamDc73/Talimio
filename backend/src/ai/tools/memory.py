@@ -58,7 +58,7 @@ def build_learner_memory_search_tool(
         # Call-time import: the session maker is patched per-process in tests
         # and this tool opens its own short-lived, read-only session.
         from src.database.session import async_session_maker
-        from src.memory.notes_search import search_learner_notes
+        from src.memory.services.notes_search import search_learner_notes
 
         async with async_session_maker() as session:
             hits = await search_learner_notes(

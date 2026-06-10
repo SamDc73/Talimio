@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 )
 async def run_profile_maintenance(user_id: str) -> None:
     """Evaluate a user's unprocessed chat turns for durable profile memory."""
-    from src.memory.maintenance import process_user_memory
+    from src.memory.services.profile_maintenance import process_user_memory
 
     evaluated = await process_user_memory(uuid.UUID(user_id))
     logger.info("jobs.profile_maintenance.done", extra={"memory_user_id": user_id, "turns_evaluated": evaluated})
@@ -32,7 +32,7 @@ async def run_profile_maintenance(user_id: str) -> None:
 async def rebuild_user_profile(user_id: str, apply: bool = False) -> None:
     """Replay the evidence log against live inferred state; optionally repair."""
     from src.database.session import async_session_maker
-    from src.memory.rebuild import diff_inferred_profile, repair_inferred_profile
+    from src.memory.services.profile_rebuild import diff_inferred_profile, repair_inferred_profile
 
     async with async_session_maker() as session:
         if apply:
@@ -62,7 +62,7 @@ async def rebuild_user_profile(user_id: str, apply: bool = False) -> None:
 )
 async def run_student_card_update(user_id: str, course_id: str) -> None:
     """Consolidate one learner-course pair's new evidence into the StudentCard."""
-    from src.memory.pedagogy_updater import process_pedagogy_update
+    from src.memory.services.pedagogy_updater import process_pedagogy_update
 
     processed = await process_pedagogy_update(uuid.UUID(user_id), uuid.UUID(course_id))
     logger.info(
@@ -80,7 +80,7 @@ async def forget_pedagogy_cleanup(user_id: str, course_id: str, cutoff: str) -> 
     """Redact learner-authored pedagogical evidence after an explicit forget."""
     from datetime import datetime
 
-    from src.memory.pedagogy_controls import run_forget_cleanup
+    from src.memory.services.pedagogy_controls import run_forget_cleanup
 
     await run_forget_cleanup(uuid.UUID(user_id), uuid.UUID(course_id), datetime.fromisoformat(cutoff))
     logger.info("jobs.pedagogy_forget_cleanup.done", extra={"memory_user_id": user_id, "course_id": course_id})
@@ -90,7 +90,7 @@ async def forget_pedagogy_cleanup(user_id: str, course_id: str, cutoff: str) -> 
 async def rebuild_student_card(user_id: str, course_id: str, apply: bool = False) -> None:
     """Compare the live StudentCard against its latest revision snapshot; optionally repair."""
     from src.database.session import async_session_maker
-    from src.memory.pedagogy_rebuild import diff_student_card, repair_student_card
+    from src.memory.services.pedagogy_rebuild import diff_student_card, repair_student_card
 
     async with async_session_maker() as session:
         if apply:
@@ -127,7 +127,7 @@ async def pedagogy_nightly_sweep(timestamp: int) -> None:
     """Defer the updater for every learner-course pair with evidence past its watermark."""
     del timestamp
     from src.database.session import async_session_maker
-    from src.memory.pedagogy_updater import find_stale_pairs
+    from src.memory.services.pedagogy_updater import find_stale_pairs
 
     async with async_session_maker() as session:
         pairs = await find_stale_pairs(session)

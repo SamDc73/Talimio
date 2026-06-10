@@ -30,7 +30,7 @@ from src.exceptions import (
     UpstreamUnavailableError,
     ValidationError,
 )
-from src.memory.teaching_events import record_teaching_event
+from src.memory import record_teaching_event
 
 from .models import Course, CourseConcept, LearningAttempt, LearningQuestion, Lesson
 from .schemas import (

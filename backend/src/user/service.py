@@ -10,9 +10,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.exceptions import BadRequestError, NotFoundError
-from src.memory.maintenance import advance_watermark_past_history
+from src.memory import SlotCommitResult, advance_watermark_past_history, clear_slot, redact_slot_evidence, set_slot
 from src.memory.models import UserProfileSlot, UserProfileSlotEvent
-from src.memory.service import SlotCommitResult, clear_slot, redact_slot_evidence, set_slot
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     CustomInstructionsResponse,

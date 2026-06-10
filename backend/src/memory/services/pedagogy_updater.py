@@ -27,11 +27,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
 from src.jobs import QUEUE_PEDAGOGY, defer_job, pedagogy_queueing_lock
-from src.memory.notes_search import EMBEDDING_FAILURE_ERROR_TYPES
-from src.memory.pedagogy_models import PedagogicalNote, PedagogyWatermark, StudentCard, TeachingEvent
-from src.memory.pedagogy_service import TEACHING_PROFILE_FIELDS, upsert_course_teaching_profile
+from src.memory.models import PedagogicalNote, PedagogyWatermark, StudentCard, TeachingEvent
 from src.memory.prompts import PEDAGOGY_UPDATER_SYSTEM_PROMPT
-from src.memory.student_card import card_replace, card_rethink, lock_card
+from src.memory.services.notes_search import EMBEDDING_FAILURE_ERROR_TYPES
+from src.memory.services.pedagogy_service import TEACHING_PROFILE_FIELDS, upsert_course_teaching_profile
+from src.memory.services.student_card import card_replace, card_rethink, lock_card
 
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ async def maybe_trigger_update(
 async def process_pedagogy_update(user_id: uuid.UUID, course_id: uuid.UUID) -> int:
     """Run one consolidation pass; returns how many new evidence items were processed."""
     from src.database.session import async_session_maker
-    from src.memory.maintenance import _user_is_active
+    from src.memory.services.profile_maintenance import _user_is_active
 
     async with async_session_maker() as session:
         if not await _user_is_active(session, user_id):

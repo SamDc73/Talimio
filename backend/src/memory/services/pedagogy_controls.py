@@ -22,9 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.exceptions import BadRequestError
 from src.jobs import QUEUE_MAINTENANCE, defer_job
-from src.memory.pedagogy_models import CourseTeachingProfile, StudentCard, StudentCardRevision
-from src.memory.pedagogy_service import get_merged_teaching_profile
-from src.memory.student_card import SECTION_HEADERS, CardEditError, card_replace, lock_card
+from src.memory.models import CourseTeachingProfile, PedagogicalNote, StudentCard, StudentCardRevision
+from src.memory.services.pedagogy_service import get_merged_teaching_profile
+from src.memory.services.student_card import SECTION_HEADERS, CardEditError, card_replace, lock_card
 
 
 PEDAGOGY_FORGET_TASK_NAME = "pedagogy.forget_cleanup"
@@ -204,8 +204,6 @@ async def run_forget_cleanup(user_id: uuid.UUID, course_id: uuid.UUID, cutoff: d
                 strategy_request_signal=None,
             )
         )
-
-        from src.memory.pedagogy_models import PedagogicalNote
 
         await session.execute(
             update(PedagogicalNote)

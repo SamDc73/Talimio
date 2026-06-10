@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.memory.pedagogy_models import StudentCard, StudentCardRevision
-from src.memory.student_card import lock_card
+from src.memory.models import StudentCard, StudentCardRevision
+from src.memory.services.student_card import lock_card
 
 
 @dataclass(frozen=True, slots=True)

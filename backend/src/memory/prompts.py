@@ -7,7 +7,7 @@ dual-trace: the fact plus a one-line scene trace of when it was learned.
 
 from __future__ import annotations
 
-from src.memory.slots import PROFILE_SLOTS
+from src.memory.services.profile_slots import PROFILE_SLOTS
 
 
 def _slot_vocabulary_lines() -> str:

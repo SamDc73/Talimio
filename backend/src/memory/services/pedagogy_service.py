@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.memory.pedagogy_models import CourseTeachingProfile
+from src.memory.models import CourseTeachingProfile
 
 
 TEACHING_PROFILE_FIELDS = (
@@ -121,8 +121,8 @@ async def build_pedagogy_context(session: AsyncSession, *, user_id: uuid.UUID, c
     card with no claims is skipped. Mastery/review numbers stay in the adaptive
     signals and never appear here.
     """
-    from src.memory.pedagogy_models import StudentCard
-    from src.memory.student_card import DEFAULT_CARD_TEXT
+    from src.memory.models import StudentCard
+    from src.memory.services.student_card import DEFAULT_CARD_TEXT
 
     parts: list[str] = []
 

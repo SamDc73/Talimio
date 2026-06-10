@@ -21,7 +21,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.memory.models import UserProfileSlot, UserProfileSlotEvent
-from src.memory.slots import is_known_slot
+from src.memory.services.profile_slots import is_known_slot
 
 
 SlotSource = Literal["manual", "inferred", "legacy_migration"]

@@ -12,7 +12,7 @@ import uuid
 from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.memory.pedagogy_models import TeachingEvent
+from src.memory.models import TeachingEvent
 
 
 TEACHING_EVENT_TYPES = frozenset(
@@ -66,7 +66,7 @@ async def record_teaching_event(
     await session.flush()
 
     # Local import: the updater module pulls in jobs and course models.
-    from src.memory.pedagogy_updater import maybe_trigger_update
+    from src.memory.services.pedagogy_updater import maybe_trigger_update
 
     # The learner speaking in their own words is high-signal: consolidate now.
     high_signal = event_type in {"lesson_regenerated", "preference_stated"}
