@@ -292,7 +292,7 @@ function DocumentList({
 										{/* Document Info */}
 										<div className="col-span-5">
 											<div className="flex items-center space-x-3">
-												<div className="shrink-0">{getFileTypeIcon(doc)}</div>
+												<div className="shrink-0">{getFileTypeIcon()}</div>
 												<div className="min-w-0 flex-1">
 													<p className="text-sm font-medium text-foreground truncate">
 														{doc.title || "Untitled Document"}

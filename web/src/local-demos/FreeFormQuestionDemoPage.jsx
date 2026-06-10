@@ -121,7 +121,7 @@ function Demo1Baseline() {
 	const submitted = grade !== null
 
 	return (
-		<div className="rounded-2xl border border-border/40 p-6 md:p-8 bg-card shadow-sm max-w-3xl mx-auto">
+		<div className="mx-auto max-w-container-3xl rounded-2xl border border-border/40 bg-card p-6 shadow-sm md:p-8">
 			{LESSON_CONTEXT}
 
 			<div className="mb-6 text-lg font-medium text-foreground">
@@ -207,7 +207,7 @@ function Demo2Semantic() {
 	}
 
 	return (
-		<div className="rounded-2xl border border-border/40 p-6 md:p-8 bg-card shadow-sm max-w-3xl mx-auto">
+		<div className="mx-auto max-w-container-3xl rounded-2xl border border-border/40 bg-card p-6 shadow-sm md:p-8">
 			{LESSON_CONTEXT}
 
 			<div className="mb-6 text-lg font-medium text-foreground">
@@ -312,7 +312,7 @@ function Demo3Conversational() {
 	const isCompleted = attempts.some((a) => a.grade.status === "correct")
 
 	return (
-		<div className="rounded-2xl border border-border/40 p-6 md:p-8 bg-card shadow-sm max-w-3xl mx-auto">
+		<div className="mx-auto max-w-container-3xl rounded-2xl border border-border/40 bg-card p-6 shadow-sm md:p-8">
 			{LESSON_CONTEXT}
 
 			<div className="mb-6 text-lg font-medium text-foreground">
@@ -839,7 +839,7 @@ export default function FreeFormQuestionDemoPage() {
 
 	return (
 		<div className="min-h-screen bg-muted/20 py-12 px-4">
-			<div className="max-w-3xl mx-auto mb-10">
+			<div className="mx-auto mb-10 max-w-container-3xl">
 				<div className="mb-8">
 					<h1 className="text-3xl font-bold tracking-tight mb-2">Free Form Question UI Studies</h1>
 					<p className="text-muted-foreground">

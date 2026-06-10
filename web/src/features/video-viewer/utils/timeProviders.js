@@ -7,7 +7,9 @@ class TimeProvider {
 	getPlaybackRate() {
 		return 1
 	}
-	destroy() {}
+	destroy() {
+		// no-op base implementation; subclasses override
+	}
 }
 
 export class HTML5TimeProvider extends TimeProvider {

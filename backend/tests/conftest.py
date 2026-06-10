@@ -28,6 +28,7 @@ from src.auth.crud import create_auth_session
 from src.auth.security import create_access_token
 from src.config.settings import get_settings
 from src.database.migrate import apply_migrations
+from src.observability.log_context import clear_log_context
 from src.user.models import User
 from tests.fixtures.auth_modes import AuthMode
 
@@ -55,6 +56,7 @@ def _configure_test_settings() -> None:
     os.environ["AUTH_PROVIDER"] = "none"
     os.environ["MIGRATIONS_VERBOSE"] = "false"
     os.environ["OTEL_ENABLED"] = "false"
+    os.environ["STORAGE_PROVIDER"] = "local"
     os.environ["LOCAL_STORAGE_PATH"] = str(_TEST_STORAGE_PATH)
     os.environ["FRONTEND_URL"] = "http://testserver"
     os.environ["FRONTEND_APP_URL"] = "http://testserver"
@@ -289,10 +291,6 @@ class _ModeAwareClient:
         return await self._client.delete(url, **kwargs)
 
 
-def _discard_detached_task(coro: Any) -> None:
-    coro.close()
-
-
 _configure_test_settings()
 _TEST_ENGINE = _create_test_engine()
 _patch_database_modules(_TEST_ENGINE)
@@ -326,6 +324,14 @@ async def test_engine() -> AsyncIterator[AsyncEngine]:
             await conn.execute(text(f'DROP SCHEMA IF EXISTS "{_TEST_SCHEMA_NAME}" CASCADE'))
         await admin_engine.dispose()
         shutil.rmtree(_TEST_STORAGE_PATH, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def _reset_log_context_between_tests() -> Iterator[None]:
+    """Clear the request-scoped log ContextVar so sync tests don't leak state."""
+    clear_log_context()
+    yield
+    clear_log_context()
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -375,7 +381,9 @@ def mock_external_services(monkeypatch: pytest.MonkeyPatch) -> None:
         await asyncio.sleep(0)
 
     monkeypatch.setattr("src.videos.service.VideoService.fetch_video_info", fake_fetch_video_info)
-    monkeypatch.setattr("src.videos.service._spawn_detached_task", _discard_detached_task)
+    monkeypatch.setattr("src.videos.service._auto_tag_video_background", noop_async)
+    monkeypatch.setattr("src.videos.service._extract_chapters_background", noop_async)
+    monkeypatch.setattr("src.videos.service._process_transcript_to_jsonb", noop_async)
     monkeypatch.setattr("src.auth.emails.send_reset_email", noop_async)
     monkeypatch.setattr("src.auth.emails.send_verification_email", noop_async)
 
@@ -410,12 +418,6 @@ async def client_factory(
         user_id, token_version = await _ensure_local_user(test_engine, email=email)
         auth_cookie = await _create_local_auth_cookie(test_engine, user_id=user_id, token_version=token_version)
         client.cookies.set(get_settings().AUTH_COOKIE_NAME, auth_cookie)
-
-        csrf_response = await client.get("/health")
-        csrf_response.raise_for_status()
-        csrf_token = client.cookies.get("csrftoken")
-        if csrf_token:
-            client.headers["X-CSRFToken"] = csrf_token
 
         return _ModeAwareClient(_client=client, expected_user_id=str(user_id), auth_mode=auth_mode)
 

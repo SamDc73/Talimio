@@ -131,7 +131,7 @@ async def _post_attempt(client, *, course_id: uuid.UUID, question_id: uuid.UUID,
         json={
             "attemptId": str(attempt_id or uuid.uuid4()),
             "questionId": str(question_id),
-            "answer": {"kind": "latex", "answerText": answer},
+            "answer": {"kind": "latex", "answerLatex": answer},
             "hintsUsed": 0,
             "durationMs": 1000,
         },

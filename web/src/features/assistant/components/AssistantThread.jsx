@@ -49,7 +49,7 @@ export function AssistantThread({ toolRenderers = DEFAULT_TOOL_RENDERERS }) {
 			>
 				<ThreadPrimitive.Viewport
 					autoScroll
-					className="aui-thread-viewport relative flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto px-4 pt-4"
+					className="aui-thread-viewport relative flex min-h-0 flex-1 flex-col overflow-auto  px-4 pt-4"
 				>
 					<AuiIf condition={(s) => s.thread.isEmpty}>
 						<ThreadWelcome />

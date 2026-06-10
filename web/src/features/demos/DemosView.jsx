@@ -29,6 +29,21 @@ const LOCAL_DEMO_ROUTE_DEFINITIONS = [
 		description: "Local palette study for lesson UI tone and readability.",
 		modulePathCandidates: ["/src/local-demos/LessonFlowGreensDemoPage.jsx"],
 	},
+	{
+		id: "self-assessment-toggle",
+		path: "/self-assessment-toggle",
+		title: "Self-assessment toggle",
+		description: "Design variants for the self-assessment toggle in the Create Course modal.",
+		modulePathCandidates: ["/src/local-demos/SelfAssessmentToggleDemoPage.jsx"],
+	},
+	{
+		id: "course-loading-graphics",
+		path: "/course-loading-graphics",
+		title: "Course loading scenes",
+		description:
+			"Signature loading scenes for the Create Course generation overlay — the message itself is the loader. Pick the winner.",
+		modulePathCandidates: ["/src/local-demos/CourseLoadingGraphicsDemoPage.jsx"],
+	},
 ]
 
 // biome-ignore lint/style/useComponentExportOnlyModules: route metadata stays colocated with the route component in this local-only module.
@@ -55,10 +70,10 @@ const loadLocalDemoModule = async (modulePathCandidates) => {
 
 function LocalDemoState({ title, message }) {
 	return (
-		<div className="mx-auto flex min-h-[60vh] w-full max-w-3xl flex-col justify-center gap-4 px-6 py-12">
+		<div className="mx-auto flex min-h-[60vh] w-full max-w-container-3xl flex-col justify-center gap-4 px-6 py-12">
 			<p className="text-sm font-medium text-primary">Local Demo</p>
 			<h1 className="text-3xl font-semibold tracking-tight text-foreground">{title}</h1>
-			<p className="max-w-2xl text-base/relaxed text-muted-foreground">{message}</p>
+			<p className="max-w-container-2xl text-base/relaxed text-muted-foreground">{message}</p>
 			<div className="flex flex-wrap gap-3 text-sm">
 				<Link className="text-primary underline underline-offset-4" to="/demos">
 					Browse local demo routes
@@ -159,11 +174,11 @@ export default function DemosView() {
 	const unavailableRoutes = localDemoRoutes.filter((route) => !route.isAvailable)
 
 	return (
-		<div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-10">
+		<div className="mx-auto flex w-full max-w-container-4xl flex-col gap-8 px-6 py-10">
 			<header className="rounded-3xl border border-border bg-card p-6 shadow-sm">
 				<p className="text-sm font-medium text-primary">Local Demos</p>
 				<h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">Scratch routes for this checkout</h1>
-				<p className="mt-3 max-w-3xl text-base/relaxed text-muted-foreground">
+				<p className="mt-3 max-w-container-3xl text-base/relaxed text-muted-foreground">
 					These routes are optional. They load local files from <code>src/local-demos</code> only in the Vite dev
 					server, so production builds never depend on scratch experiments.
 				</p>

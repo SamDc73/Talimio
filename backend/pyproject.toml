@@ -51,6 +51,8 @@ dependencies = [
     "opentelemetry-instrumentation-asgi>=0.62b0",
     "opentelemetry-instrumentation-sqlalchemy>=0.62b0",
     "structlog>=25.5.0",
+    "bs4>=0.0.2",
+    "markdownify>=1.2.2",
 ]
 
 [dependency-groups]

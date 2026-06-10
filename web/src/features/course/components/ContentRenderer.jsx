@@ -7,10 +7,6 @@ import { MdxRenderer } from "./MdxRenderer"
  * @returns {JSX.Element}
  */
 export function ContentRenderer({ content, lessonId, courseId, lessonConceptId }) {
-	// Debug logging moved outside render
-	if (process.env.NODE_ENV === "development") {
-	}
-
 	// Use MDXRenderer with proper interactive component support
 	return <MdxRenderer content={content} lessonId={lessonId} courseId={courseId} lessonConceptId={lessonConceptId} />
 }

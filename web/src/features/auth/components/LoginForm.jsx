@@ -4,16 +4,17 @@ import { GoogleMark } from "@/components/GoogleMark"
 import AuthPageShell from "@/features/auth/components/AuthPageShell"
 import { isValidEmail } from "@/features/auth/emailValidation"
 import logger from "@/lib/logger"
+import { asyncNoop, noop } from "@/lib/utils"
 
 const REQUIRED_FIELD_MESSAGE = "This field is required"
 
 function LoginForm({
-	onSignUp = () => {},
-	onForgotPassword = () => {},
-	onSubmit = async (_email, _password) => {},
+	onSignUp = noop,
+	onForgotPassword = noop,
+	onSubmit = asyncNoop,
 	onResendVerification = async (_email) => ({ success: false, error: "Resend is unavailable" }),
 	showGoogleOAuth = false,
-	onGoogle = () => {},
+	onGoogle = noop,
 	errorMessage = "",
 	successMessage = "",
 }) {

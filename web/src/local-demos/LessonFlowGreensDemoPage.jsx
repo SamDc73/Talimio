@@ -366,7 +366,7 @@ function FlowCardsSections() {
 								<span className="flex size-[1.618rem] items-center justify-center">
 									<span
 										className={cn(
-											"h-[0.382rem] w-[0.382rem] rounded-full transition-colors",
+											"size-[0.382rem]  rounded-full transition-colors",
 											isActive ? "bg-(--color-course)" : "bg-muted-foreground/20"
 										)}
 									/>
@@ -422,7 +422,7 @@ function LessonFlowPreview({ palette }) {
 						</Badge>
 						{palette.isOriginal ? <Badge variant="secondary">Original</Badge> : null}
 					</div>
-					<p className="max-w-2xl text-sm text-muted-foreground">{palette.note}</p>
+					<p className="max-w-container-2xl text-sm text-muted-foreground">{palette.note}</p>
 					<p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/70">
 						Suggested by {palette.suggestedBy}
 					</p>
@@ -493,10 +493,10 @@ function LessonFlowPreview({ palette }) {
 							</div>
 						</div>
 						<div className="space-y-2.5">
-							<h1 className="max-w-3xl text-3xl/tight font-semibold tracking-tight text-foreground md:text-4xl/tight">
+							<h1 className="max-w-container-3xl text-3xl/tight font-semibold tracking-tight text-foreground md:text-4xl/tight">
 								{LESSON.title}
 							</h1>
-							<p className="max-w-2xl text-sm/relaxed text-muted-foreground md:text-base/relaxed">
+							<p className="max-w-container-2xl text-sm/relaxed text-muted-foreground md:text-base/relaxed">
 								{LESSON.description}
 							</p>
 						</div>
@@ -516,11 +516,11 @@ export default function LessonFlowGreensDemoPage() {
 				<header className="rounded-3xl border border-border bg-card p-6  shadow-sm">
 					<p className="text-sm font-medium text-primary">Scratch Route</p>
 					<h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground">#45 Green Study</h1>
-					<p className="mt-3 max-w-4xl text-base/relaxed  text-muted-foreground">
+					<p className="mt-3 max-w-container-4xl text-base/relaxed  text-muted-foreground">
 						Same interaction design as `#45 Flow cards`, repeated with different OKLCH greens so the judgment stays
 						about tone and readability, not layout. Open it at <code>/#/lesson-flow-greens</code>.
 					</p>
-					<p className="mt-3 max-w-4xl text-sm/relaxed  text-muted-foreground">
+					<p className="mt-3 max-w-container-4xl text-sm/relaxed  text-muted-foreground">
 						The palette set holds the structure constant and varies only three color-science levers: lightness for
 						button contrast, chroma for calm vs. hype, and hue angle for whether the green reads like a learning system,
 						a success state, or something more ownable to Talimio.

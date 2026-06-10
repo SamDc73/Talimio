@@ -381,9 +381,13 @@ export const useAssistantRuntime = () => {
 				storeConversationContext(conversation)
 			},
 
-			async archive(_remoteId) {},
+			async archive(_remoteId) {
+				// intentionally unimplemented
+			},
 
-			async unarchive(_remoteId) {},
+			async unarchive(_remoteId) {
+				// intentionally unimplemented
+			},
 
 			async delete(remoteId) {
 				await assistantApi.deleteConversation(remoteId)
