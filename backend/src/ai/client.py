@@ -1681,9 +1681,49 @@ class LLMClient:
 
     async def _inject_memory_into_messages(self, messages: list[ChatMessage], user_id: uuid.UUID) -> list[ChatMessage]:
         """Inject user memory context into the conversation."""
+        context_parts: list[str] = []
+
+        profile_block = await self._load_canonical_profile_block(user_id)
+        if profile_block:
+            context_parts.append(f"User profile (durable preferences):\n{profile_block}")
+
+        legacy_lines = await self._search_legacy_memories(messages, user_id)
+        if legacy_lines:
+            context_parts.append("\n".join(legacy_lines))
+
+        if not context_parts:
+            return messages
+
+        memory_context = MEMORY_CONTEXT_SYSTEM_PROMPT.format(memory_context="\n\n".join(context_parts))
+        memory_message = {"role": "system", "content": memory_context}
+
+        if messages and messages[0].get("role") == "system":
+            return [messages[0], memory_message, *messages[1:]]
+        return [memory_message, *messages]
+
+    async def _load_canonical_profile_block(self, user_id: uuid.UUID) -> str:
+        """Read the canonical DB-backed profile block; failures never break the request."""
+        try:
+            from sqlalchemy.exc import SQLAlchemyError
+
+            from src.memory.service import build_profile_block, get_active_slots
+        except ImportError as error:
+            self._logger.warning("Failed to import profile memory for user %s: %s", user_id, error)
+            return ""
+
+        try:
+            async with async_session_maker() as session:
+                slots = await get_active_slots(session, user_id)
+            return build_profile_block(slots)
+        except (SQLAlchemyError, *_MEMORY_OPERATION_ERROR_TYPES) as error:
+            self._logger.warning("Failed to load profile block for user %s: %s", user_id, error)
+            return ""
+
+    async def _search_legacy_memories(self, messages: list[ChatMessage], user_id: uuid.UUID) -> list[str]:
+        """Transitional mem0 read kept alive until the Phase 4 canonical cutover."""
         query_text = self._build_memory_query(messages)
         if not query_text:
-            return messages
+            return []
 
         try:
             from src.ai.memory import search_memories
@@ -1696,10 +1736,7 @@ class LLMClient:
             )
         except _MEMORY_OPERATION_ERROR_TYPES as error:
             self._logger.warning("Failed to inject memory for user %s: %s", user_id, error)
-            return messages
-
-        if not memories:
-            return messages
+            return []
 
         memory_lines: list[str] = []
         for memory in memories:
@@ -1716,15 +1753,7 @@ class LLMClient:
             if normalized:
                 memory_lines.append(f"• {normalized}")
 
-        if not memory_lines:
-            return messages
-
-        memory_context = MEMORY_CONTEXT_SYSTEM_PROMPT.format(memory_context="\n".join(memory_lines))
-        memory_message = {"role": "system", "content": memory_context}
-
-        if messages and messages[0].get("role") == "system":
-            return [messages[0], memory_message, *messages[1:]]
-        return [memory_message, *messages]
+        return memory_lines
 
     def _build_memory_query(self, messages: Sequence[ChatMessage]) -> str | None:
         """Return the most recent user utterance to drive mem0 vector search."""

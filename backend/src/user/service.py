@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.memory import add_memory, delete_all_memories, delete_memory, get_memories
+from src.ai.memory import delete_all_memories, delete_memory, get_memories
 from src.exceptions import NotFoundError, UpstreamUnavailableError
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
@@ -138,21 +138,6 @@ async def update_custom_instructions(
     preferences.user_preferences["custom_instructions"] = instructions
 
     await _save_user_preferences(user_id, preferences, db_session)
-
-    # Also add a memory entry about the instruction update
-    try:
-        await add_memory(
-            user_id=user_id,
-            messages="Updated personal AI instructions",
-            metadata={
-                "interaction_type": "settings_update",
-                "setting_type": "custom_instructions",
-                "instructions_length": len(instructions),
-                "timestamp": "now",
-            },
-        )
-    except RuntimeError, TimeoutError, TypeError, ValueError:
-        logger.warning("Failed to log instruction update in memory for user %s", user_id, exc_info=True)
 
     return CustomInstructionsResponse(instructions=instructions, updated=True)
 
