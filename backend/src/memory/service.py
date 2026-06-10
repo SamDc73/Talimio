@@ -171,6 +171,30 @@ async def clear_slot(
     return SlotCommitResult(slot=slot, status=status)
 
 
+async def record_skip_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    slot: str,
+    op: Literal["ignore", "defer"],
+    evidence: SlotEvidence | None = None,
+) -> SlotCommitResult:
+    """Log an ignore/defer decision for audit without touching canonical state."""
+    _validate_slot(slot)
+    _record_event(
+        session,
+        user_id=user_id,
+        slot=slot,
+        op=op,
+        proposed_value=None,
+        source="inferred",
+        evidence=evidence or SlotEvidence(),
+        status="noop",
+    )
+    await session.flush()
+    return SlotCommitResult(slot=slot, status="noop")
+
+
 def _validate_slot(slot: str) -> None:
     if not is_known_slot(slot):
         msg = f"unknown profile slot: {slot!r}"

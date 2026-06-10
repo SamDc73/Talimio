@@ -1088,6 +1088,11 @@ async def _persist_latest_user_and_load_server_history(
         run_config=request.run_config,
     )
     if inserted:
+        # Defer the profile-memory maintenance pass atomically with the
+        # user-turn write; the job commits or rolls back with the evidence.
+        from src.memory.maintenance import defer_profile_maintenance
+
+        await defer_profile_maintenance(session, user_id=user_id)
         await session.commit()
     else:
         msg = "Latest user message already exists"

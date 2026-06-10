@@ -176,13 +176,13 @@ CREATE TABLE IF NOT EXISTS ai_custom_instructions (
 
 CREATE TABLE IF NOT EXISTS learning_memories (
     id UUID PRIMARY KEY,
-    vector VECTOR(${MEMORY_EMBEDDING_OUTPUT_DIM}),
+    vector VECTOR(1024),
     payload JSONB
 );
 
 CREATE TABLE IF NOT EXISTS mem0migrations (
     id UUID PRIMARY KEY,
-    vector VECTOR(${MEMORY_EMBEDDING_OUTPUT_DIM}),
+    vector VECTOR(1024),
     payload JSONB
 );
 

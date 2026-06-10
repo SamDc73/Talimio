@@ -3,11 +3,12 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.base import Base
+from src.user import models as _user_models  # noqa: F401  # registers the users table these FKs resolve against
 
 
 class UserProfileSlot(Base):
@@ -42,6 +43,25 @@ class UserProfileSlot(Base):
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class UserMemoryWatermark(Base):
+    """High-water mark of conversation-history seq already evaluated for a user."""
+
+    __tablename__ = "user_memory_watermarks"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    last_processed_seq: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -5,12 +5,12 @@ import uuid
 
 from psycopg.errors import ForeignKeyViolation
 from pydantic import ValidationError as PydanticValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.memory import delete_all_memories, delete_memory, get_memories
-from src.exceptions import NotFoundError, UpstreamUnavailableError
+from src.exceptions import NotFoundError
+from src.memory.models import UserProfileSlot
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     CustomInstructionsResponse,
@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 USER_RESOURCE_TYPE = "user"
 MEMORY_RESOURCE_TYPE = "memory"
-MEMORY_SERVICE_UNAVAILABLE_DETAIL = "Memory service is unavailable"
 
 
 async def _load_user_preferences(user_id: uuid.UUID, db_session: AsyncSession) -> UserPreferences:
@@ -100,12 +99,12 @@ async def get_user_settings(user_id: uuid.UUID, db_session: AsyncSession) -> Use
         raw_custom_instructions = preferences.user_preferences.get("custom_instructions")
     custom_instructions = raw_custom_instructions if isinstance(raw_custom_instructions, str) else ""
 
-    memory_count = 0
-    try:
-        memories = await get_memories(user_id)
-        memory_count = len(memories)
-    except RuntimeError, TimeoutError, TypeError, ValueError:
-        logger.warning("Failed to count memories for user %s", user_id, exc_info=True)
+    count_stmt = (
+        select(func.count())
+        .select_from(UserProfileSlot)
+        .where(UserProfileSlot.user_id == user_id, UserProfileSlot.is_active.is_(True))
+    )
+    memory_count = (await db_session.execute(count_stmt)).scalar_one()
 
     return UserSettingsResponse(
         custom_instructions=custom_instructions,
@@ -142,60 +141,72 @@ async def update_custom_instructions(
     return CustomInstructionsResponse(instructions=instructions, updated=True)
 
 
-async def get_user_memories(user_id: uuid.UUID, agent_id: str | None = None, *, limit: int = 100) -> list[dict]:
+async def get_user_memories(user_id: uuid.UUID, db_session: AsyncSession, *, limit: int = 100) -> list[dict]:
     """
-    Get memories for a user, optionally filtered to a specific agent scope.
+    Get active profile-slot memories for a user.
 
     Args:
         user_id: Unique identifier for the user
-        agent_id: Limit results to memories created by a specific agent (optional)
+        db_session: Database session for reading profile slots
+        limit: Maximum number of memories to return
 
     Returns
     -------
         List of memories with content, timestamps, and metadata
     """
-    try:
-        memories = await get_memories(user_id, limit=limit, agent_id=agent_id)
-        formatted_memories = []
-        for memory in memories:
-            metadata = memory.get("metadata", {})
-            formatted_memory = {
-                "id": memory.get("id", ""),
-                "content": memory.get("memory", ""),
-                "timestamp": memory.get("created_at", ""),
-                "metadata": metadata,
-            }
-            formatted_memories.append(formatted_memory)
+    stmt = (
+        select(UserProfileSlot)
+        .where(UserProfileSlot.user_id == user_id, UserProfileSlot.is_active.is_(True))
+        .order_by(UserProfileSlot.updated_at.desc())
+        .limit(limit)
+    )
+    rows = (await db_session.execute(stmt)).scalars().all()
 
-        return formatted_memories
+    return [
+        {
+            "id": str(row.id),
+            "content": f"{row.slot}: {row.value}",
+            "timestamp": row.updated_at.isoformat(),
+            "metadata": {"slot": row.slot, "source": row.source},
+        }
+        for row in rows
+    ]
 
-    except (RuntimeError, TimeoutError, TypeError, ValueError) as error:
-        logger.exception("Error getting memories for user %s", user_id)
-        raise UpstreamUnavailableError(MEMORY_SERVICE_UNAVAILABLE_DETAIL, feature_area="user") from error
 
-
-async def delete_user_memory(user_id: uuid.UUID, memory_id: str) -> None:
+async def delete_user_memory(user_id: uuid.UUID, memory_id: str, db_session: AsyncSession) -> None:
     """
-    Delete a specific memory for a user.
+    Delete (deactivate) a specific profile-slot memory for a user.
 
     Args:
         user_id: Unique identifier for the user
-        memory_id: The ID of the memory to delete
+        memory_id: The UserProfileSlot row id to delete
+        db_session: Database session for the update
 
     """
-    outcome = await delete_memory(user_id, memory_id)
-    if outcome == "deleted":
-        return
-    if outcome == "not_found":
+    try:
+        slot_id = uuid.UUID(memory_id)
+    except ValueError as error:
+        raise NotFoundError(MEMORY_RESOURCE_TYPE, memory_id, feature_area="user") from error
+
+    stmt = select(UserProfileSlot).where(
+        UserProfileSlot.id == slot_id,
+        UserProfileSlot.user_id == user_id,
+        UserProfileSlot.is_active.is_(True),
+    )
+    row = (await db_session.execute(stmt)).scalar_one_or_none()
+    if row is None:
         raise NotFoundError(MEMORY_RESOURCE_TYPE, memory_id, feature_area="user")
 
-    raise UpstreamUnavailableError(MEMORY_SERVICE_UNAVAILABLE_DETAIL, feature_area="user")
+    row.is_active = False
+    await db_session.flush()
 
 
-async def clear_user_memories(user_id: uuid.UUID, agent_id: str | None = None) -> None:
-    """Clear all memories for a user, optionally scoped to a specific agent."""
-    outcome = await delete_all_memories(user_id, agent_id=agent_id)
-    if outcome == "cleared":
-        return
-
-    raise UpstreamUnavailableError(MEMORY_SERVICE_UNAVAILABLE_DETAIL, feature_area="user")
+async def clear_user_memories(user_id: uuid.UUID, db_session: AsyncSession) -> None:
+    """Deactivate all active profile-slot memories for a user."""
+    stmt = (
+        update(UserProfileSlot)
+        .where(UserProfileSlot.user_id == user_id, UserProfileSlot.is_active.is_(True))
+        .values(is_active=False)
+    )
+    await db_session.execute(stmt)
+    await db_session.flush()

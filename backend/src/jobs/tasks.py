@@ -1,17 +1,29 @@
-"""Background task definitions.
-
-Memory and pedagogy tasks land here in later phases; for now this module owns
-the periodic stalled-job sweep that recovers work from crashed workers.
-"""
+"""Background task definitions."""
 
 from __future__ import annotations
 
 import logging
+import uuid
 
-from src.jobs.app import QUEUE_MAINTENANCE, job_app
+import procrastinate
+
+from src.jobs.app import QUEUE_MAINTENANCE, QUEUE_MEMORY, job_app
 
 
 logger = logging.getLogger(__name__)
+
+
+@job_app.task(
+    name="memory.run_profile_maintenance",
+    queue=QUEUE_MEMORY,
+    retry=procrastinate.RetryStrategy(max_attempts=3, exponential_wait=5),
+)
+async def run_profile_maintenance(user_id: str) -> None:
+    """Evaluate a user's unprocessed chat turns for durable profile memory."""
+    from src.memory.maintenance import process_user_memory
+
+    evaluated = await process_user_memory(uuid.UUID(user_id))
+    logger.info("jobs.profile_maintenance.done", extra={"memory_user_id": user_id, "turns_evaluated": evaluated})
 
 
 @job_app.periodic(cron="*/10 * * * *")

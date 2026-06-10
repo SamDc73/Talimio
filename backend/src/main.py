@@ -116,14 +116,6 @@ async def _shutdown() -> None:
         logger.warning("shutdown.litellm.cleanup_failed", exc_info=True)
 
     try:
-        from src.ai.memory import cleanup_memory_client
-
-        cleanup_memory_client()
-        logger.debug("shutdown.memory.cleaned")
-    except (RuntimeError, TimeoutError, TypeError, ValueError):
-        logger.warning("shutdown.memory.cleanup_failed", exc_info=True)
-
-    try:
         await engine.dispose()
         logger.debug("shutdown.database_engine.disposed")
     except SQLAlchemyError:
