@@ -1,5 +1,6 @@
 """Request-scoped AI tool planning and execution."""
 
+from src.ai.tools.figures import build_figure_finder_function_tool
 from src.ai.tools.plan import (
     FunctionToolDefinition,
     LocalToolTarget,
@@ -23,6 +24,7 @@ __all__ = [
     "RequestToolPlan",
     "SandboxToolContext",
     "ToolTarget",
+    "build_figure_finder_function_tool",
     "build_request_tool_plan",
     "build_sandbox_function_tools",
     "build_web_search_function_tool",

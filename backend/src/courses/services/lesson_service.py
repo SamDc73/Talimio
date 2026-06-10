@@ -19,6 +19,7 @@ from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.client import LLMClient
 from src.ai.models import GeneratedLesson
 from src.ai.rag.exceptions import RagUnavailableError, RagValidationError
+from src.ai.tools.figures import build_figure_finder_function_tool
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.models import (
     Concept,
@@ -907,7 +908,10 @@ class LessonService:
         return await llm_client.generate_lesson_content(
             lesson_context,
             user_id=self.user_id,
-            function_tools=[build_wikipedia_resolver_function_tool()],
+            function_tools=[
+                build_wikipedia_resolver_function_tool(),
+                build_figure_finder_function_tool(verify=llm_client.verify_figure_for_concept),
+            ],
         )
 
     async def _materialize_and_persist_inline_questions(

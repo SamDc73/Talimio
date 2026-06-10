@@ -13,6 +13,7 @@ from src.ai import AGENT_ID_LESSON_WRITER
 from src.ai.assistant.models import AssistantActiveProbe, AssistantConversation
 from src.ai.errors import AIRuntimeError
 from src.ai.models import GeneratedLesson
+from src.ai.tools.figures import build_figure_finder_function_tool
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.models import Course, LearningQuestion, Lesson
 from src.courses.schemas import (
@@ -810,7 +811,10 @@ class LearningCapabilityActionService:
         return await llm_client.generate_lesson_content(
             composed_context,
             user_id=user_id,
-            function_tools=[build_wikipedia_resolver_function_tool()],
+            function_tools=[
+                build_wikipedia_resolver_function_tool(),
+                build_figure_finder_function_tool(verify=llm_client.verify_figure_for_concept),
+            ],
         )
 
     async def _materialize_generated_lesson(

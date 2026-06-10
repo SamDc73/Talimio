@@ -1,12 +1,16 @@
-"""Openverse figure retrieval for lesson-writing (usage is gated by vision verification)."""
+"""Openverse figure retrieval for lesson-writing, gated by vision verification."""
 
+import base64
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import cast
+from typing import Protocol, cast
 from urllib.parse import unquote, urlsplit
 
 import httpx
 from pydantic import JsonValue
+
+from src.ai.models import FigureVerification
+from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
 
 
 _OPENVERSE_SEARCH_URL = "https://api.openverse.org/v1/images/"
@@ -20,6 +24,10 @@ _DEFAULT_TIMEOUT_SECONDS = 15.0
 _USER_AGENT = "TalimioLessonFigures/1.0 (https://talimio.com)"
 # Diagram-friendly formats rank first; photo formats (the usual junk) rank last.
 _EXTENSION_SORT_RANK = {"svg": 0, "png": 1}
+# Vision verifications run per candidate, so keep the cap small.
+_DEFAULT_MAX_CANDIDATES = 3
+# Below this confidence a match is downgraded to "none" rather than risk a misleading figure.
+_CONFIDENCE_FLOOR = 0.55
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,3 +245,138 @@ def _format_license(code: str, version: str) -> str:
         return "Public Domain Mark"
     label = code.upper() if code == "cc0" else f"CC {code.upper()}"
     return f"{label} {version}".strip()
+
+
+class FigureVerifier(Protocol):
+    """Vision verify callable supplied by LLMClient.verify_figure_for_concept."""
+
+    async def __call__(
+        self, *, concept: str, image_url: str, lesson_context: str | None = None
+    ) -> FigureVerification:
+        """Verify whether one image is a load-bearing figure for the concept."""
+        ...
+
+
+class OpenverseFigureFinderTool:
+    """Find one vision-verified, load-bearing figure for a concept, or report `none`.
+
+    The whole look→re-search loop is kept inside this handler: search candidates,
+    verify up to a small cap, stop early on an exact match, and fall back to the best
+    related figure. The lesson-writer model just sees one honest result.
+    """
+
+    def __init__(
+        self,
+        *,
+        verify: FigureVerifier,
+        max_candidates: int = _DEFAULT_MAX_CANDIDATES,
+        timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
+    ) -> None:
+        self._verify = verify
+        self._max_candidates = max_candidates
+        self._timeout_seconds = timeout_seconds
+
+    async def execute(self, arguments: Mapping[str, object]) -> dict[str, JsonValue]:
+        """Return one verified figure dict, or `{"match": "none"}` when nothing real fits."""
+        concept = str(arguments.get("concept") or "").strip()
+        if not concept:
+            msg = "Field `concept` is required"
+            raise ValueError(msg)
+        raw_context = arguments.get("lesson_context")
+        lesson_context = str(raw_context).strip() if isinstance(raw_context, str) else None
+
+        candidates = await search_figure_candidates(concept, timeout_seconds=self._timeout_seconds)
+
+        best: tuple[FigureCandidate, FigureVerification] | None = None
+        headers = {"User-Agent": _USER_AGENT}
+        async with httpx.AsyncClient(timeout=self._timeout_seconds, headers=headers, follow_redirects=True) as client:
+            for candidate in candidates[: self._max_candidates]:
+                # Verify on the bytes we fetch (our User-Agent works); the LLM provider's own
+                # fetch of Wikimedia thumbs gets rate-limited (429), so inline the image instead.
+                image_data_url = await _fetch_image_data_url(client, candidate)
+                if image_data_url is None:
+                    continue
+                verification = await self._verify(
+                    concept=concept, image_url=image_data_url, lesson_context=lesson_context
+                )
+                if verification.match == "none" or verification.confidence < _CONFIDENCE_FLOOR:
+                    continue
+                if verification.match == "exact":
+                    return _figure_payload(candidate, verification)
+                if best is None or verification.confidence > best[1].confidence:
+                    best = (candidate, verification)
+
+        if best is not None:
+            return _figure_payload(*best)
+        return {"match": "none"}
+
+
+def build_figure_finder_function_tool(
+    *,
+    verify: FigureVerifier,
+    max_candidates: int = _DEFAULT_MAX_CANDIDATES,
+    timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
+) -> FunctionToolDefinition:
+    """Return the lesson-writer `find_lesson_figure` function tool."""
+    tool = OpenverseFigureFinderTool(
+        verify=verify, max_candidates=max_candidates, timeout_seconds=timeout_seconds
+    )
+    return FunctionToolDefinition(
+        schema={
+            "type": "function",
+            "function": {
+                "name": "find_lesson_figure",
+                "description": (
+                    "Find a real, load-bearing educational figure (diagram, schematic, anatomical "
+                    "drawing, micrograph) for a science concept that has no native modality — biology, "
+                    "physics, chemistry, anatomy. Do NOT use it for math or CS (use math/code components) "
+                    "or for decoration. Each candidate is vision-verified before it is returned. "
+                    'On success returns match "exact" or "related" with url, license, attribution, '
+                    "caption and a caveat; on `related`, honor the caveat and you may adapt the surrounding "
+                    'text to what the figure actually shows. Returns {"match": "none"} when no real figure '
+                    "fits — generate your own explanation instead."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "concept": {"type": "string"},
+                        "lesson_context": {"type": "string"},
+                    },
+                    "required": ["concept"],
+                },
+            },
+        },
+        target=LocalToolTarget(execute=tool.execute),
+    )
+
+
+async def _fetch_image_data_url(client: httpx.AsyncClient, candidate: FigureCandidate) -> str | None:
+    """Fetch the candidate image and return a base64 data URL, or None if it is not a live image."""
+    try:
+        response = await client.get(candidate.url)
+        response.raise_for_status()
+    except httpx.HTTPError:
+        return None
+    content_type = response.headers.get("content-type", "").split(";", 1)[0].strip()
+    if not content_type:
+        content_type = candidate.mime or "image/png"
+    if not content_type.startswith("image/"):
+        return None
+    encoded = base64.b64encode(response.content).decode("ascii")
+    return f"data:{content_type};base64,{encoded}"
+
+
+def _figure_payload(candidate: FigureCandidate, verification: FigureVerification) -> dict[str, JsonValue]:
+    return {
+        "match": verification.match,
+        "confidence": verification.confidence,
+        "url": candidate.url,
+        "license": candidate.license,
+        "attribution": candidate.attribution,
+        "source_page": candidate.foreign_landing_url,
+        "depicts": verification.depicts,
+        "relevance": verification.relevance,
+        "caveat": verification.caveat,
+        "caption": verification.caption,
+    }
