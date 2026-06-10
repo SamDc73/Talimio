@@ -30,6 +30,7 @@ from src.exceptions import (
     UpstreamUnavailableError,
     ValidationError,
 )
+from src.memory.teaching_events import record_teaching_event
 
 from .models import Course, CourseConcept, LearningAttempt, LearningQuestion, Lesson
 from .schemas import (
@@ -797,6 +798,19 @@ class CoursesFacade:  # noqa: PLR0904
         )
         self._session.add(attempt)
         await self._session.flush()
+        await record_teaching_event(
+            self._session,
+            user_id=user_id,
+            course_id=course_id,
+            event_type="check_answered",
+            lesson_id=lesson_id,
+            lesson_version_id=question.lesson_version_id,
+            concept_id=question.concept_id,
+            duration_ms=payload.duration_ms,
+            hints_used=payload.hints_used,
+            outcome="correct" if is_correct else "incorrect",
+            details={"practice_context": question.practice_context, "grade_status": attempt_status},
+        )
 
         concept_stats: dict[str, _ReviewConceptStats] = {}
         snapshot: _ReviewSnapshot = {
