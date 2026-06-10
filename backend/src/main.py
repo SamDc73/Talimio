@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncGenerator
@@ -133,8 +134,56 @@ async def _shutdown() -> None:
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Application lifespan events."""
     await _startup()
+    worker_task = await _start_jobs_worker()
     yield
+    await _stop_jobs_worker(worker_task)
     await _shutdown()
+
+
+async def _start_jobs_worker() -> asyncio.Task[None]:
+    """Run the procrastinate worker inside the app process, supervised."""
+    from src.jobs import job_app
+
+    await job_app.open_async()
+    worker_task = asyncio.create_task(_supervise_jobs_worker(), name="procrastinate-worker-supervisor")
+    logger.info("startup.jobs_worker.started")
+    return worker_task
+
+
+async def _supervise_jobs_worker() -> None:
+    """Keep the worker alive across transient failures.
+
+    Procrastinate's worker is fail-stop: when any side task (heartbeat update,
+    LISTEN connection) hits a transient DB error it stops itself and
+    ``run_worker_async`` returns normally - without supervision the API keeps
+    serving while background jobs silently stop.
+    """
+    from src.jobs import job_app
+
+    while True:
+        try:
+            await job_app.run_worker_async(install_signal_handlers=False)
+            logger.error("jobs_worker.stopped_unexpectedly")
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("jobs_worker.crashed")
+        await asyncio.sleep(5)
+
+
+async def _stop_jobs_worker(worker_task: asyncio.Task[None]) -> None:
+    """Cancel the worker, waiting for running jobs to finish gracefully."""
+    from src.jobs import job_app
+
+    worker_task.cancel()
+    try:
+        await asyncio.wait_for(worker_task, timeout=10)
+    except TimeoutError:
+        logger.warning("shutdown.jobs_worker.ungraceful")
+    except asyncio.CancelledError:
+        logger.debug("shutdown.jobs_worker.stopped")
+    finally:
+        await job_app.close_async()
 
 
 def _get_cors_allow_origins(settings: Settings) -> list[str]:
