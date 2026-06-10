@@ -1,6 +1,6 @@
 """Shared AI constants."""
 
-# Logical agent identifiers used for mem0 scoping.
+# Logical agent identifiers used to scope AI callers per module.
 AGENT_ID_DEFAULT = "llm-client"
 AGENT_ID_COURSE_PLANNER = "course-planner"
 AGENT_ID_ASSISTANT = "assistant"

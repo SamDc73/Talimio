@@ -640,11 +640,6 @@ class LLMClient:
             return [messages[0], tool_message, *messages[1:]]
         return [tool_message, *messages]
 
-    def _schedule_memory_save(self, user_id: uuid.UUID | None, messages: list[ChatMessage], response: object) -> None:
-        if user_id is None:
-            return
-        _schedule_background_task(self._save_conversation_to_memory(user_id, messages, response))
-
     def _extract_provider_name(self, model: str) -> str:
         normalized_model = model.strip()
         if "/" not in normalized_model:
@@ -935,13 +930,11 @@ class LLMClient:
                 )
 
             if request.response_model is None and request.use_responses_transport:
-                result, conversation = await self._run_responses_autonomy_loop(request)
+                result, _conversation = await self._run_responses_autonomy_loop(request)
             elif request.response_model is None:
-                result, conversation = await self._run_autonomy_loop(request)
+                result, _conversation = await self._run_autonomy_loop(request)
             else:
-                result, conversation = await self._run_structured_completion_with_retries(request)
-            if request.enable_memory:
-                self._schedule_memory_save(request.user_id, conversation, result)
+                result, _conversation = await self._run_structured_completion_with_retries(request)
             return result
 
         except ValueError:
@@ -1247,7 +1240,6 @@ class LLMClient:
         transport formatting.
         """
         conversation = list(messages)
-        full_text: list[str] = []
         tool_round = 0
         used_tool_names_in_turn: set[str] = set()
         tool_failure_counts: dict[str, int] = {}
@@ -1286,7 +1278,6 @@ class LLMClient:
                     chunks.append(chunk)
                     delta = self._extract_stream_delta_content(chunk)
                     if delta:
-                        full_text.append(delta)
                         round_text.append(delta)
                         yield delta
 
@@ -1342,9 +1333,6 @@ class LLMClient:
             mapped = self._map_runtime_error(error, default_message="Completion failed")
             self._log_runtime_error(mapped, operation="Completion")
             raise mapped from error
-
-        # Save conversation to memory (non-blocking). Keep this best-effort.
-        self._schedule_memory_save(user_id, conversation, "".join(full_text))
 
     def _build_tool_call_stream_events(self, call: PlannedToolCall) -> list[JsonDict]:
         return [
@@ -1681,20 +1669,11 @@ class LLMClient:
 
     async def _inject_memory_into_messages(self, messages: list[ChatMessage], user_id: uuid.UUID) -> list[ChatMessage]:
         """Inject user memory context into the conversation."""
-        context_parts: list[str] = []
-
         profile_block = await self._load_canonical_profile_block(user_id)
-        if profile_block:
-            context_parts.append(profile_block)
-
-        legacy_lines = await self._search_legacy_memories(messages, user_id)
-        if legacy_lines:
-            context_parts.append("\n".join(legacy_lines))
-
-        if not context_parts:
+        if not profile_block:
             return messages
 
-        memory_context = MEMORY_CONTEXT_SYSTEM_PROMPT.format(memory_context="\n\n".join(context_parts))
+        memory_context = MEMORY_CONTEXT_SYSTEM_PROMPT.format(memory_context=profile_block)
         memory_message = {"role": "system", "content": memory_context}
 
         if messages and messages[0].get("role") == "system":
@@ -1717,68 +1696,6 @@ class LLMClient:
         except (SQLAlchemyError, *_MEMORY_OPERATION_ERROR_TYPES) as error:
             self._logger.warning("Failed to load profile block for user %s: %s", user_id, error)
             return ""
-
-    async def _search_legacy_memories(self, messages: list[ChatMessage], user_id: uuid.UUID) -> list[str]:
-        """Transitional mem0 read kept alive until the Phase 4 canonical cutover."""
-        query_text = self._build_memory_query(messages)
-        if not query_text:
-            return []
-
-        try:
-            from src.ai.memory import search_memories
-
-            memories = await search_memories(
-                user_id=user_id,
-                query=query_text,
-                limit=6,
-                agent_id=self._agent_id,
-            )
-        except _MEMORY_OPERATION_ERROR_TYPES as error:
-            self._logger.warning("Failed to inject memory for user %s: %s", user_id, error)
-            return []
-
-        memory_lines: list[str] = []
-        for memory in memories:
-            if not isinstance(memory, dict):
-                continue
-
-            candidate = memory.get("memory")
-            if not isinstance(candidate, str):
-                candidate = memory.get("content")
-            if not isinstance(candidate, str):
-                continue
-
-            normalized = candidate.strip()
-            if normalized:
-                memory_lines.append(f"• {normalized}")
-
-        return memory_lines
-
-    def _build_memory_query(self, messages: Sequence[ChatMessage]) -> str | None:
-        """Return the most recent user utterance to drive mem0 vector search."""
-        for message in reversed(messages):
-            if message.get("role") != "user":
-                continue
-            content = message.get("content")
-            if isinstance(content, str):
-                normalized = content.strip()
-                if normalized:
-                    return normalized
-            if isinstance(content, list):
-                text_parts: list[str] = []
-                for part in content:
-                    if not isinstance(part, Mapping):
-                        continue
-                    part = cast("Mapping[str, object]", part)
-                    if part.get("type") != "text":
-                        continue
-                    text = part.get("text")
-                    if isinstance(text, str) and text.strip():
-                        text_parts.append(text.strip())
-                normalized = " ".join(text_parts).strip()
-                if normalized:
-                    return normalized
-        return None
 
     def _slug_tool_key(self, server_name: str, tool_name: str) -> str:
         base = f"{server_name}_{tool_name}".lower()
@@ -2204,58 +2121,3 @@ class LLMClient:
             msg = f"Expected {response_model.__name__} from practice prediction structured output"
             raise TypeError(msg)
         return result
-
-    async def _save_conversation_to_memory(
-        self, user_id: uuid.UUID | None, messages: Sequence[ChatMessage], response: object
-    ) -> None:
-        """Save conversation to memory using mem0.
-
-        This runs async in background - never blocks the user response.
-        mem0 handles all the intelligent extraction, deduplication, and preference detection.
-        """
-        if user_id is None:
-            return
-
-        try:
-            from src.ai.memory import add_memory
-        except ImportError as error:
-            self._logger.warning("Failed to save conversation to memory: %s", error)
-            return
-
-        user_message = self._build_memory_query(messages) or ""
-        ai_response = self._extract_memory_response_text(response)
-
-        memory_messages: list[JsonDict] = []
-        if user_message:
-            memory_messages.append({"role": "user", "content": user_message})
-        if ai_response:
-            memory_messages.append({"role": "assistant", "content": ai_response})
-
-        if not memory_messages:
-            return
-
-        try:
-            # Let mem0 handle everything - extraction, deduplication, relevance filtering
-            await add_memory(
-                user_id=user_id,
-                messages=memory_messages,
-                agent_id=self._agent_id,
-            )
-        except SystemExit as error:
-            # Some mem0/spaCy setup paths call sys.exit(); memory persistence is best-effort.
-            self._logger.warning("Failed to save conversation to memory: %s", error)
-        except _MEMORY_OPERATION_ERROR_TYPES as error:
-            # Never fail the main request due to memory issues
-            self._logger.warning("Failed to save conversation to memory: %s", error)
-
-    def _extract_memory_response_text(self, response: object) -> str:
-        if isinstance(response, str):
-            return response[:1000]
-        if hasattr(response, "choices"):
-            message = self._extract_first_choice_message(response)
-            content = self._extract_message_content(message)
-            return content[:1000]
-        model_dump = getattr(response, "model_dump", None)
-        if callable(model_dump):
-            return str(model_dump())[:1000]
-        return str(response)[:1000]

@@ -127,8 +127,6 @@ class Settings(BaseSettings):
     RAG_EMBEDDING_OUTPUT_DIM: int | None = None
     RAG_RERANK_MODEL: str = ""
     MEMORY_LLM_MODEL: str = ""
-    MEMORY_EMBEDDING_MODEL: str = ""
-    MEMORY_EMBEDDING_OUTPUT_DIM: int | None = None
 
     # RAG Configuration
     RAG_HNSW_EF_SEARCH: int = 80
@@ -229,7 +227,7 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return value
 
-    @field_validator("RAG_EMBEDDING_OUTPUT_DIM", "MEMORY_EMBEDDING_OUTPUT_DIM")
+    @field_validator("RAG_EMBEDDING_OUTPUT_DIM")
     @classmethod
     def validate_embedding_output_dimensions(cls, value: int | None) -> int | None:
         """Ensure configured embedding dimensions are positive when provided."""

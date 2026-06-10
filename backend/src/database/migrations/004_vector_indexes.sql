@@ -5,10 +5,10 @@
 -- Ensure vector columns have fixed dimensions required by HNSW
 DO $$
 BEGIN
-  -- learning_memories.vector should be vector(${MEMORY_EMBEDDING_OUTPUT_DIM})
+  -- learning_memories.vector should be vector(1024)
   BEGIN
     EXECUTE 'ALTER TABLE learning_memories
-             ALTER COLUMN vector TYPE vector(${MEMORY_EMBEDDING_OUTPUT_DIM})
+             ALTER COLUMN vector TYPE vector(1024)
              USING vector';
   EXCEPTION WHEN others THEN
     -- Ignore if column already has dimensions or table doesn't exist yet
@@ -38,7 +38,7 @@ END $$;
 DO $$
 BEGIN
   -- pgvector HNSW supports up to 2000 dimensions for vector columns.
-  IF ${MEMORY_EMBEDDING_OUTPUT_DIM} <= 2000 THEN
+  IF 1024 <= 2000 THEN
     BEGIN
       EXECUTE 'CREATE INDEX IF NOT EXISTS lm_vec_cos ON learning_memories USING hnsw (vector vector_cosine_ops)';
     EXCEPTION WHEN others THEN

@@ -21,7 +21,6 @@ dependencies = [
     # AI
     "litellm[google]>=1.83.4",
     "pgvector>=0.3.0",
-    "mem0ai>=0.1.116",
     "chonkie>=1.2.1",
     # Video
     "yt-dlp>=2026.3.17",

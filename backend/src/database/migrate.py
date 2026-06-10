@@ -14,8 +14,6 @@ from src.database.engine import engine as default_engine
 logger = logging.getLogger(__name__)
 _MIGRATION_LOCK_KEY = "schema_migrations"
 _VECTOR_SCHEMA_COLUMNS = (
-    ("learning_memories", "vector", "MEMORY_EMBEDDING_OUTPUT_DIM"),
-    ("mem0migrations", "vector", "MEMORY_EMBEDDING_OUTPUT_DIM"),
     ("rag_document_chunks", "embedding", "RAG_EMBEDDING_OUTPUT_DIM"),
     ("concepts", "embedding", "RAG_EMBEDDING_OUTPUT_DIM"),
 )
@@ -29,28 +27,22 @@ def _read_sql(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _resolve_embedding_output_dimensions(settings: Settings | None = None) -> tuple[int, int]:
-    """Return configured RAG and memory vector dimensions."""
+def _resolve_embedding_output_dimensions(settings: Settings | None = None) -> int:
+    """Return the configured RAG vector dimension."""
     resolved_settings = settings or get_settings()
     rag_dim = resolved_settings.RAG_EMBEDDING_OUTPUT_DIM
-    mem_dim = resolved_settings.MEMORY_EMBEDDING_OUTPUT_DIM
 
     if rag_dim is None:
         msg = "RAG_EMBEDDING_OUTPUT_DIM must be set before running migrations or startup checks"
         raise ValueError(msg)
-    if mem_dim is None:
-        msg = "MEMORY_EMBEDDING_OUTPUT_DIM must be set before running migrations or startup checks"
-        raise ValueError(msg)
 
-    return rag_dim, mem_dim
+    return rag_dim
 
 
 def _build_expected_vector_dimensions(settings: Settings | None = None) -> dict[tuple[str, str], int]:
     """Map vector columns to the configured dimensions they must use."""
-    rag_dim, mem_dim = _resolve_embedding_output_dimensions(settings)
+    rag_dim = _resolve_embedding_output_dimensions(settings)
     return {
-        ("learning_memories", "vector"): mem_dim,
-        ("mem0migrations", "vector"): mem_dim,
         ("rag_document_chunks", "embedding"): rag_dim,
         ("concepts", "embedding"): rag_dim,
     }
@@ -58,11 +50,8 @@ def _build_expected_vector_dimensions(settings: Settings | None = None) -> dict[
 
 def _interpolate_sql_placeholders(sql: str, settings: Settings | None = None) -> str:
     """Replace vector-dimension placeholders in SQL with canonical settings values."""
-    rag_dim, mem_dim = _resolve_embedding_output_dimensions(settings)
-    return sql.replace("${RAG_EMBEDDING_OUTPUT_DIM}", str(rag_dim)).replace(
-        "${MEMORY_EMBEDDING_OUTPUT_DIM}",
-        str(mem_dim),
-    )
+    rag_dim = _resolve_embedding_output_dimensions(settings)
+    return sql.replace("${RAG_EMBEDDING_OUTPUT_DIM}", str(rag_dim))
 
 
 async def _fetch_vector_dimension(
@@ -257,7 +246,7 @@ async def validate_vector_schema_dimensions(db_engine: AsyncEngine | None = None
     """Ensure configured vector dimensions match the live database schema."""
     engine = db_engine or default_engine
     expected_dimensions = _build_expected_vector_dimensions()
-    rag_dim, mem_dim = _resolve_embedding_output_dimensions()
+    rag_dim = _resolve_embedding_output_dimensions()
     mismatches: list[str] = []
 
     async with engine.connect() as conn:
@@ -285,7 +274,6 @@ async def validate_vector_schema_dimensions(db_engine: AsyncEngine | None = None
         "startup.vector_schema_dimensions.validated",
         extra={
             "rag_dimension": rag_dim,
-            "memory_dimension": mem_dim,
             "validated_columns": len(_VECTOR_SCHEMA_COLUMNS),
         },
     )

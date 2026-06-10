@@ -83,14 +83,14 @@ async def get_current_user_memories(
     -------
         Dict with memories list and total count
     """
-    memories = await get_user_memories(auth.user_id, limit=limit)
+    memories = await get_user_memories(auth.user_id, auth.session, limit=limit)
     return UserMemoriesResponse(memories=memories, total=len(memories))
 
 
 @router.delete("/memories")
 async def clear_current_user_memories(auth: CurrentAuth) -> ClearMemoryResponse:
     """Delete all memories for the current user."""
-    await clear_user_memories(auth.user_id)
+    await clear_user_memories(auth.user_id, auth.session)
     return ClearMemoryResponse(cleared=True, message="All memories cleared successfully")
 
 
@@ -106,5 +106,5 @@ async def delete_current_user_memory(auth: CurrentAuth, memory_id: str) -> dict[
     -------
         Dict with deletion confirmation
     """
-    await delete_user_memory(auth.user_id, memory_id)
+    await delete_user_memory(auth.user_id, memory_id, auth.session)
     return {"status": "success", "message": "Memory deleted successfully"}
