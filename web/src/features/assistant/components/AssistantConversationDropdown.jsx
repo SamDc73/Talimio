@@ -2,11 +2,11 @@ import { ThreadListItemPrimitive, ThreadListPrimitive, useAuiState } from "@assi
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { ChevronDownIcon, TrashIcon } from "lucide-react"
 import { createContext, useCallback, useContext, useRef, useState } from "react"
-import { cn } from "@/lib/utils"
+import { cn, noop } from "@/lib/utils"
 
 const DEFAULT_THREAD_TITLE = "New chat"
 
-const ConversationDropdownCloseContext = createContext(() => {})
+const ConversationDropdownCloseContext = createContext(noop)
 
 function useConversationDropdownClose() {
 	return useContext(ConversationDropdownCloseContext)

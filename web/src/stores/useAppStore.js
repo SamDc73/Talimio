@@ -2,8 +2,6 @@ import { create } from "zustand"
 import { createJSONStorage, devtools, persist } from "zustand/middleware"
 import { immer } from "zustand/middleware/immer"
 
-/* eslint-disable sonarjs/todo-tag */
-
 // Stable default objects to prevent infinite re-renders
 const DEFAULT_BOOK_READING_STATE = {
 	currentPage: 1,
@@ -229,11 +227,7 @@ const useAppStore = create(
 					}
 				},
 				migrate: (persistedState, version) => {
-					if (!persistedState || typeof persistedState !== "object") {
-						return persistedState
-					}
-
-					if (version <= 5) {
+					if (persistedState && typeof persistedState === "object" && version <= 5) {
 						delete persistedState.course
 						delete persistedState.courses
 						delete persistedState.videos

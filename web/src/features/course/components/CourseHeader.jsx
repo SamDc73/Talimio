@@ -4,7 +4,7 @@ import { UserAvatarMenu } from "@/components/header/MainHeader"
 import { TooltipButton } from "@/components/TooltipButton"
 import { useChatSidebar } from "@/contexts/ChatSidebarContext"
 import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
-import { cn } from "@/lib/utils"
+import { cn, noop } from "@/lib/utils"
 
 export function CourseHeader({
 	courseName,
@@ -12,7 +12,7 @@ export function CourseHeader({
 	onModeChange,
 	progress = 0,
 	isOpen = true,
-	toggleSidebar = () => {},
+	toggleSidebar = noop,
 	courseId,
 	adaptiveEnabled = false,
 }) {

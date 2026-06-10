@@ -256,7 +256,7 @@ function WindowA() {
 	const [tab, setTab] = useState("account")
 
 	return (
-		<div className="mx-auto w-full max-w-3xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+		<div className="mx-auto w-full max-w-container-3xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
 			<header className="flex items-center gap-4 border-b border-border px-6 py-4">
 				<div className="flex items-center gap-3">
 					<div className="rounded-lg bg-muted p-2">
@@ -317,7 +317,7 @@ function WindowB() {
 	const [tab, setTab] = useState("account")
 
 	return (
-		<div className="mx-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+		<div className="mx-auto w-full max-w-container-2xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
 			<header className="border-b border-border px-6 py-4">
 				<h1 className="text-lg font-semibold">Settings</h1>
 				<div className="mt-3 flex gap-1">
@@ -345,7 +345,7 @@ function WindowC() {
 	const [tab, setTab] = useState("account")
 
 	return (
-		<div className="mx-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+		<div className="mx-auto w-full max-w-container-2xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
 			<header className="border-b border-border px-6 py-4">
 				<div className="flex items-center justify-between gap-3">
 					<h1 className="text-lg font-semibold">Settings</h1>
@@ -375,7 +375,7 @@ function WindowD() {
 	const [tab, setTab] = useState("account")
 
 	return (
-		<div className="mx-auto w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+		<div className="mx-auto w-full max-w-container-2xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
 			<div className="border-b border-border px-6 pt-5">
 				<h1 className="text-lg font-semibold">Settings</h1>
 				<div className="-mb-px mt-3 flex gap-6 border-b border-border">
@@ -405,7 +405,7 @@ function WindowE() {
 	const [tab, setTab] = useState("account")
 
 	return (
-		<div className="mx-auto w-full max-w-3xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+		<div className="mx-auto w-full max-w-container-3xl overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
 			<header className="flex items-center gap-3 border-b border-border px-6 py-4">
 				<Settings2 className="size-4 text-muted-foreground" />
 				<h1 className="text-lg font-semibold">Settings</h1>

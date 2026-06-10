@@ -14,13 +14,6 @@ function SidebarItem({
 	className = "",
 	variant = "default",
 }) {
-	// Validate that leftContent and rightContent are not buttons if onClick is provided
-	if (process.env.NODE_ENV === "development") {
-		if (onClick && leftContent?.type === "button") {
-		}
-		if (onClick && rightContent?.type === "button") {
-		}
-	}
 	// Map variants to colors following the styling guide
 	const variantColors = {
 		default: "text-primary",

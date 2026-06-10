@@ -30,6 +30,8 @@ yarn-error.log*
 .env.production.local
 dist-ssr
 .vite-cache/
+local-demos/
+demos/
 
 # Logs
 logs
@@ -86,3 +88,4 @@ public/pdf.worker.min.js
 .serena/cache/
 .env.production
 backend/.env.prod
+.test.jsx

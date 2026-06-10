@@ -202,7 +202,7 @@ async def test_lesson_free_form_attempt_grades_server_owned_math_question(
             json={
                 "attemptId": str(uuid.uuid4()),
                 "questionId": str(question_id),
-                "answer": {"kind": "latex", "answerText": "x^2 + 2x + 1"},
+                "answer": {"kind": "latex", "answerLatex": "x^2 + 2x + 1"},
                 "hintsUsed": 0,
                 "durationMs": 900,
             },

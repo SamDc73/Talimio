@@ -3,6 +3,8 @@ import Editor from "react-simple-code-editor"
 import { escapeHtml, highlightToHtml, highlightToInnerHtml } from "@/lib/shiki"
 import { cn } from "@/lib/utils"
 
+/* eslint-disable better-tailwindcss/no-unknown-classes -- shiki, shiki-host, and shiki-editor are Shiki-specific class names used for syntax highlighting theming; they are not Tailwind utilities. */
+
 // Highlights `code` asynchronously via Shiki and returns the inner colored HTML
 // (no wrapping <pre><code>). While Shiki is loading or re-tokenizing after a
 // keystroke, returns plain escaped HTML so the editor's <pre> always matches
@@ -15,9 +17,15 @@ function useHighlightedInnerHtml(code, language) {
 		// Show plain escaped text immediately to keep editor pre/textarea in sync
 		// during typing; replace with colored tokens when Shiki resolves.
 		setHtml(escapeHtml(code))
-		highlightToInnerHtml(code, language).then((next) => {
-			if (!cancelled) setHtml(next)
-		})
+		const run = async () => {
+			try {
+				const next = await highlightToInnerHtml(code, language)
+				if (!cancelled) setHtml(next)
+			} catch {
+				// Ignore highlight errors; keep escaped text as fallback
+			}
+		}
+		run()
 		return () => {
 			cancelled = true
 		}
@@ -34,9 +42,15 @@ function useHighlightedBlockHtml(code, language) {
 
 	useEffect(() => {
 		let cancelled = false
-		highlightToHtml(code, language).then((next) => {
-			if (!cancelled) setHtml(next)
-		})
+		const run = async () => {
+			try {
+				const next = await highlightToHtml(code, language)
+				if (!cancelled) setHtml(next)
+			} catch {
+				// Ignore highlight errors; keep null so caller shows plain fallback
+			}
+		}
+		run()
 		return () => {
 			cancelled = true
 		}

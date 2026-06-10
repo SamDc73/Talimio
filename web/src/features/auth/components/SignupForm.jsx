@@ -6,6 +6,7 @@ import PasswordStrengthMeter from "@/features/auth/components/PasswordStrengthMe
 import { isValidEmail } from "@/features/auth/emailValidation"
 import { getPasswordPolicyValidationMessage } from "@/features/auth/passwordPolicy"
 import logger from "@/lib/logger"
+import { asyncNoop, noop } from "@/lib/utils"
 import { getPasswordStrength } from "../passwordStrength"
 
 const REQUIRED_FIELD_MESSAGE = "This field is required"
@@ -15,10 +16,10 @@ const USERNAME_ALLOWED_CHARS_PATTERN = /^[a-zA-Z0-9._]+$/
 const USERNAME_START_END_PATTERN = /^[a-zA-Z0-9].*[a-zA-Z0-9]$/
 
 function SignupForm({
-	onSignIn = () => {},
-	onSubmit = async (_fullName, _email, _password, _username) => {},
+	onSignIn = noop,
+	onSubmit = asyncNoop,
 	showGoogleOAuth = false,
-	onGoogle = () => {},
+	onGoogle = noop,
 	errorMessage = "",
 	successMessage = "",
 	passwordPolicy = null,

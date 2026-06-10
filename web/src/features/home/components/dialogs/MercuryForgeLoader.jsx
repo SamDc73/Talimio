@@ -62,7 +62,7 @@ export function MercuryForgeLoader({ message }) {
 			<AnimatePresence mode="wait">
 				<motion.p
 					key={message}
-					className="max-w-[28rem] text-center font-semibold text-[1.25rem] leading-snug text-(--color-course)"
+					className="max-w-container-md text-center font-semibold text-xl/snug  text-(--color-course)"
 					initial={{ opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					exit={{ opacity: 0, y: -6 }}

@@ -60,7 +60,7 @@ class _HybridSearchSession:
         self.params.append(params)
         if "SET LOCAL" in sql:
             return _SearchResultRows([])
-        if "websearch_to_tsquery" in sql:
+        if "tsvector_to_array" in sql:
             return _SearchResultRows(self.lexical_rows)
         return _SearchResultRows(self.dense_rows)
 
@@ -259,7 +259,7 @@ async def test_hybrid_search_returns_exact_match_from_lexical_candidates(monkeyp
     assert results[0].metadata["lexical_score"] == pytest.approx(0.42)
     assert results[0].metadata["fused_score"] == pytest.approx(1 / 61)
     assert any("metadata->>'course_id' = :course_id" in statement for statement in session.statements)
-    assert any("websearch_to_tsquery('english', :query)" in statement for statement in session.statements)
+    assert any("tsvector_to_array(to_tsvector('simple', :query))" in statement for statement in session.statements)
     assert session.params[1] is not None
     assert session.params[1]["candidate_limit"] == 4
     assert session.params[1]["course_id"] == str(course_id)

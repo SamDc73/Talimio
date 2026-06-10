@@ -236,7 +236,7 @@ export function JXGBoard({
 
 		const startAnimation = (frameFn) => {
 			if (typeof frameFn !== "function") {
-				return () => {}
+				return () => undefined
 			}
 
 			let animationFrameId = 0
