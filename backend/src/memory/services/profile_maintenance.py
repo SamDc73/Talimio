@@ -25,14 +25,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.prompts import MAINTENANCE_SYSTEM_PROMPT
 from src.jobs import QUEUE_MEMORY, defer_job, memory_queueing_lock
 from src.memory.models import UserMemoryWatermark
-from src.memory.prompts import MAINTENANCE_SYSTEM_PROMPT
 from src.memory.services.profile_service import SlotEvidence, clear_slot, get_active_slots, record_skip_event, set_slot
-from src.memory.services.profile_slots import is_known_slot
+from src.memory.services.profile_slots import PROFILE_SLOTS, is_known_slot
 
 
 logger = logging.getLogger(__name__)
+
+# The slot vocabulary the maintenance prompt is allowed to write, rendered once for the system prompt.
+_SLOT_VOCABULARY = "\n".join(f"- {name}: {description}" for name, description in PROFILE_SLOTS.items())
 
 PROFILE_MAINTENANCE_TASK_NAME = "memory.run_profile_maintenance"
 
@@ -313,7 +316,7 @@ async def _propose_actions(
     client = LLMClient(agent_id="memory-maintenance")
     result = await client.get_completion(
         [
-            {"role": "system", "content": MAINTENANCE_SYSTEM_PROMPT},
+            {"role": "system", "content": MAINTENANCE_SYSTEM_PROMPT.format(slot_vocabulary=_SLOT_VOCABULARY)},
             {"role": "user", "content": _to_json(payload)},
         ],
         response_model=MaintenanceDecision,
