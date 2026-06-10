@@ -61,6 +61,34 @@ def build_profile_block(slots: list[UserProfileSlot]) -> str:
     return "\n".join(f"- {slot.slot}: {slot.value}" for slot in slots)
 
 
+async def get_custom_instructions(session: AsyncSession, user_id: uuid.UUID) -> str:
+    """Return the user's raw custom-instructions text ('' when unset)."""
+    from src.user.models import UserPreferences
+
+    preferences = await session.get(UserPreferences, user_id)
+    if preferences is None:
+        return ""
+    nested = preferences.preferences.get("user_preferences")
+    raw = nested.get("custom_instructions") if isinstance(nested, dict) else None
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+async def build_memory_context(session: AsyncSession, user_id: uuid.UUID) -> str:
+    """One merged profile context: custom instructions (verbatim) plus active slots.
+
+    This is the single durable-memory block prompts receive; custom instructions
+    and profile slots are never injected as parallel sources.
+    """
+    parts: list[str] = []
+    instructions = await get_custom_instructions(session, user_id)
+    if instructions:
+        parts.append(f"User custom instructions:\n{instructions}")
+    profile_block = build_profile_block(await get_active_slots(session, user_id))
+    if profile_block:
+        parts.append(f"User profile (durable preferences):\n{profile_block}")
+    return "\n\n".join(parts)
+
+
 async def set_slot(
     session: AsyncSession,
     *,

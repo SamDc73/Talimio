@@ -1685,7 +1685,7 @@ class LLMClient:
 
         profile_block = await self._load_canonical_profile_block(user_id)
         if profile_block:
-            context_parts.append(f"User profile (durable preferences):\n{profile_block}")
+            context_parts.append(profile_block)
 
         legacy_lines = await self._search_legacy_memories(messages, user_id)
         if legacy_lines:
@@ -1702,19 +1702,18 @@ class LLMClient:
         return [memory_message, *messages]
 
     async def _load_canonical_profile_block(self, user_id: uuid.UUID) -> str:
-        """Read the canonical DB-backed profile block; failures never break the request."""
+        """Read the merged canonical memory context; failures never break the request."""
         try:
             from sqlalchemy.exc import SQLAlchemyError
 
-            from src.memory.service import build_profile_block, get_active_slots
+            from src.memory.service import build_memory_context
         except ImportError as error:
             self._logger.warning("Failed to import profile memory for user %s: %s", user_id, error)
             return ""
 
         try:
             async with async_session_maker() as session:
-                slots = await get_active_slots(session, user_id)
-            return build_profile_block(slots)
+                return await build_memory_context(session, user_id)
         except (SQLAlchemyError, *_MEMORY_OPERATION_ERROR_TYPES) as error:
             self._logger.warning("Failed to load profile block for user %s: %s", user_id, error)
             return ""
