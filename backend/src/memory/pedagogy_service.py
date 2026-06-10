@@ -136,7 +136,7 @@ async def build_pedagogy_context(session: AsyncSession, *, user_id: uuid.UUID, c
     card = await session.scalar(
         select(StudentCard).where(StudentCard.user_id == user_id, StudentCard.course_id == course_id)
     )
-    if card is not None and card.card_text.strip() != DEFAULT_CARD_TEXT:
+    if card is not None and card.deleted_at is None and card.card_text.strip() != DEFAULT_CARD_TEXT:
         parts.append(
             "Student card (evidence-backed teaching memory for this learner; claims marked "
             "[hypothesis] or [tentative] are working theories to test, never hard facts; "

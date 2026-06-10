@@ -344,9 +344,7 @@ async def _apply_decision(
         elif effective_op == "clear":
             result = await clear_slot(session, user_id=user_id, slot=action.slot, source="inferred", evidence=evidence)
         else:
-            result = await record_skip_event(
-                session, user_id=user_id, slot=action.slot, op="defer", evidence=evidence
-            )
+            result = await record_skip_event(session, user_id=user_id, slot=action.slot, op="defer", evidence=evidence)
 
         logger.info(
             "memory.maintenance.action",

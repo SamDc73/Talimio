@@ -41,6 +41,7 @@ from .database.migrate import apply_migrations, assert_migrations_current, valid
 from .database.session import DbSession, engine
 from .exceptions import DomainError, ErrorCategory, ErrorCode
 from .highlights.router import router as highlights_router
+from .memory.router import router as memory_router
 from .middleware.error_handlers import (
     ExternalServiceError,
     format_error_response,
@@ -69,6 +70,7 @@ def _register_routers(app: FastAPI) -> None:
         books_router,
         content_router,
         highlights_router,
+        memory_router,
         progress_router,
         rag_router,
         courses_router,

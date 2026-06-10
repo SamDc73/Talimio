@@ -67,6 +67,9 @@ class StudentCard(Base):
     )
     card_text: Mapped[str] = mapped_column(Text, nullable=False)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Explicit learner forget: soft-deleted cards are skipped at read time and
+    # reborn as a fresh skeleton (same row) on next use.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -71,6 +71,21 @@ async def run_student_card_update(user_id: str, course_id: str) -> None:
     )
 
 
+@job_app.task(
+    name="pedagogy.forget_cleanup",
+    queue=QUEUE_MAINTENANCE,
+    retry=procrastinate.RetryStrategy(max_attempts=3, exponential_wait=5),
+)
+async def forget_pedagogy_cleanup(user_id: str, course_id: str, cutoff: str) -> None:
+    """Redact learner-authored pedagogical evidence after an explicit forget."""
+    from datetime import datetime
+
+    from src.memory.pedagogy_controls import run_forget_cleanup
+
+    await run_forget_cleanup(uuid.UUID(user_id), uuid.UUID(course_id), datetime.fromisoformat(cutoff))
+    logger.info("jobs.pedagogy_forget_cleanup.done", extra={"memory_user_id": user_id, "course_id": course_id})
+
+
 @job_app.task(name="pedagogy.rebuild_student_card", queue=QUEUE_MAINTENANCE)
 async def rebuild_student_card(user_id: str, course_id: str, apply: bool = False) -> None:
     """Compare the live StudentCard against its latest revision snapshot; optionally repair."""
