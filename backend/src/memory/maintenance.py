@@ -296,6 +296,26 @@ def _to_json(payload: dict[str, object]) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
+def resolve_effective_op(action: SlotAction) -> Literal["set", "clear", "ignore", "defer", "drop"]:
+    """Deterministic gate between what the model proposed and what may commit.
+
+    The model only proposes; these rules own the final decision:
+    - unknown slots are dropped outright
+    - low-confidence sets become defers (abstention beats confident misuse)
+    - rambling values (model conflating value with evidence) become defers
+    """
+    if action.op == "ignore" and not action.slot:
+        return "ignore"
+    if not is_known_slot(action.slot):
+        return "drop"
+    if action.op != "set":
+        return action.op
+    value = action.value.strip()
+    if not value or action.confidence < _CONFIDENCE_FLOOR or len(value) > _MAX_VALUE_LENGTH:
+        return "defer"
+    return "set"
+
+
 async def _apply_decision(
     session: AsyncSession,
     *,
@@ -304,10 +324,10 @@ async def _apply_decision(
     decision: MaintenanceDecision,
 ) -> None:
     for action in decision.actions:
-        if action.op == "ignore" and not action.slot:
-            continue
-        if not is_known_slot(action.slot):
-            logger.info("memory.maintenance.unknown_slot", extra={"slot": action.slot, "op": action.op})
+        effective_op = resolve_effective_op(action)
+        if effective_op in {"ignore", "drop"}:
+            if effective_op == "drop":
+                logger.info("memory.maintenance.unknown_slot", extra={"slot": action.slot, "op": action.op})
             continue
 
         evidence = SlotEvidence(
@@ -317,23 +337,15 @@ async def _apply_decision(
             confidence=action.confidence,
         )
 
-        op = action.op
-        if op == "set" and action.confidence < _CONFIDENCE_FLOOR:
-            op = "defer"
-        if op == "set" and len(action.value.strip()) > _MAX_VALUE_LENGTH:
-            # A slot value is a short reusable phrase; a rambling value means
-            # the model conflated value with evidence. Keep it out of canon.
-            op = "defer"
-
-        if op == "set" and action.value.strip():
+        if effective_op == "set":
             result = await set_slot(
                 session, user_id=user_id, slot=action.slot, value=action.value, source="inferred", evidence=evidence
             )
-        elif op == "clear":
+        elif effective_op == "clear":
             result = await clear_slot(session, user_id=user_id, slot=action.slot, source="inferred", evidence=evidence)
         else:
             result = await record_skip_event(
-                session, user_id=user_id, slot=action.slot, op="defer" if op == "set" else op, evidence=evidence
+                session, user_id=user_id, slot=action.slot, op="defer", evidence=evidence
             )
 
         logger.info(

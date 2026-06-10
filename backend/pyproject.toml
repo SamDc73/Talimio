@@ -68,6 +68,7 @@ dev = [
     "pytest-timeout>=2.4.0",
     "ty>=0.0.18",
     "skylos>=4.0.0",
+    "pydantic-evals>=1.106.0",
 ]
 
 [tool.ruff]
