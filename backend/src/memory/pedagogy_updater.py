@@ -348,6 +348,55 @@ async def _apply_facet_extraction(
         await upsert_course_teaching_profile(session, course_id=course_id, source="inferred", **profile_fields)
 
 
+STUDENT_CARD_REPLACE_TOOL_SCHEMA: dict[str, object] = {
+    "type": "function",
+    "function": {
+        "name": "student_card_replace",
+        "description": (
+            "Replace one exact snippet of the student card. old_str must match the current "
+            "card text exactly once; include enough surrounding context to make it unique. "
+            "Use for adding, updating, downgrading, or pruning individual claim lines."
+        ),
+        "parameters": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "old_str": {"type": "string"},
+                "new_str": {"type": "string"},
+            },
+            "required": ["old_str", "new_str"],
+        },
+    },
+}
+
+STUDENT_CARD_RETHINK_TOOL_SCHEMA: dict[str, object] = {
+    "type": "function",
+    "function": {
+        "name": "student_card_rethink",
+        "description": (
+            "Rewrite the whole student card as one consolidated block. All section "
+            "headers must survive in their canonical order. Use when many claims need "
+            "reorganizing at once, not for single-line edits."
+        ),
+        "parameters": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"new_text": {"type": "string"}},
+            "required": ["new_text"],
+        },
+    },
+}
+
+STUDENT_CARD_FINISH_TOOL_SCHEMA: dict[str, object] = {
+    "type": "function",
+    "function": {
+        "name": "student_card_finish_edits",
+        "description": "Signal that the card edit session is complete. Call exactly once, last.",
+        "parameters": {"type": "object", "additionalProperties": False, "properties": {}},
+    },
+}
+
+
 def _build_card_edit_tools(session: AsyncSession, card: StudentCard) -> list[FunctionToolDefinition]:
     """Text-editor tools closing over the locked card.
 
@@ -373,60 +422,9 @@ def _build_card_edit_tools(session: AsyncSession, card: StudentCard) -> list[Fun
         return "edits recorded"
 
     return [
-        FunctionToolDefinition(
-            schema={
-                "type": "function",
-                "function": {
-                    "name": "student_card_replace",
-                    "description": (
-                        "Replace one exact snippet of the student card. old_str must match the current "
-                        "card text exactly once; include enough surrounding context to make it unique. "
-                        "Use for adding, updating, downgrading, or pruning individual claim lines."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "properties": {
-                            "old_str": {"type": "string"},
-                            "new_str": {"type": "string"},
-                        },
-                        "required": ["old_str", "new_str"],
-                    },
-                },
-            },
-            target=LocalToolTarget(execute=execute_replace),
-        ),
-        FunctionToolDefinition(
-            schema={
-                "type": "function",
-                "function": {
-                    "name": "student_card_rethink",
-                    "description": (
-                        "Rewrite the whole student card as one consolidated block. All section "
-                        "headers must survive in their canonical order. Use when many claims need "
-                        "reorganizing at once, not for single-line edits."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "properties": {"new_text": {"type": "string"}},
-                        "required": ["new_text"],
-                    },
-                },
-            },
-            target=LocalToolTarget(execute=execute_rethink),
-        ),
-        FunctionToolDefinition(
-            schema={
-                "type": "function",
-                "function": {
-                    "name": "student_card_finish_edits",
-                    "description": "Signal that the card edit session is complete. Call exactly once, last.",
-                    "parameters": {"type": "object", "additionalProperties": False, "properties": {}},
-                },
-            },
-            target=LocalToolTarget(execute=execute_finish),
-        ),
+        FunctionToolDefinition(schema=STUDENT_CARD_REPLACE_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_replace)),
+        FunctionToolDefinition(schema=STUDENT_CARD_RETHINK_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_rethink)),
+        FunctionToolDefinition(schema=STUDENT_CARD_FINISH_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_finish)),
     ]
 
 
