@@ -86,7 +86,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 				exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
 				transition={{ duration: 0.4, delay: Math.min(index, 3) * 0.04 }}
 				whileHover={{ y: -5, transition: { duration: 0.2 } }}
-				className={`bg-background rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
+				className={`group bg-background rounded-2xl overflow-hidden relative flex flex-col h-full cursor-pointer ${
 					pinned ? "shadow-md border-2 border-primary/15 bg-primary/5" : "shadow-sm hover:shadow-md"
 				}`}
 				onMouseEnter={() => setHover(true)}
@@ -94,58 +94,60 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 				onClick={onClick}
 			>
 				{pinned && <div className="absolute top-0 left-lg h-3xs w-lg rounded-b-full bg-primary" />}
-				<div className="flex h-full flex-col justify-between p-lg">
-					<div className="mb-md flex items-start justify-between">
+				<div className="flex h-full flex-col p-lg">
+					<div className="mb-md flex">
 						<div
-							className={`${VARIANTS[item.type].badge} flex items-center gap-2xs rounded-full px-xs py-3xs text-xs font-medium`}
+							className={`${VARIANTS[item.type].badge} flex items-center gap-2xs rounded-full px-sm py-2xs text-xs font-medium`}
 						>
 							{(() => {
 								const V = VARIANTS[item.type]
 								const Icon = V.icon
 								return (
 									<>
-										<Icon className="size-xs" />
+										<Icon className="size-md" />
 										<span>{V.label}</span>
 									</>
 								)
 							})()}
 						</div>
 					</div>
-					<h3 className="mb-3xs line-clamp-2 text-xl font-bold text-foreground hover:underline">{item.title}</h3>
 
-					{/* Video metadata */}
-					{item.type === "video" && (
-						<p className="mb-md text-sm text-muted-foreground">
-							by {item.channel || "Unknown Channel"} • {formatDuration(item.duration)}
-						</p>
-					)}
+					{/* Group title + subtitle so the gap below holds when there's no subtitle */}
+					<div className="mb-md">
+						<h3 className="line-clamp-2 text-xl font-bold text-foreground group-hover:underline">{item.title}</h3>
 
-					{/* Book metadata */}
-					{item.type === "book" && (
-						<p className="mb-md text-sm text-muted-foreground">
-							by {item.author || "Unknown Author"} • {item.pageCount || "Unknown"} pages
-						</p>
-					)}
+						{/* Video metadata */}
+						{item.type === "video" && (
+							<p className="mt-3xs text-sm text-muted-foreground">
+								by {item.channel || "Unknown Channel"} • {formatDuration(item.duration)}
+							</p>
+						)}
 
-					{/* Description for other types */}
-					{item.type !== "video" && item.type !== "book" && item.description && (
-						<p className="mb-md line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
-					)}
+						{/* Book metadata */}
+						{item.type === "book" && (
+							<p className="mt-3xs text-sm text-muted-foreground">
+								by {item.author || "Unknown Author"} • {item.pageCount || "Unknown"} pages
+							</p>
+						)}
+
+						{/* Description for other types */}
+						{item.type !== "video" && item.type !== "book" && item.description && (
+							<p className="mt-3xs line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
+						)}
+					</div>
 
 					<div className="mb-xs flex flex-wrap items-center gap-2xs">
 						{item.tags?.slice(0, 2).map((t) => (
 							<TagChip key={t} tag={t} contentType={item.type} />
 						))}
 						{item.tags?.length > 2 && (
-							<span className="inline-flex rounded-sm bg-muted px-xs py-3xs text-xs font-medium text-muted-foreground">
+							<span className="inline-flex rounded-full bg-muted px-xs py-3xs text-xs font-medium text-muted-foreground">
 								+{item.tags.length - 2}
 							</span>
 						)}
 					</div>
-					<div>
-						<div className="mb-2xs flex justify-between text-xs text-muted-foreground">
-							<span>{Math.round(progressValue)}%</span>
-						</div>
+					<div className="mt-auto">
+						<div className="mb-2xs text-xs text-muted-foreground">{Math.round(progressValue)}%</div>
 						<div className="h-2xs w-full overflow-hidden rounded-full bg-muted">
 							<div
 								style={{ width: `${progressValue}%` }}
@@ -172,7 +174,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 												key={action}
 												variant="ghost"
 												size="sm"
-												className={`justify-start flex items-center gap-2 ${action === "Delete" ? "text-destructive hover:bg-destructive/10" : ""}`}
+												className={`justify-start flex items-center gap-xs ${action === "Delete" ? "text-destructive hover:bg-destructive/10" : ""}`}
 												onClick={(e) => {
 													e.stopPropagation()
 													switch (action) {
@@ -196,10 +198,10 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 												}}
 												disabled={action === "Archive" && archiveContentMutation.isPending}
 											>
-												{action === "Pin" && <Pin className="size-4 " />}
-												{action === "Edit Tags" && <Tag className="size-4 " />}
-												{action === "Archive" && <Archive className="size-4 " />}
-												{action === "Delete" && <X className="size-4 " />}
+												{action === "Pin" && <Pin className="size-md" />}
+												{action === "Edit Tags" && <Tag className="size-md" />}
+												{action === "Archive" && <Archive className="size-md" />}
+												{action === "Delete" && <X className="size-md" />}
 												{getActionLabel(action)}
 											</Button>
 										)
