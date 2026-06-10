@@ -1,6 +1,6 @@
 """Openverse figure retrieval for lesson-writing, gated by vision verification."""
 
-import base64
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol, cast
@@ -112,10 +112,13 @@ def _parse_openverse_results(results: list[JsonValue]) -> list[FigureCandidate]:
 
 
 def _build_candidate(item: Mapping[str, JsonValue]) -> FigureCandidate | None:
-    url = str(item.get("url") or "").strip()
+    original_url = str(item.get("url") or "").strip()
     license_code = str(item.get("license") or "").strip()
-    if not url or not license_code:
+    if not original_url or not license_code:
         return None
+    source = str(item.get("source") or "").strip()
+    thumbnail_url = str(item.get("thumbnail") or "").strip()
+    url = original_url if source == "wikimedia" else thumbnail_url or original_url
     filetype = str(item.get("filetype") or "").strip() or _url_extension(url)
     return FigureCandidate(
         url=url,
@@ -123,7 +126,7 @@ def _build_candidate(item: Mapping[str, JsonValue]) -> FigureCandidate | None:
         license=_format_license(license_code, str(item.get("license_version") or "").strip()),
         attribution=str(item.get("attribution") or "").strip(),
         mime=f"image/{filetype}" if filetype else None,
-        source=str(item.get("source") or "").strip(),
+        source=source,
         foreign_landing_url=str(item.get("foreign_landing_url") or "").strip(),
     )
 
@@ -247,12 +250,28 @@ def _format_license(code: str, version: str) -> str:
     return f"{label} {version}".strip()
 
 
+def _jsx_string_prop(value: str) -> str:
+    return "{" + json.dumps(value) + "}"
+
+
+def _build_figure_mdx(candidate: FigureCandidate, verification: FigureVerification) -> str:
+    alt_text = verification.depicts.strip() or verification.caption.strip()
+    props = {
+        "src": candidate.url,
+        "alt": alt_text,
+        "caption": verification.caption,
+        "attribution": candidate.attribution,
+        "license": candidate.license,
+        "sourcePage": candidate.foreign_landing_url,
+    }
+    prop_text = " ".join(f"{name}={_jsx_string_prop(value)}" for name, value in props.items())
+    return f"<Figure {prop_text} />"
+
+
 class FigureVerifier(Protocol):
     """Vision verify callable supplied by LLMClient.verify_figure_for_concept."""
 
-    async def __call__(
-        self, *, concept: str, image_url: str, lesson_context: str | None = None
-    ) -> FigureVerification:
+    async def __call__(self, *, concept: str, image_url: str, lesson_context: str | None = None) -> FigureVerification:
         """Verify whether one image is a load-bearing figure for the concept."""
         ...
 
@@ -288,23 +307,16 @@ class OpenverseFigureFinderTool:
         candidates = await search_figure_candidates(concept, timeout_seconds=self._timeout_seconds)
 
         best: tuple[FigureCandidate, FigureVerification] | None = None
-        headers = {"User-Agent": _USER_AGENT}
-        async with httpx.AsyncClient(timeout=self._timeout_seconds, headers=headers, follow_redirects=True) as client:
-            for candidate in candidates[: self._max_candidates]:
-                # Verify on the bytes we fetch (our User-Agent works); the LLM provider's own
-                # fetch of Wikimedia thumbs gets rate-limited (429), so inline the image instead.
-                image_data_url = await _fetch_image_data_url(client, candidate)
-                if image_data_url is None:
-                    continue
-                verification = await self._verify(
-                    concept=concept, image_url=image_data_url, lesson_context=lesson_context
-                )
-                if verification.match == "none" or verification.confidence < _CONFIDENCE_FLOOR:
-                    continue
-                if verification.match == "exact":
-                    return _figure_payload(candidate, verification)
-                if best is None or verification.confidence > best[1].confidence:
-                    best = (candidate, verification)
+        for candidate in candidates[: self._max_candidates]:
+            # Pass the image URL directly to LiteLLM; the provider fetches it.
+            # This is simpler than base64 inlining and lets LiteLLM handle provider quirks.
+            verification = await self._verify(concept=concept, image_url=candidate.url, lesson_context=lesson_context)
+            if verification.match == "none" or verification.confidence < _CONFIDENCE_FLOOR:
+                continue
+            if verification.match == "exact":
+                return _figure_payload(candidate, verification)
+            if best is None or verification.confidence > best[1].confidence:
+                best = (candidate, verification)
 
         if best is not None:
             return _figure_payload(*best)
@@ -318,9 +330,7 @@ def build_figure_finder_function_tool(
     timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
 ) -> FunctionToolDefinition:
     """Return the lesson-writer `find_lesson_figure` function tool."""
-    tool = OpenverseFigureFinderTool(
-        verify=verify, max_candidates=max_candidates, timeout_seconds=timeout_seconds
-    )
+    tool = OpenverseFigureFinderTool(verify=verify, max_candidates=max_candidates, timeout_seconds=timeout_seconds)
     return FunctionToolDefinition(
         schema={
             "type": "function",
@@ -329,12 +339,14 @@ def build_figure_finder_function_tool(
                 "description": (
                     "Find a real, load-bearing educational figure (diagram, schematic, anatomical "
                     "drawing, micrograph) for a science concept that has no native modality — biology, "
-                    "physics, chemistry, anatomy. Do NOT use it for math or CS (use math/code components) "
-                    "or for decoration. Each candidate is vision-verified before it is returned. "
-                    'On success returns match "exact" or "related" with url, license, attribution, '
-                    "caption and a caveat; on `related`, honor the caveat and you may adapt the surrounding "
-                    'text to what the figure actually shows. Returns {"match": "none"} when no real figure '
-                    "fits — generate your own explanation instead."
+                    "physics, chemistry, anatomy. Do NOT call this tool for math or CS (use math/code components), "
+                    "for decoration, or when the concept is too vague. The tool should only be called when the "
+                    "concept is specific, concrete, and truly requires a visual diagram. Each candidate is "
+                    'vision-verified before it is returned. On success returns match "exact" or "related" '
+                    "with figure_mdx (a pre-built MDX snippet), url, license, attribution, caption and a caveat. "
+                    "You MUST paste the figure_mdx string exactly as returned,  do not reconstruct the component yourself. "
+                    "On `related`, honor the caveat and adapt the surrounding text to what the figure actually shows. "
+                    'Returns {"match": "none"} when no real figure fits.'
                 ),
                 "parameters": {
                     "type": "object",
@@ -351,22 +363,6 @@ def build_figure_finder_function_tool(
     )
 
 
-async def _fetch_image_data_url(client: httpx.AsyncClient, candidate: FigureCandidate) -> str | None:
-    """Fetch the candidate image and return a base64 data URL, or None if it is not a live image."""
-    try:
-        response = await client.get(candidate.url)
-        response.raise_for_status()
-    except httpx.HTTPError:
-        return None
-    content_type = response.headers.get("content-type", "").split(";", 1)[0].strip()
-    if not content_type:
-        content_type = candidate.mime or "image/png"
-    if not content_type.startswith("image/"):
-        return None
-    encoded = base64.b64encode(response.content).decode("ascii")
-    return f"data:{content_type};base64,{encoded}"
-
-
 def _figure_payload(candidate: FigureCandidate, verification: FigureVerification) -> dict[str, JsonValue]:
     return {
         "match": verification.match,
@@ -379,4 +375,5 @@ def _figure_payload(candidate: FigureCandidate, verification: FigureVerification
         "relevance": verification.relevance,
         "caveat": verification.caveat,
         "caption": verification.caption,
+        "figure_mdx": _build_figure_mdx(candidate, verification),
     }
