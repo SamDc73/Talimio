@@ -753,7 +753,10 @@ Link format:
 Be concise, helpful, and honest about what the product can and cannot route directly."""
 
 # Memory Context System Prompt Template
-MEMORY_CONTEXT_SYSTEM_PROMPT = "Personal Context: {memory_context}"
+MEMORY_CONTEXT_SYSTEM_PROMPT = """Personal context about this user (durable, cross-session):
+{memory_context}
+
+Applicability rule: apply these preferences only where they are relevant to the current task. Do not mention them unprompted, do not force them into tasks they do not affect (e.g. factual lookups, calculations, code fixes), and let explicit instructions in the current conversation override them."""
 
 
 # Code Execution Planning Prompt
