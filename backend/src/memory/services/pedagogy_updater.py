@@ -25,10 +25,10 @@ from pydantic import BaseModel, Field, JsonValue
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.prompts import PEDAGOGY_UPDATER_SYSTEM_PROMPT
 from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
 from src.jobs import QUEUE_PEDAGOGY, defer_job, pedagogy_queueing_lock
 from src.memory.models import PedagogicalNote, PedagogyWatermark, StudentCard, TeachingEvent
-from src.memory.prompts import PEDAGOGY_UPDATER_SYSTEM_PROMPT
 from src.memory.services.notes_search import EMBEDDING_FAILURE_ERROR_TYPES
 from src.memory.services.pedagogy_service import TEACHING_PROFILE_FIELDS, upsert_course_teaching_profile
 from src.memory.services.student_card import card_replace, card_rethink, lock_card
