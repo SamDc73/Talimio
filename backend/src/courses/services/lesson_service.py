@@ -722,7 +722,7 @@ class LessonService:
             current_version=current_version,
             recommendation=generation_recommendation,
         )
-        generated = await self._generate_lesson_body(lesson_context=lesson_context)
+        generated = await self._generate_lesson_body(lesson_context=lesson_context, course_id=course.id)
         selected_version = await lesson_version_service.create_adaptive_pass_version(
             lesson=lesson,
             content=generated.content,
@@ -904,7 +904,7 @@ class LessonService:
             adaptive_recommendation=recommendation,
         )
 
-    async def _generate_lesson_body(self, *, lesson_context: str) -> GeneratedLesson:
+    async def _generate_lesson_body(self, *, lesson_context: str, course_id: uuid.UUID | None = None) -> GeneratedLesson:
         llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
         return await llm_client.generate_lesson_content(
             lesson_context,
@@ -913,6 +913,7 @@ class LessonService:
                 build_wikipedia_resolver_function_tool(),
                 build_figure_finder_function_tool(verify=llm_client.verify_figure_for_concept),
             ],
+            course_id=course_id,
         )
 
     async def _materialize_and_persist_inline_questions(
@@ -1244,7 +1245,7 @@ class LessonService:
                 current_version=current_version,
                 critique_text=trimmed_critique,
             )
-            generated = await self._generate_lesson_body(lesson_context=lesson_context)
+            generated = await self._generate_lesson_body(lesson_context=lesson_context, course_id=course.id)
             selected_version = await lesson_version_service.create_regenerated_version(
                 lesson=lesson,
                 content=generated.content,
@@ -1325,7 +1326,7 @@ class LessonService:
                 course=course,
                 generation_mode="first_pass",
             )
-            generated = await self._generate_lesson_body(lesson_context=lesson_context)
+            generated = await self._generate_lesson_body(lesson_context=lesson_context, course_id=course.id)
             lesson_version_service = LessonVersionService(self.session)
             new_version = await lesson_version_service.create_initial_version(lesson=lesson, content=generated.content)
             await self._materialize_and_persist_inline_questions(

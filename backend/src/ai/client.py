@@ -1697,6 +1697,23 @@ class LLMClient:
             self._logger.warning("Failed to load profile block for user %s: %s", user_id, error)
             return ""
 
+    async def _load_pedagogy_context(self, user_id: uuid.UUID, course_id: uuid.UUID) -> str:
+        """Load the StudentCard + teaching profile block; failures never break generation."""
+        try:
+            from sqlalchemy.exc import SQLAlchemyError
+
+            from src.memory.pedagogy_service import build_pedagogy_context
+        except ImportError as error:
+            self._logger.warning("Failed to import pedagogy memory for course %s: %s", course_id, error)
+            return ""
+
+        try:
+            async with async_session_maker() as session:
+                return await build_pedagogy_context(session, user_id=user_id, course_id=course_id)
+        except (SQLAlchemyError, *_MEMORY_OPERATION_ERROR_TYPES) as error:
+            self._logger.warning("Failed to load pedagogy context for course %s: %s", course_id, error)
+            return ""
+
     def _slug_tool_key(self, server_name: str, tool_name: str) -> str:
         base = f"{server_name}_{tool_name}".lower()
         return "".join(char if char.isalnum() or char == "_" else "_" for char in base)
@@ -1872,6 +1889,7 @@ class LLMClient:
         lesson_context: str,
         user_id: str | uuid.UUID | None = None,
         function_tools: list[FunctionToolDefinition] | None = None,
+        course_id: uuid.UUID | None = None,
     ) -> GeneratedLesson:
         """Generate a lesson body and inline practice questions from a prepared LESSON_CONTEXT string."""
         context_text = lesson_context.strip()
@@ -1885,6 +1903,11 @@ class LLMClient:
             {"role": "system", "content": LESSON_GENERATION_PROMPT},
             {"role": "user", "content": context_text},
         ]
+
+        if course_id is not None and normalized_user_id is not None:
+            pedagogy_block = await self._load_pedagogy_context(normalized_user_id, course_id)
+            if pedagogy_block:
+                messages.insert(1, {"role": "system", "content": pedagogy_block})
 
         try:
             result = await self.get_completion(
