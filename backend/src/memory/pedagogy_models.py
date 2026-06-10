@@ -48,6 +48,64 @@ class CourseTeachingProfile(Base):
     )
 
 
+class StudentCard(Base):
+    """One labeled plain-text pedagogical summary block per user+course."""
+
+    __tablename__ = "student_cards"
+    __table_args__ = (UniqueConstraint("user_id", "course_id", name="student_cards_user_id_course_id_key"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    card_text: Mapped[str] = mapped_column(Text, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class StudentCardRevision(Base):
+    """Append-only full-text snapshot per card edit (provenance + rebuild substrate)."""
+
+    __tablename__ = "student_card_revisions"
+    __table_args__ = (
+        UniqueConstraint("card_id", "revision", name="student_card_revisions_card_id_revision_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    card_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("student_cards.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    card_text: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_call: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False, default=dict)
+    evidence_refs: Mapped[list[JsonValue]] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+
+
 class TeachingEvent(Base):
     """Append-only pedagogical evidence: what was shown and how the learner responded."""
 
