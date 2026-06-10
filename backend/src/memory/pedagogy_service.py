@@ -112,3 +112,35 @@ async def get_merged_teaching_profile(session: AsyncSession, course_id: uuid.UUI
             avoid.extend(item for item in row.avoid_list if item not in avoid)
 
     return MergedTeachingProfile(fields=merged_fields, avoid_list=avoid)
+
+
+async def build_pedagogy_context(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> str:
+    """Planner-facing pedagogical context: teaching profile plus the StudentCard.
+
+    The card is injected as-is (it already is the prompt block); the skeleton
+    card with no claims is skipped. Mastery/review numbers stay in the adaptive
+    signals and never appear here.
+    """
+    from src.memory.pedagogy_models import StudentCard
+    from src.memory.student_card import DEFAULT_CARD_TEXT
+
+    parts: list[str] = []
+
+    profile_block = (await get_merged_teaching_profile(session, course_id)).render_block()
+    if profile_block:
+        parts.append(
+            "Course teaching preferences (explicit = learner-stated, inferred = derived from critiques):\n"
+            + profile_block
+        )
+
+    card = await session.scalar(
+        select(StudentCard).where(StudentCard.user_id == user_id, StudentCard.course_id == course_id)
+    )
+    if card is not None and card.card_text.strip() != DEFAULT_CARD_TEXT:
+        parts.append(
+            "Student card (evidence-backed teaching memory for this learner; claims marked "
+            "[hypothesis] or [tentative] are working theories to test, never hard facts; "
+            "what the learner says they like and what measurably works are tracked separately):\n" + card.card_text
+        )
+
+    return "\n\n".join(parts)
