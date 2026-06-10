@@ -614,6 +614,8 @@ def _build_completion_metadata(
         "assistant_lesson_id": str(context_meta.get("lesson_id", "")),
         "assistant_probe_context": _build_probe_context(request),
     }
+    if request.context_type == "course" and request.context_id is not None:
+        metadata["assistant_course_id"] = str(request.context_id)
     if probe_submitted:
         metadata["probe_submitted"] = True
     if prefetched_learning_tools:

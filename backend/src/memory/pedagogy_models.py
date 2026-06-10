@@ -3,6 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
+from pgvector.sqlalchemy import Vector
 from pydantic import JsonValue
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
@@ -87,9 +88,7 @@ class StudentCardRevision(Base):
     """Append-only full-text snapshot per card edit (provenance + rebuild substrate)."""
 
     __tablename__ = "student_card_revisions"
-    __table_args__ = (
-        UniqueConstraint("card_id", "revision", name="student_card_revisions_card_id_revision_key"),
-    )
+    __table_args__ = (UniqueConstraint("card_id", "revision", name="student_card_revisions_card_id_revision_key"),)
 
     id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     card_id: Mapped[uuid.UUID] = mapped_column(
@@ -134,6 +133,51 @@ class PedagogyWatermark(Base):
         nullable=False,
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class PedagogicalNote(Base):
+    """One distilled, retrieval-worthy pedagogical fact with provenance.
+
+    The note carries the searchable claim; verbatim_quote keeps a short raw
+    source excerpt because the lexical leg ranks learner phrasing better than
+    distilled text. No ANN index: per-user corpora are small, so the exact
+    cosine scan is perfect-recall.
+    """
+
+    __tablename__ = "pedagogical_notes"
+    __table_args__ = (
+        CheckConstraint(
+            "source_kind IN ('lesson_feedback_event', 'teaching_event', 'updater_reflection')",
+            name="source_kind_allowed",
+        ),
+        Index("pedagogical_notes_user_id_idx", "user_id"),
+        Index("pedagogical_notes_user_id_course_id_idx", "user_id", "course_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    course_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    note: Mapped[str] = mapped_column(Text, nullable=False)
+    scene_trace: Mapped[str] = mapped_column(Text, nullable=False)
+    verbatim_quote: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    source_id: Mapped[uuid.UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
     )
 
 

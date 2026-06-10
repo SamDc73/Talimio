@@ -562,6 +562,7 @@ class LLMClient:
 
         if request.user_id is not None and self._agent_id == AGENT_ID_ASSISTANT:
             from src.ai.tools.learning import build_learning_action_tools, build_learning_query_tools
+            from src.ai.tools.memory import build_learner_memory_search_tool
 
             function_tools.extend(build_learning_query_tools(user_id=request.user_id))
             function_tools.extend(
@@ -570,6 +571,12 @@ class LLMClient:
                     thread_id=_metadata_uuid(request.metadata, "assistant_thread_id"),
                     lesson_id=_metadata_uuid(request.metadata, "assistant_lesson_id"),
                     learner_context=_metadata_text(request.metadata, "assistant_probe_context"),
+                )
+            )
+            function_tools.append(
+                build_learner_memory_search_tool(
+                    user_id=request.user_id,
+                    course_id=_metadata_uuid(request.metadata, "assistant_course_id"),
                 )
             )
 

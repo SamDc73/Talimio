@@ -20,6 +20,7 @@ from src.ai.client import LLMClient
 from src.ai.models import GeneratedLesson
 from src.ai.rag.exceptions import RagUnavailableError, RagValidationError
 from src.ai.tools.figures import build_figure_finder_function_tool
+from src.ai.tools.memory import build_learner_memory_search_tool
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.models import (
     Concept,
@@ -912,6 +913,7 @@ class LessonService:
             function_tools=[
                 build_wikipedia_resolver_function_tool(),
                 build_figure_finder_function_tool(verify=llm_client.verify_figure_for_concept),
+                build_learner_memory_search_tool(user_id=self.user_id, course_id=course_id),
             ],
             course_id=course_id,
         )
