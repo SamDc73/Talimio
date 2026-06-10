@@ -71,6 +71,41 @@ async def run_student_card_update(user_id: str, course_id: str) -> None:
     )
 
 
+@job_app.task(name="pedagogy.rebuild_student_card", queue=QUEUE_MAINTENANCE)
+async def rebuild_student_card(user_id: str, course_id: str, apply: bool = False) -> None:
+    """Compare the live StudentCard against its latest revision snapshot; optionally repair."""
+    from src.database.session import async_session_maker
+    from src.memory.pedagogy_rebuild import diff_student_card, repair_student_card
+
+    async with async_session_maker() as session:
+        if apply:
+            drift = await repair_student_card(
+                session, user_id=uuid.UUID(user_id), course_id=uuid.UUID(course_id)
+            )
+            await session.commit()
+        else:
+            drift = await diff_student_card(
+                session, user_id=uuid.UUID(user_id), course_id=uuid.UUID(course_id)
+            )
+
+    if drift is not None:
+        logger.warning(
+            "jobs.pedagogy_rebuild.drift",
+            extra={
+                "memory_user_id": user_id,
+                "course_id": course_id,
+                "card_id": str(drift.card_id),
+                "live_revision": drift.live_revision,
+                "snapshot_revision": drift.snapshot_revision,
+                "repaired": apply,
+            },
+        )
+    logger.info(
+        "jobs.pedagogy_rebuild.done",
+        extra={"memory_user_id": user_id, "course_id": course_id, "drift_count": 0 if drift is None else 1},
+    )
+
+
 @job_app.periodic(cron="0 3 * * *")
 @job_app.task(name="pedagogy.nightly_sweep", queue=QUEUE_MAINTENANCE, queueing_lock="pedagogy:nightly-sweep")
 async def pedagogy_nightly_sweep(timestamp: int) -> None:
