@@ -32,7 +32,7 @@ export async function fetchLesson(
 	return api.get(`/courses/${courseId}/lessons/${lessonId}${query}`)
 }
 
-export async function regenerateLesson(courseId, lessonId, { critiqueText, applyAcrossCourse = false }) {
+export async function regenerateLesson(courseId, lessonId, { critiqueText }) {
 	if (!courseId || !lessonId) {
 		throw new Error("Course ID and Lesson ID are required")
 	}
@@ -44,7 +44,6 @@ export async function regenerateLesson(courseId, lessonId, { critiqueText, apply
 
 	return api.post(`/courses/${courseId}/lessons/${lessonId}/regenerate`, {
 		critiqueText: trimmedCritique,
-		applyAcrossCourse,
 	})
 }
 

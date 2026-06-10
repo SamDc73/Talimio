@@ -435,7 +435,6 @@ class CoursesFacade:  # noqa: PLR0904
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
         critique_text: str,
-        apply_across_course: bool,
         user_id: uuid.UUID,
     ) -> LessonDetailResponse:
         """Regenerate a lesson body with explicit learner feedback."""
@@ -446,7 +445,6 @@ class CoursesFacade:  # noqa: PLR0904
                 course_id=course_id,
                 lesson_id=lesson_id,
                 critique_text=critique_text,
-                apply_across_course=apply_across_course,
             )
         except NotFoundError, UpstreamUnavailableError, ValidationError:
             raise

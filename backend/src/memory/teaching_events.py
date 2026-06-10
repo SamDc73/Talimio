@@ -67,5 +67,7 @@ async def record_teaching_event(
     # Local import: the updater module pulls in jobs and course models.
     from src.memory.pedagogy_updater import maybe_trigger_update
 
-    await maybe_trigger_update(session, user_id=user_id, course_id=course_id)
+    # The learner speaking in their own words is high-signal: consolidate now.
+    high_signal = event_type in {"lesson_regenerated", "preference_stated"}
+    await maybe_trigger_update(session, user_id=user_id, course_id=course_id, high_signal=high_signal)
     return event

@@ -121,12 +121,23 @@ async def defer_pedagogy_update(session: AsyncSession, *, user_id: uuid.UUID, co
     )
 
 
-async def maybe_trigger_update(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> bool:
+async def maybe_trigger_update(
+    session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID, high_signal: bool = False
+) -> bool:
     """Defer the updater once enough new evidence has accumulated past the watermark.
+
+    ``high_signal`` evidence (the learner speaking in their own words: critiques,
+    stated preferences) skips the threshold and consolidates immediately, so the
+    very next lesson generation already knows. Passive evidence (quiz answers,
+    completions) keeps the sleep-time economics.
 
     Two cheap index-backed counts, no lock: an off-by-one race only changes
     when the job is queued, and the queueing lock collapses duplicates anyway.
     """
+    if high_signal:
+        await defer_pedagogy_update(session, user_id=user_id, course_id=course_id)
+        return True
+
     from src.courses.models import LessonFeedbackEvent
 
     last_processed_at = (
@@ -528,6 +539,7 @@ def _build_card_session_payload(
                 "outcome": event.outcome,
                 "duration_ms": event.duration_ms,
                 "hints_used": event.hints_used,
+                **({"details": event.details} if event.details else {}),
             }
             for event in new_events
         ],

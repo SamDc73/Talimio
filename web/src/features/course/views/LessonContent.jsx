@@ -75,13 +75,13 @@ export default function LessonContent() {
 	}, [])
 
 	const handleRegenerateSubmit = useCallback(
-		async ({ critiqueText, applyAcrossCourse }) => {
+		async ({ critiqueText }) => {
 			if (!pendingRegenerateLessonId) {
 				return
 			}
 
 			try {
-				await handleRegenerate(pendingRegenerateLessonId, critiqueText, applyAcrossCourse)
+				await handleRegenerate(pendingRegenerateLessonId, critiqueText)
 				setIsRegenerateOpen(false)
 				setPendingRegenerateLessonId(null)
 				setRegenerateStatus(null)
