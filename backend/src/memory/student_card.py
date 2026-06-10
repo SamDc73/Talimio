@@ -45,7 +45,11 @@ class CardEditError(ValueError):
 
 
 async def get_or_create_card(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> StudentCard:
-    """Load the learner-course card, creating the empty skeleton on first use."""
+    """Load the learner-course card, creating the empty skeleton on first use.
+
+    A card forgotten by the learner (``deleted_at`` set) is reborn in place:
+    the unique (user_id, course_id) row is reused with a fresh skeleton.
+    """
     card = await session.scalar(
         select(StudentCard).where(StudentCard.user_id == user_id, StudentCard.course_id == course_id)
     )
@@ -55,6 +59,9 @@ async def get_or_create_card(session: AsyncSession, *, user_id: uuid.UUID, cours
         await session.flush()
         session.add(_revision_row(card, tool="student_card_create", payload={}))
         await session.flush()
+        return card
+    if card.deleted_at is not None:
+        await _rebirth_card(session, card)
     return card
 
 
@@ -65,7 +72,19 @@ async def lock_card(session: AsyncSession, *, user_id: uuid.UUID, course_id: uui
     )
     if card is None:
         return await get_or_create_card(session, user_id=user_id, course_id=course_id)
+    if card.deleted_at is not None:
+        await _rebirth_card(session, card)
     return card
+
+
+async def _rebirth_card(session: AsyncSession, card: StudentCard) -> None:
+    """Reset a soft-deleted card to the skeleton; the revision log keeps counting."""
+    card.card_text = DEFAULT_CARD_TEXT
+    card.deleted_at = None
+    card.revision += 1
+    await session.flush()
+    session.add(_revision_row(card, tool="student_card_create", payload={}))
+    await session.flush()
 
 
 async def card_replace(
