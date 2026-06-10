@@ -1,7 +1,8 @@
 """Thin writer for the append-only teaching event log.
 
 Records what was shown to the learner and how they responded, in the same
-session/transaction as the flow that produced the evidence. No LLM, no logic.
+session/transaction as the flow that produced the evidence. No LLM; the only
+logic is a cheap threshold check that nudges the sleep-time updater.
 """
 
 from __future__ import annotations
@@ -62,4 +63,9 @@ async def record_teaching_event(
     )
     session.add(event)
     await session.flush()
+
+    # Local import: the updater module pulls in jobs and course models.
+    from src.memory.pedagogy_updater import maybe_trigger_update
+
+    await maybe_trigger_update(session, user_id=user_id, course_id=course_id)
     return event

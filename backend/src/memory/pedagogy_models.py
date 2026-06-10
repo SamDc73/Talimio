@@ -106,6 +106,34 @@ class StudentCardRevision(Base):
     )
 
 
+class PedagogyWatermark(Base):
+    """High-water mark of evidence ``created_at`` already consolidated for a learner-course pair."""
+
+    __tablename__ = "pedagogy_watermarks"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    last_processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime(1970, 1, 1, tzinfo=UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
 class TeachingEvent(Base):
     """Append-only pedagogical evidence: what was shown and how the learner responded."""
 
