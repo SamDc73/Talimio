@@ -41,9 +41,7 @@ async def rebuild_card_text(session: AsyncSession, card_id: uuid.UUID) -> str | 
     return snapshot.card_text if snapshot is not None else None
 
 
-async def diff_student_card(
-    session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID
-) -> CardDrift | None:
+async def diff_student_card(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> CardDrift | None:
     """Compare the live card against its latest snapshot; None when consistent."""
     card = await session.scalar(
         select(StudentCard).where(StudentCard.user_id == user_id, StudentCard.course_id == course_id)
@@ -53,9 +51,7 @@ async def diff_student_card(
     return _drift(card, await _latest_snapshot(session, card.id))
 
 
-async def repair_student_card(
-    session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID
-) -> CardDrift | None:
+async def repair_student_card(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> CardDrift | None:
     """Restore live card_text/revision from the latest snapshot (one transaction).
 
     Runs under the same row lock the updater's edit session takes, so live

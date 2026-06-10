@@ -29,9 +29,7 @@ router = APIRouter(
 
 async def valid_owned_course(course_id: uuid.UUID, auth: CurrentAuth) -> Course:
     """Load the course only when the current user owns it; 404 otherwise."""
-    course = await auth.session.scalar(
-        select(Course).where(Course.id == course_id, Course.user_id == auth.user_id)
-    )
+    course = await auth.session.scalar(select(Course).where(Course.id == course_id, Course.user_id == auth.user_id))
     if course is None:
         resource_type = "Course"
         raise NotFoundError(resource_type, str(course_id))

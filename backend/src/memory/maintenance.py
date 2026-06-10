@@ -49,10 +49,10 @@ class SlotAction(BaseModel):
     inapplicable fields carry empty strings (e.g. for ignore actions).
     """
 
-    op: Literal["set", "clear", "ignore", "defer"]
-    slot: str = Field(description="Slot name from the vocabulary; empty string only for ignore.")
+    op: Literal["set", "clear", "ignore", "defer", "course_note"]
+    slot: str = Field(description="Slot name from the vocabulary; empty string for ignore and course_note.")
     value: str = Field(
-        description="New slot value: a short reusable phrase of at most a few words, e.g. 'text-first'. Never a sentence, never a quote, never the evidence. Empty for clear/ignore/defer.",
+        description="New slot value: a short reusable phrase of at most a few words, e.g. 'text-first'. For course_note: the distilled course-scoped preference, one short clause. Never a quote, never the evidence. Empty for clear/ignore/defer.",
     )
     confidence: float = Field(
         ge=0,
@@ -79,6 +79,7 @@ class UserTurn:
     text: str
     created_at: datetime
     prior_user_texts: list[str] = field(default_factory=list)
+    course_id: uuid.UUID | None = None  # set when the conversation is course-scoped
 
 
 async def defer_profile_maintenance(session: AsyncSession, *, user_id: uuid.UUID) -> int | None:
@@ -115,7 +116,7 @@ async def process_user_memory(user_id: uuid.UUID) -> int:
             decision = await _propose_actions(user_id=user_id, turn=turn, current_profile=current_profile)
             await _apply_decision(session, user_id=user_id, turn=turn, decision=decision)
 
-        watermark.last_processed_seq = max(item.seq for item in items)
+        watermark.last_processed_seq = max(item.seq for item, _course in items)
         await session.commit()
         return len(turns)
 
@@ -181,7 +182,7 @@ async def _lock_watermark(session: AsyncSession, user_id: uuid.UUID) -> UserMemo
 
 async def _load_unprocessed_items(
     session: AsyncSession, user_id: uuid.UUID, *, after_seq: int
-) -> list[AssistantConversationHistoryItem]:
+) -> list[tuple[AssistantConversationHistoryItem, uuid.UUID | None]]:
     """Newest unprocessed items first, bounded.
 
     Taking the newest ``_BATCH_LIMIT`` items (then restoring order) keeps each
@@ -191,7 +192,11 @@ async def _load_unprocessed_items(
     from src.ai.assistant.models import AssistantConversation, AssistantConversationHistoryItem
 
     stmt = (
-        select(AssistantConversationHistoryItem)
+        select(
+            AssistantConversationHistoryItem,
+            AssistantConversation.context_type,
+            AssistantConversation.context_id,
+        )
         .join(
             AssistantConversation,
             AssistantConversationHistoryItem.conversation_id == AssistantConversation.id,
@@ -203,16 +208,19 @@ async def _load_unprocessed_items(
         .order_by(AssistantConversationHistoryItem.seq.desc())
         .limit(_BATCH_LIMIT)
     )
-    newest_first = list(await session.scalars(stmt))
+    newest_first = [
+        (item, context_id if context_type == "course" else None)
+        for item, context_type, context_id in (await session.execute(stmt)).all()
+    ]
     return list(reversed(newest_first))
 
 
-def _extract_user_turns(items: list[AssistantConversationHistoryItem]) -> list[UserTurn]:
+def _extract_user_turns(items: list[tuple[AssistantConversationHistoryItem, uuid.UUID | None]]) -> list[UserTurn]:
     """User-role turns only; assistant text and tool output never feed memory."""
     turns: list[UserTurn] = []
     user_texts_by_conversation: dict[object, list[str]] = {}
 
-    for item in items:
+    for item, course_id in items:
         message = item.message_json
         if not isinstance(message, dict) or message.get("role") != "user":
             continue
@@ -226,6 +234,7 @@ def _extract_user_turns(items: list[AssistantConversationHistoryItem]) -> list[U
                 text=text,
                 created_at=item.created_at,
                 prior_user_texts=prior[-_CONTEXT_TURNS:],
+                course_id=course_id,
             )
         )
         prior.append(text)
@@ -252,6 +261,34 @@ def _message_text(message: Mapping[str, object]) -> str:
     return "\n".join(parts).strip()
 
 
+async def _record_course_preference(
+    session: AsyncSession, *, user_id: uuid.UUID, turn: UserTurn, action: SlotAction
+) -> None:
+    """Route a course-scoped stated preference into pedagogical evidence.
+
+    The teaching event is high-signal, so the consolidation pass runs
+    immediately and the next lesson generation in that course already knows.
+    """
+    if turn.course_id is None:
+        logger.info("memory.maintenance.course_note_without_course_context")
+        return
+
+    from src.memory.teaching_events import record_teaching_event
+
+    await record_teaching_event(
+        session,
+        user_id=user_id,
+        course_id=turn.course_id,
+        event_type="preference_stated",
+        outcome="stated",
+        details={"preference": action.value.strip(), "quote": action.evidence_text},
+    )
+    logger.info(
+        "memory.maintenance.course_preference_recorded",
+        extra={"course_id": str(turn.course_id)},
+    )
+
+
 async def _propose_actions(
     *,
     user_id: uuid.UUID,
@@ -270,6 +307,7 @@ async def _propose_actions(
         "message_date": str(turn.created_at),
         "prior_user_messages_for_reference_only": turn.prior_user_texts,
         "current_profile_values": {slot.slot: slot.value for slot in current_profile},
+        "conversation_has_course_context": turn.course_id is not None,
     }
 
     client = LLMClient(agent_id="memory-maintenance")
@@ -296,7 +334,7 @@ def _to_json(payload: dict[str, object]) -> str:
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 
-def resolve_effective_op(action: SlotAction) -> Literal["set", "clear", "ignore", "defer", "drop"]:
+def resolve_effective_op(action: SlotAction) -> Literal["set", "clear", "ignore", "defer", "drop", "course_note"]:
     """Deterministic gate between what the model proposed and what may commit.
 
     The model only proposes; these rules own the final decision:
@@ -306,6 +344,9 @@ def resolve_effective_op(action: SlotAction) -> Literal["set", "clear", "ignore"
     """
     if action.op == "ignore" and not action.slot:
         return "ignore"
+    if action.op == "course_note":
+        usable = bool(action.value.strip()) and action.confidence >= _CONFIDENCE_FLOOR
+        return "course_note" if usable else "drop"
     if not is_known_slot(action.slot):
         return "drop"
     if action.op != "set":
@@ -336,6 +377,10 @@ async def _apply_decision(
             source_message_created_at=turn.created_at,
             confidence=action.confidence,
         )
+
+        if effective_op == "course_note":
+            await _record_course_preference(session, user_id=user_id, turn=turn, action=action)
+            continue
 
         if effective_op == "set":
             result = await set_slot(
