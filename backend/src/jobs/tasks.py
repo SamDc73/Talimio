@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 
 import procrastinate
+import procrastinate.exceptions
 
-from src.jobs.app import QUEUE_MAINTENANCE, QUEUE_MEMORY, job_app
+from src.jobs.app import QUEUE_MAINTENANCE, QUEUE_MEMORY, QUEUE_PEDAGOGY, job_app, pedagogy_queueing_lock
 
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,41 @@ async def rebuild_user_profile(user_id: str, apply: bool = False) -> None:
             },
         )
     logger.info("jobs.profile_rebuild.done", extra={"memory_user_id": user_id, "drift_count": len(drifts)})
+
+
+@job_app.task(
+    name="pedagogy.run_student_card_update",
+    queue=QUEUE_PEDAGOGY,
+    retry=procrastinate.RetryStrategy(max_attempts=3, exponential_wait=5),
+)
+async def run_student_card_update(user_id: str, course_id: str) -> None:
+    """Consolidate one learner-course pair's new evidence into the StudentCard."""
+    from src.memory.pedagogy_updater import process_pedagogy_update
+
+    processed = await process_pedagogy_update(uuid.UUID(user_id), uuid.UUID(course_id))
+    logger.info(
+        "jobs.pedagogy_update.done",
+        extra={"memory_user_id": user_id, "course_id": course_id, "evidence_processed": processed},
+    )
+
+
+@job_app.periodic(cron="0 3 * * *")
+@job_app.task(name="pedagogy.nightly_sweep", queue=QUEUE_MAINTENANCE, queueing_lock="pedagogy:nightly-sweep")
+async def pedagogy_nightly_sweep(timestamp: int) -> None:
+    """Defer the updater for every learner-course pair with evidence past its watermark."""
+    del timestamp
+    from src.database.session import async_session_maker
+    from src.memory.pedagogy_updater import find_stale_pairs
+
+    async with async_session_maker() as session:
+        pairs = await find_stale_pairs(session)
+
+    for user_id, course_id in pairs:
+        with contextlib.suppress(procrastinate.exceptions.AlreadyEnqueued):
+            await run_student_card_update.configure(
+                queueing_lock=pedagogy_queueing_lock(user_id, course_id)
+            ).defer_async(user_id=str(user_id), course_id=str(course_id))
+    logger.info("jobs.pedagogy_sweep.done", extra={"pair_count": len(pairs)})
 
 
 @job_app.periodic(cron="*/10 * * * *")
