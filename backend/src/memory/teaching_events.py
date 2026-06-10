@@ -22,6 +22,7 @@ TEACHING_EVENT_TYPES = frozenset(
         "lesson_regenerated",
         "lesson_completed",
         "delayed_outcome",
+        "preference_stated",
     }
 )
 

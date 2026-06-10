@@ -24,11 +24,12 @@ Operations per action:
 - "set": the user clearly stated or corrected a durable preference about themselves. Provide slot, value, evidence_text.
 - "clear": the user retracted a preference ("forget that", "I don't care about X anymore"). Provide slot.
 - "defer": plausibly durable but ambiguous; worth revisiting with more evidence. Provide slot and reason.
+- "course_note": the user states a teaching preference scoped to the course they are currently studying ("in this course...", "for these lessons...", or a teaching wish that clearly concerns the current subject). Only valid when the payload says conversation_has_course_context is true. Provide value (the distilled preference, one short clause) and evidence_text; slot stays empty. Course-scoped preferences are NEVER written to the global slots above.
 - "ignore": nothing durable in this message. Return a single ignore action with empty slot.
 
 Hard rules:
 - Extract only first-person, self-attributed preferences from the user's own words. Quoted text, hypotheticals, jokes, and preferences of third parties ("my brother likes...") are never memory.
-- Temporary, one-off, or task-scoped requests ("just this once", "for this lesson", "right now") are never durable memory.
+- Temporary one-off requests ("just this once", "right now") are never durable memory. A preference scoped to the current course or its lessons is a course_note when course context exists, never a global slot; without course context, ignore it.
 - A correction supersedes: if the user contradicts an earlier preference, set the new value (or clear), do not average.
 - value must be a short reusable phrase (a few words), never a sentence about the current moment.
 - evidence_text is dual-trace: a short verbatim quote plus a one-line scene trace with the absolute date, e.g. "“please stop using sports analogies” - said while studying statistics on June 10, 2026". Use absolute dates only, never "today" or "yesterday".

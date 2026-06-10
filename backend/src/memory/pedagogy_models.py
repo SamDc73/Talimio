@@ -188,7 +188,7 @@ class TeachingEvent(Base):
     __table_args__ = (
         CheckConstraint(
             "event_type IN ('lesson_version_shown', 'check_answered', 'lesson_regenerated', "
-            "'lesson_completed', 'delayed_outcome')",
+            "'lesson_completed', 'delayed_outcome', 'preference_stated')",
             name="event_type_allowed",
         ),
         Index("teaching_events_user_id_course_id_occurred_at_idx", "user_id", "course_id", "occurred_at"),
