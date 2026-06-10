@@ -12,7 +12,7 @@ from opentelemetry import trace
 from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_DEFAULT
+from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_COURSE_PLANNER, AGENT_ID_DEFAULT
 from src.ai.errors import (
     AIProviderError,
     AIRateLimitOrQuotaError,
@@ -579,6 +579,13 @@ class LLMClient:
                     course_id=_metadata_uuid(request.metadata, "assistant_course_id"),
                 )
             )
+
+        if request.user_id is not None and self._agent_id == AGENT_ID_COURSE_PLANNER:
+            from src.ai.tools.memory import build_learner_memory_search_tool
+
+            # Cross-course recall: what helped or hurt this learner elsewhere
+            # shapes how a new course gets structured.
+            function_tools.append(build_learner_memory_search_tool(user_id=request.user_id))
 
         return build_request_tool_plan(
             model=request.model,
