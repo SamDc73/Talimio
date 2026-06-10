@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.memory.models import UserProfileSlot, UserProfileSlotEvent
@@ -169,6 +169,24 @@ async def clear_slot(
     )
     await session.flush()
     return SlotCommitResult(slot=slot, status=status)
+
+
+async def redact_slot_evidence(session: AsyncSession, *, user_id: uuid.UUID, slot: str | None = None) -> int:
+    """Tombstone raw evidence on explicit user-forget (slot-scoped or all).
+
+    Keeps the structural record (slot, op, status, timestamps) for replay
+    safety and drift checks; the text and proposed value are gone, so rebuilds
+    can never resurrect the forgotten state.
+    """
+    stmt = (
+        update(UserProfileSlotEvent)
+        .where(UserProfileSlotEvent.user_id == user_id, UserProfileSlotEvent.redacted_at.is_(None))
+        .values(evidence_text=None, proposed_value=None, redacted_at=datetime.now(UTC))
+    )
+    if slot is not None:
+        stmt = stmt.where(UserProfileSlotEvent.slot == slot)
+    result = await session.execute(stmt)
+    return getattr(result, "rowcount", 0) or 0
 
 
 async def record_skip_event(

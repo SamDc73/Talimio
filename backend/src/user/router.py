@@ -18,10 +18,12 @@ from src.user.schemas import (
     UserSettingsResponse,
 )
 from src.user.service import (
+    clear_profile_slot,
     clear_user_memories,
     delete_user_memory,
     get_user_memories,
     get_user_settings,
+    set_profile_slot,
     update_custom_instructions,
 )
 
@@ -92,6 +94,41 @@ async def clear_current_user_memories(auth: CurrentAuth) -> ClearMemoryResponse:
     """Delete all memories for the current user."""
     await clear_user_memories(auth.user_id, auth.session)
     return ClearMemoryResponse(cleared=True, message="All memories cleared successfully")
+
+
+class ProfileSlotUpdateRequest(BaseModel):
+    """Manual value for one profile slot."""
+
+    value: str
+
+
+class ProfileSlotResponse(BaseModel):
+    """Outcome of a manual slot operation."""
+
+    slot: str
+    status: str
+
+
+@router.put("/memories/slots/{slot}")
+async def set_current_user_profile_slot(
+    auth: CurrentAuth,
+    slot: str,
+    request: ProfileSlotUpdateRequest,
+) -> ProfileSlotResponse:
+    """Manually set a profile slot; manual values win over inferred ones."""
+    result = await set_profile_slot(auth.user_id, slot, request.value, auth.session)
+    return ProfileSlotResponse(slot=result.slot, status=result.status)
+
+
+@router.delete("/memories/slots/{slot}")
+async def clear_current_user_profile_slot(
+    auth: CurrentAuth,
+    slot: str,
+    forget: Annotated[bool, Query(description="Also tombstone the slot's raw evidence")] = False,
+) -> ProfileSlotResponse:
+    """Clear a profile slot; with forget=true the raw evidence is redacted too."""
+    await clear_profile_slot(auth.user_id, slot, auth.session, forget=forget)
+    return ProfileSlotResponse(slot=slot, status="cleared")
 
 
 @router.delete("/memories/{memory_id}")

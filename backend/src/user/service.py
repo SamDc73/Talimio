@@ -9,8 +9,10 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.exceptions import NotFoundError
-from src.memory.models import UserProfileSlot
+from src.exceptions import BadRequestError, NotFoundError
+from src.memory.maintenance import advance_watermark_past_history
+from src.memory.models import UserProfileSlot, UserProfileSlotEvent
+from src.memory.service import SlotCommitResult, clear_slot, redact_slot_evidence, set_slot
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     CustomInstructionsResponse,
@@ -141,9 +143,30 @@ async def update_custom_instructions(
     return CustomInstructionsResponse(instructions=instructions, updated=True)
 
 
+async def _latest_applied_events(
+    user_id: uuid.UUID, slots: list[str], db_session: AsyncSession
+) -> dict[str, UserProfileSlotEvent]:
+    """Most recent applied evidence event per slot (provenance for inferred values)."""
+    if not slots:
+        return {}
+    stmt = (
+        select(UserProfileSlotEvent)
+        .where(
+            UserProfileSlotEvent.user_id == user_id,
+            UserProfileSlotEvent.slot.in_(slots),
+            UserProfileSlotEvent.status == "applied",
+        )
+        .order_by(UserProfileSlotEvent.created_at.desc())
+    )
+    latest: dict[str, UserProfileSlotEvent] = {}
+    for event in (await db_session.execute(stmt)).scalars():
+        latest.setdefault(event.slot, event)
+    return latest
+
+
 async def get_user_memories(user_id: uuid.UUID, db_session: AsyncSession, *, limit: int = 100) -> list[dict]:
     """
-    Get active profile-slot memories for a user.
+    Get active profile-slot memories with provenance for inferred values.
 
     Args:
         user_id: Unique identifier for the user
@@ -152,7 +175,7 @@ async def get_user_memories(user_id: uuid.UUID, db_session: AsyncSession, *, lim
 
     Returns
     -------
-        List of memories with content, timestamps, and metadata
+        List of memories with content, timestamps, and provenance metadata
     """
     stmt = (
         select(UserProfileSlot)
@@ -161,25 +184,58 @@ async def get_user_memories(user_id: uuid.UUID, db_session: AsyncSession, *, lim
         .limit(limit)
     )
     rows = (await db_session.execute(stmt)).scalars().all()
+    inferred_slots = [row.slot for row in rows if row.source == "inferred"]
+    provenance = await _latest_applied_events(user_id, inferred_slots, db_session)
 
-    return [
-        {
-            "id": str(row.id),
-            "content": f"{row.slot}: {row.value}",
-            "timestamp": row.updated_at.isoformat(),
-            "metadata": {"slot": row.slot, "source": row.source},
-        }
-        for row in rows
-    ]
+    memories: list[dict] = []
+    for row in rows:
+        metadata: dict[str, object] = {"slot": row.slot, "source": row.source}
+        if row.last_evidence_at is not None:
+            metadata["last_evidence_at"] = row.last_evidence_at.isoformat()
+        event = provenance.get(row.slot)
+        if event is not None:
+            metadata["evidence_text"] = event.evidence_text
+            metadata["source_message_id"] = event.message_id
+        memories.append(
+            {
+                "id": str(row.id),
+                "content": f"{row.slot}: {row.value}",
+                "timestamp": row.updated_at.isoformat(),
+                "metadata": metadata,
+            }
+        )
+    return memories
+
+
+async def set_profile_slot(user_id: uuid.UUID, slot: str, value: str, db_session: AsyncSession) -> SlotCommitResult:
+    """Manually set a profile slot (manual values win over inferred ones)."""
+    try:
+        return await set_slot(db_session, user_id=user_id, slot=slot, value=value, source="manual")
+    except ValueError as error:
+        raise BadRequestError(str(error), feature_area="user") from error
+
+
+async def clear_profile_slot(user_id: uuid.UUID, slot: str, db_session: AsyncSession, *, forget: bool) -> None:
+    """Manually clear a slot; with forget=True also tombstone its raw evidence."""
+    if forget:
+        # Barrier first: blocks on the watermark row until any in-flight
+        # maintenance job commits, so the clear below sees its writes.
+        await advance_watermark_past_history(db_session, user_id=user_id)
+    try:
+        await clear_slot(db_session, user_id=user_id, slot=slot, source="manual")
+    except ValueError as error:
+        raise BadRequestError(str(error), feature_area="user") from error
+    if forget:
+        await redact_slot_evidence(db_session, user_id=user_id, slot=slot)
 
 
 async def delete_user_memory(user_id: uuid.UUID, memory_id: str, db_session: AsyncSession) -> None:
     """
-    Delete (deactivate) a specific profile-slot memory for a user.
+    Forget a specific profile-slot memory: deactivate it and tombstone its evidence.
 
     Args:
         user_id: Unique identifier for the user
-        memory_id: The UserProfileSlot row id to delete
+        memory_id: The UserProfileSlot row id to forget
         db_session: Database session for the update
 
     """
@@ -188,25 +244,44 @@ async def delete_user_memory(user_id: uuid.UUID, memory_id: str, db_session: Asy
     except ValueError as error:
         raise NotFoundError(MEMORY_RESOURCE_TYPE, memory_id, feature_area="user") from error
 
+    # Barrier first: serialize with any in-flight maintenance job so the
+    # deactivation below operates on its committed state.
+    await advance_watermark_past_history(db_session, user_id=user_id)
+
+    # Resolve the slot from the id without an is_active filter: an in-flight
+    # job may have superseded the exact row the user saw; the intent is
+    # "forget this slot", so the forget targets whatever row is active now.
     stmt = select(UserProfileSlot).where(
         UserProfileSlot.id == slot_id,
         UserProfileSlot.user_id == user_id,
-        UserProfileSlot.is_active.is_(True),
     )
     row = (await db_session.execute(stmt)).scalar_one_or_none()
     if row is None:
         raise NotFoundError(MEMORY_RESOURCE_TYPE, memory_id, feature_area="user")
 
-    row.is_active = False
+    await db_session.execute(
+        update(UserProfileSlot)
+        .where(
+            UserProfileSlot.user_id == user_id,
+            UserProfileSlot.slot == row.slot,
+            UserProfileSlot.is_active.is_(True),
+        )
+        .values(is_active=False)
+    )
+    await redact_slot_evidence(db_session, user_id=user_id, slot=row.slot)
     await db_session.flush()
 
 
 async def clear_user_memories(user_id: uuid.UUID, db_session: AsyncSession) -> None:
-    """Deactivate all active profile-slot memories for a user."""
+    """Forget all profile-slot memories: deactivate them and tombstone all evidence."""
+    # Barrier first: blocks on the watermark row until any in-flight
+    # maintenance job commits, so the deactivation below sees its writes.
+    await advance_watermark_past_history(db_session, user_id=user_id)
     stmt = (
         update(UserProfileSlot)
         .where(UserProfileSlot.user_id == user_id, UserProfileSlot.is_active.is_(True))
         .values(is_active=False)
     )
     await db_session.execute(stmt)
+    await redact_slot_evidence(db_session, user_id=user_id)
     await db_session.flush()
