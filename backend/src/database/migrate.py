@@ -166,7 +166,11 @@ async def _acquire_lock(conn: AsyncConnection, *, lock_key: str) -> None:
 
 
 async def _execute_migration_sql(*, conn: AsyncConnection, sql_content: str) -> None:
-    await conn.exec_driver_sql(sql_content)
+    # Execute through the raw psycopg connection: SQLAlchemy's psycopg dialect
+    # scans for client-side placeholders even without parameters, which breaks
+    # migrations containing literal "%" (e.g. plpgsql RAISE messages).
+    raw_connection = await conn.get_raw_connection()
+    await raw_connection.driver_connection.execute(sql_content)
 
 
 async def _record_applied_migration(conn: AsyncConnection, *, filename: str) -> None:

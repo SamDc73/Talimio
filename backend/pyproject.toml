@@ -53,6 +53,7 @@ dependencies = [
     "structlog>=25.5.0",
     "bs4>=0.0.2",
     "markdownify>=1.2.2",
+    "procrastinate>=3.8.1",
 ]
 
 [dependency-groups]
