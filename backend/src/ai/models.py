@@ -875,3 +875,37 @@ class ExecutionPlan(BaseModel):
             if entry is not None:
                 actions.append(entry)
         return actions
+
+
+FigureMatch = Literal["exact", "related", "none"]
+
+
+class FigureVerification(BaseModel):
+    """Vision-LLM judgment of whether a candidate image is a load-bearing lesson figure.
+
+    ``match`` is tiered, never a boolean: ``exact`` is a canonical fit, ``related`` is an
+    honest 80% figure the lesson-writer MAY adapt around (the ``caveat`` carries what it
+    actually shows), and ``none`` means generate instead. Descriptive fields stay empty
+    on ``none`` so a rejected image cannot launder its way into a confident caption.
+    """
+
+    match: FigureMatch = Field(description="Tiered fit: exact (canonical), related (adapt with caveat), or none")
+    confidence: float = Field(ge=0.0, le=1.0, description="Confidence in the match judgment")
+    depicts: str = Field(default="", description="What the figure literally shows (honest, concept-agnostic)")
+    relevance: str = Field(default="", description="How the figure maps to the concept")
+    caveat: str = Field(default="", description="What it adds or where it diverges from the concept")
+    caption: str = Field(default="", description="Student-facing caption, honest about what the figure shows")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def _enforce_tier_contract(self) -> "FigureVerification":
+        if self.match == "none":
+            return self
+        if not self.caption.strip():
+            msg = "a usable figure (exact/related) requires a non-empty caption"
+            raise ValueError(msg)
+        if self.match == "related" and not self.caveat.strip():
+            msg = "a related figure requires a caveat describing how it diverges"
+            raise ValueError(msg)
+        return self

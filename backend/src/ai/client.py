@@ -29,6 +29,7 @@ from src.ai.models import (
     AdaptiveCourseStructure,
     CourseStructure,
     ExecutionPlan,
+    FigureVerification,
     GeneratedLesson,
     SelfAssessmentQuiz,
 )
@@ -36,6 +37,7 @@ from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
     COURSE_GENERATION_PROMPT,
     E2B_EXECUTION_SYSTEM_PROMPT,
+    FIGURE_VERIFICATION_PROMPT,
     LESSON_GENERATION_PROMPT,
     MEMORY_CONTEXT_SYSTEM_PROMPT,
     PRACTICE_GENERATION_PROMPT,
@@ -1953,6 +1955,44 @@ class LLMClient:
 
         if not isinstance(result, GeneratedLesson):
             msg = "Expected GeneratedLesson from structured output"
+            raise TypeError(msg)
+        return result
+
+    async def verify_figure_for_concept(
+        self,
+        *,
+        concept: str,
+        image_url: str,
+        lesson_context: str | None = None,
+        user_id: str | uuid.UUID | None = None,
+    ) -> FigureVerification:
+        """Vision-verify whether a candidate image is a load-bearing figure for a concept.
+
+        Runs on the root model (already multimodal) through the shared structured path.
+        Memory and tools are disabled: this is a clean, self-contained judgment that runs
+        inside the lesson-writer's own tool loop.
+        """
+        context_line = f"\nLesson context: {lesson_context.strip()}" if lesson_context and lesson_context.strip() else ""
+        messages = [
+            {"role": "system", "content": FIGURE_VERIFICATION_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"Concept: {concept.strip()}{context_line}"},
+                    {"type": "image_url", "image_url": {"url": image_url}},
+                ],
+            },
+        ]
+
+        result = await self.get_completion(
+            messages,
+            response_model=FigureVerification,
+            user_id=user_id,
+            enable_memory=False,
+            enable_tools=False,
+        )
+        if not isinstance(result, FigureVerification):
+            msg = "Expected FigureVerification from structured output"
             raise TypeError(msg)
         return result
 
