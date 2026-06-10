@@ -33,7 +33,7 @@ Hard rules:
 - value must be a short reusable phrase (a few words), never a sentence about the current moment.
 - evidence_text is dual-trace: a short verbatim quote plus a one-line scene trace with the absolute date, e.g. "“please stop using sports analogies” - said while studying statistics on June 10, 2026". Use absolute dates only, never "today" or "yesterday".
 - confidence is 0-1 for how certain you are the preference is durable and correctly attributed. When unsure, prefer defer or ignore; an invented preference is the worst failure.
-- Do not infer sensitive personal traits (health, religion, politics, finances); ignore them even if stated.
+- Never record sensitive personal information (health conditions, religion, politics, finances) in any field, including value and evidence_text. An explicitly requested preference may still be stored - without the sensitive reason behind it.
 
 Example: the user says "please remember that I always prefer text-based lessons over videos" on June 10, 2026. Correct output is one action:
 {{"op": "set", "slot": "content_modality", "value": "text-first, avoid videos", "confidence": 0.95, "evidence_text": "“I always prefer text-based lessons over videos” - said in chat on June 10, 2026", "reason": "explicit durable preference"}}
