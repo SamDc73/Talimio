@@ -248,28 +248,6 @@ class LessonService:
 
         return "\n".join(lines)
 
-    async def _build_feedback_context(
-        self,
-        *,
-        course_id: uuid.UUID,
-    ) -> str | None:
-        recent_events = (
-            (
-                await self.session.execute(
-                    select(LessonFeedbackEvent)
-                    .where(LessonFeedbackEvent.course_id == course_id, LessonFeedbackEvent.apply_across_course.is_(True))
-                    .order_by(LessonFeedbackEvent.created_at.desc())
-                    .limit(3)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        if not recent_events:
-            return None
-        lines = ["## Recent Course Feedback"] + [f"- {event.critique_text}" for event in recent_events]
-        return "\n".join(lines)
-
     async def _build_rag_context(
         self,
         *,
@@ -792,9 +770,6 @@ class LessonService:
             previous_lesson_context = self._build_previous_lesson_context(current_version=current_version)
             self._append_optional_context_section(sections=context_sections, section=previous_lesson_context)
 
-        feedback_context = await self._build_feedback_context(course_id=course.id)
-        self._append_optional_context_section(sections=context_sections, section=feedback_context)
-
         self._append_optional_context_section(
             sections=context_sections,
             section=f"## Regeneration Request\n{immediate_regenerate_request}" if immediate_regenerate_request else None,
@@ -1226,7 +1201,6 @@ class LessonService:
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
         critique_text: str,
-        apply_across_course: bool,
     ) -> LessonDetailResponse:
         """Regenerate an existing lesson body using the normal writer path plus learner critique."""
         lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
@@ -1264,7 +1238,6 @@ class LessonService:
                 lesson_id=lesson.id,
                 lesson_version_id=current_version.id,
                 critique_text=trimmed_critique,
-                apply_across_course=apply_across_course,
             )
             self.session.add(feedback_event)
             await self.session.flush()
@@ -1279,7 +1252,6 @@ class LessonService:
                 strategy_label="regeneration",
                 outcome="regenerated",
                 details={
-                    "apply_across_course": apply_across_course,
                     "critique_chars": len(trimmed_critique),
                 },
             )

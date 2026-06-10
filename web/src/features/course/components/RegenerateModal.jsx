@@ -8,16 +8,12 @@ const REGENERATE_ICON_SHELL_CLASS_NAME =
 	"rounded-lg bg-(--color-course)/10 p-2.5 ring-1 ring-inset ring-(--color-course)/15"
 const REGENERATE_FIELDSET_CLASS_NAME =
 	"relative flex flex-col rounded-xl border border-border bg-background shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
-const REGENERATE_CHECKBOX_CLASS_NAME =
-	"mt-0.5 size-4 rounded-sm border-border text-(--color-course) focus:ring-2 focus:ring-(--color-course)/20 focus:ring-offset-0"
 const REGENERATE_PRIMARY_ACTION_CLASS_NAME =
 	"min-w-[140px] bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
 
 export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerating = false }) {
 	const critiqueId = useId()
-	const applyAcrossCourseId = useId()
 	const [critique, setCritique] = useState("")
-	const [applyAcrossCourse, setApplyAcrossCourse] = useState(false)
 	const textareaRef = useRef(null)
 	const trimmedCritiqueLength = critique.trim().length
 	const remainingCharacters = Math.max(0, MIN_CRITIQUE_LENGTH - trimmedCritiqueLength)
@@ -40,9 +36,9 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 		(e) => {
 			e?.preventDefault()
 			if (!canSubmit) return
-			void onRegenerate({ critiqueText: critique.trim(), applyAcrossCourse })
+			void onRegenerate({ critiqueText: critique.trim() })
 		},
-		[applyAcrossCourse, canSubmit, critique, onRegenerate]
+		[canSubmit, critique, onRegenerate]
 	)
 
 	const handleOpenChange = useCallback(
@@ -50,7 +46,6 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 			if (isRegenerating) return
 			if (!nextOpen) {
 				setCritique("")
-				setApplyAcrossCourse(false)
 			}
 			onOpenChange(nextOpen)
 		},
@@ -94,26 +89,6 @@ export function RegenerateModal({ open, onOpenChange, onRegenerate, isRegenerati
 								Add {remainingCharacters} more character{remainingCharacters === 1 ? "" : "s"}.
 							</p>
 						) : null}
-
-						<label
-							htmlFor={applyAcrossCourseId}
-							className="flex items-start gap-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3 text-sm transition-colors hover:bg-muted/35"
-						>
-							<input
-								type="checkbox"
-								id={applyAcrossCourseId}
-								checked={applyAcrossCourse}
-								onChange={(e) => setApplyAcrossCourse(e.target.checked)}
-								disabled={isRegenerating}
-								className={REGENERATE_CHECKBOX_CLASS_NAME}
-							/>
-							<span className="space-y-1">
-								<span className="block font-medium text-foreground">Apply this preference across this course</span>
-								<span className="block text-xs/relaxed text-muted-foreground">
-									Future lessons in this course will try to follow the same teaching style.
-								</span>
-							</span>
-						</label>
 					</div>
 
 					<div className="flex justify-end gap-2.5 pt-1">

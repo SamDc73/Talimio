@@ -300,7 +300,6 @@ export function useCourseService(courseId = null) {
 			return await regenerateLesson.execute(
 				{
 					critiqueText,
-					applyAcrossCourse: Boolean(payload?.applyAcrossCourse),
 				},
 				{
 					pathParams: { courseId, lessonId },

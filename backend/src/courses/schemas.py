@@ -118,10 +118,6 @@ class LessonRegenerateRequest(BaseModel):
         min_length=1,
         description="What the learner wants changed in the lesson",
     )
-    apply_across_course: bool = Field(
-        default=False,
-        description="Whether this critique should influence future lessons",
-    )
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
 

@@ -61,7 +61,7 @@ export function useLessonActions(courseId) {
 
 	// Action: Regenerate lesson content
 	const handleRegenerate = useCallback(
-		async (lessonId, critiqueText, applyAcrossCourse = false) => {
+		async (lessonId, critiqueText) => {
 			if (!courseId || !lessonId) {
 				return
 			}
@@ -69,7 +69,6 @@ export function useLessonActions(courseId) {
 			const regeneratedLesson = await regenerateMutation.mutateAsync({
 				lessonId,
 				critiqueText,
-				applyAcrossCourse,
 			})
 
 			window.dispatchEvent(

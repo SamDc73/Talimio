@@ -274,7 +274,6 @@ async def regenerate_lesson(
         course_id=course_id,
         lesson_id=lesson_id,
         critique_text=payload.critique_text,
-        apply_across_course=payload.apply_across_course,
         user_id=auth.user_id,
     )
 

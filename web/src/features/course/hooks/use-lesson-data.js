@@ -34,7 +34,7 @@ export function useLessonRegenerateMutation(courseId) {
 	const queryClient = useQueryClient()
 
 	return useMutation({
-		mutationFn: async ({ lessonId, critiqueText, applyAcrossCourse = false }) => {
+		mutationFn: async ({ lessonId, critiqueText }) => {
 			if (!courseId) {
 				throw new Error("Course ID is required to regenerate a lesson")
 			}
@@ -43,7 +43,7 @@ export function useLessonRegenerateMutation(courseId) {
 				throw new Error("Lesson ID is required to regenerate a lesson")
 			}
 
-			return regenerateLesson(courseId, lessonId, { critiqueText, applyAcrossCourse })
+			return regenerateLesson(courseId, lessonId, { critiqueText })
 		},
 		onSuccess: async (data, variables) => {
 			if (!courseId || !variables?.lessonId) {
