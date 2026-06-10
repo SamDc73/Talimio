@@ -26,6 +26,33 @@ async def run_profile_maintenance(user_id: str) -> None:
     logger.info("jobs.profile_maintenance.done", extra={"memory_user_id": user_id, "turns_evaluated": evaluated})
 
 
+@job_app.task(name="memory.rebuild_user_profile", queue=QUEUE_MAINTENANCE)
+async def rebuild_user_profile(user_id: str, apply: bool = False) -> None:
+    """Replay the evidence log against live inferred state; optionally repair."""
+    from src.database.session import async_session_maker
+    from src.memory.rebuild import diff_inferred_profile, repair_inferred_profile
+
+    async with async_session_maker() as session:
+        if apply:
+            drifts = await repair_inferred_profile(session, uuid.UUID(user_id))
+            await session.commit()
+        else:
+            drifts = await diff_inferred_profile(session, uuid.UUID(user_id))
+
+    for drift in drifts:
+        logger.warning(
+            "jobs.profile_rebuild.drift",
+            extra={
+                "memory_user_id": user_id,
+                "drift_slot": drift.slot,
+                "live_value": drift.live_value,
+                "rebuilt_value": drift.rebuilt_value,
+                "repaired": apply,
+            },
+        )
+    logger.info("jobs.profile_rebuild.done", extra={"memory_user_id": user_id, "drift_count": len(drifts)})
+
+
 @job_app.periodic(cron="*/10 * * * *")
 @job_app.task(queue=QUEUE_MAINTENANCE, queueing_lock="maintenance:retry-stalled-jobs")
 async def retry_stalled_jobs(timestamp: int) -> None:
