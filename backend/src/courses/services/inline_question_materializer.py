@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -12,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.models import GeneratedInlineQuestion, GeneratedLesson
 from src.courses.models import LearningQuestion
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -41,8 +45,22 @@ class InlineQuestionMaterializer:
         concept_id: uuid.UUID | None,
         lesson_version_id: uuid.UUID | None,
     ) -> str:
-        """Persist inline questions and return the content with placeholders replaced by question IDs."""
+        """Persist inline questions and return the content with placeholders replaced by question IDs.
+
+        Inline practice is concept-scoped: non-adaptive lessons have no concept,
+        so questions are skipped gracefully (placeholders blanked) rather than
+        failing the whole lesson.
+        """
         content = generated.content
+        if concept_id is None:
+            if generated.inline_questions:
+                logger.info(
+                    "inline_questions.skipped_no_concept",
+                    extra={"lesson_id": str(lesson_id), "question_count": len(generated.inline_questions)},
+                )
+            for inline in generated.inline_questions:
+                content = content.replace(inline.placeholder, "")
+            return content
         for index, inline in enumerate(generated.inline_questions):
             question_id = await self._upsert_question(
                 user_id=user_id,
@@ -68,15 +86,12 @@ class InlineQuestionMaterializer:
         user_id: uuid.UUID,
         course_id: uuid.UUID,
         lesson_id: uuid.UUID,
-        concept_id: uuid.UUID | None,
+        concept_id: uuid.UUID,
         lesson_version_id: uuid.UUID | None,
         source_component: str,
         source_key: str,
         inline_question: _InlineQuestion,
     ) -> uuid.UUID:
-        if concept_id is None:
-            detail = "lesson concept is required for inline practice"
-            raise ValueError(detail)
         existing = await self._session.scalar(
             select(LearningQuestion).where(
                 LearningQuestion.user_id == user_id,
