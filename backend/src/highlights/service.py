@@ -1,17 +1,30 @@
 import uuid
+from typing import cast
 
+from pydantic import JsonValue, ValidationError as PydanticValidationError
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.books.models import Book
-from src.exceptions import NotFoundError
+from src.exceptions import NotFoundError, ValidationError
 
 from .models import Highlight
 from .schemas import HighlightResponse
+from .validation import validate_highlight_data
 
 
 BOOK_RESOURCE_TYPE = "book"
 HIGHLIGHT_RESOURCE_TYPE = "highlight"
+
+
+def _validated_payload(highlight_data: dict[str, object]) -> dict[str, object]:
+    """Normalize a highlight blob through the shared validation schemas."""
+    try:
+        highlight_json = cast("dict[str, JsonValue]", highlight_data)
+        return dict(validate_highlight_data(highlight_json, _content_type="book"))
+    except PydanticValidationError as error:
+        message = f"Invalid highlight data: {error!s}"
+        raise ValidationError(message, feature_area="highlights") from error
 
 
 class BookHighlightService:
@@ -47,7 +60,7 @@ class BookHighlightService:
             user_id=user_id,
             content_type="book",
             content_id=book_id,
-            highlight_data=highlight_data,
+            highlight_data=_validated_payload(highlight_data),
         )
         self._session.add(highlight)
         await self._session.flush()
@@ -62,7 +75,7 @@ class BookHighlightService:
     ) -> HighlightResponse:
         """Update one owned highlight."""
         highlight = await self._require_highlight(highlight_id, user_id)
-        highlight.highlight_data = highlight_data
+        highlight.highlight_data = _validated_payload(highlight_data)
         await self._session.flush()
         await self._session.refresh(highlight)
         return HighlightResponse.model_validate(highlight)
