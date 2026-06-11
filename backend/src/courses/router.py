@@ -147,7 +147,7 @@ async def list_courses(
     auth: CurrentAuth,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
-    per_page: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+    per_page: Annotated[int, Query(alias="perPage", ge=1, le=100, description="Items per page")] = 20,
     search: Annotated[str | None, Query(description="Search query")] = None,
 ) -> CourseListResponse:
     """List courses with pagination and optional search (single source of truth)."""

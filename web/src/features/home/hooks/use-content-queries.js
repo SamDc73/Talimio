@@ -24,7 +24,7 @@ const getContentStatus = (archiveFilter) => contentStatusByArchiveFilter[archive
 const buildContentListUrl = ({ page, status }) => {
 	const params = new URLSearchParams({
 		page: String(page),
-		page_size: String(DASHBOARD_CONTENT_PAGE_SIZE),
+		pageSize: String(DASHBOARD_CONTENT_PAGE_SIZE),
 		status,
 	})
 
@@ -176,7 +176,7 @@ export function useContentList(filters = {}) {
 				items: data,
 				total: contentPage.total ?? data.length,
 				page: contentPage.page ?? 1,
-				perPage: contentPage.perPage ?? contentPage.per_page ?? DASHBOARD_CONTENT_PAGE_SIZE,
+				perPage: contentPage.perPage ?? DASHBOARD_CONTENT_PAGE_SIZE,
 				filterOptions,
 				sortOptions,
 			}

@@ -17,9 +17,9 @@ async def get_all_content(
     _response: Response,
     auth: CurrentAuth,
     search: Annotated[str | None, Query(description="Search term for filtering content")] = None,
-    content_type: Annotated[ContentType | None, Query(description="Filter by content type")] = None,
+    content_type: Annotated[ContentType | None, Query(alias="contentType", description="Filter by content type")] = None,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+    page_size: Annotated[int, Query(alias="pageSize", ge=1, le=100, description="Items per page")] = 20,
     content_status: Annotated[
         ContentStatusFilter,
         Query(alias="status", description="Filter by content lifecycle status"),
