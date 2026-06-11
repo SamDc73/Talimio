@@ -202,8 +202,8 @@ export function useDeleteContent() {
 	const queryClient = useQueryClient()
 
 	return useMutation({
-		mutationFn: async ({ itemId, itemType }) => {
-			await deleteContent(itemType, itemId)
+		mutationFn: async ({ itemId, itemType, force = false }) => {
+			await deleteContent(itemType, itemId, { force })
 			return { itemId, itemType }
 		},
 

@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import TypedDict, cast
 
-from fastapi import BackgroundTasks, UploadFile, status
+from fastapi import BackgroundTasks, status
 from pydantic import JsonValue
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -242,8 +242,8 @@ class CoursesFacade:  # noqa: PLR0904
         course_data: Mapping[str, object],
         user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
-        attachments: list[UploadFile] | None = None,
         book_ids: list[uuid.UUID] | None = None,
+        image_data_urls: list[str] | None = None,
     ) -> CourseResponse:
         """Create a new course entry and return its canonical response model."""
         try:
@@ -251,8 +251,8 @@ class CoursesFacade:  # noqa: PLR0904
                 course_data,
                 user_id,
                 background_tasks=background_tasks,
-                attachments=attachments,
                 book_ids=book_ids,
+                image_data_urls=image_data_urls,
             )
             query_service = CourseQueryService(self._session)
             return await query_service.get_course(created_course.id, user_id)

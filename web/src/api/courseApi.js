@@ -46,6 +46,15 @@ function getBookTitleFromFile(file) {
 	return filename.slice(0, -(extension.length + 1)) || filename
 }
 
+async function encodeFileAsDataUrl(file) {
+	return await new Promise((resolve, reject) => {
+		const reader = new FileReader()
+		reader.onload = () => resolve(reader.result)
+		reader.onerror = () => reject(reader.error || new Error("Failed to read image file"))
+		reader.readAsDataURL(file)
+	})
+}
+
 async function uploadFileToSession(file, uploadSession) {
 	if (!file?.size) {
 		throw new Error("Cannot upload an empty file")
@@ -127,41 +136,39 @@ export function useCourseService(courseId = null) {
 		// ========== COURSE OPERATIONS ==========
 
 		/**
-		 * Create a new course
+		 * Create a new course. Books travel as references; images travel
+		 * inline as base64 data URLs in a pure JSON body.
 		 * @param {Object} courseData - Course creation data
 		 * @param {string} courseData.prompt - AI prompt for course generation
 		 * @param {boolean} courseData.adaptive_enabled - Whether adaptive mode is enabled
-		 * @param {File[]} [courseData.files] - Optional attachments (pdf/epub/images)
+		 * @param {File[]} [courseData.files] - Optional attachments (pdf/epub become books, images inline)
+		 * @param {string[]} [courseData.bookIds] - Already-uploaded book IDs to attach
 		 */
 		async createCourse(courseData) {
 			const files = Array.isArray(courseData?.files) ? courseData.files : []
 			const preUploadedBookIds = Array.isArray(courseData?.bookIds) ? courseData.bookIds : []
-			const inlineFiles = []
 			const bookIds = [...preUploadedBookIds]
+			const imageDataUrls = []
 
 			for (const file of files) {
-				if (!isBookAttachment(file)) {
-					inlineFiles.push(file)
+				if (isBookAttachment(file)) {
+					const book = await createBookFromCourseAttachment(file)
+					if (!book?.id) {
+						throw new Error("Book upload finished without a book ID")
+					}
+					bookIds.push(book.id)
 					continue
 				}
 
-				const book = await createBookFromCourseAttachment(file)
-				if (!book?.id) {
-					throw new Error("Book upload finished without a book ID")
-				}
-				bookIds.push(book.id)
+				imageDataUrls.push(await encodeFileAsDataUrl(file))
 			}
 
-			const formData = new FormData()
-			formData.append("prompt", courseData?.prompt ?? "")
-			formData.append("adaptive_enabled", String(Boolean(courseData?.adaptive_enabled)))
-			formData.append("book_ids", JSON.stringify(bookIds))
-
-			for (const file of inlineFiles) {
-				formData.append("files", file)
-			}
-
-			return await createCourse.execute(formData)
+			return await createCourse.execute({
+				prompt: courseData?.prompt ?? "",
+				adaptiveEnabled: Boolean(courseData?.adaptive_enabled),
+				bookIds,
+				imageDataUrls,
+			})
 		},
 
 		async fetchSelfAssessmentQuestions(payload) {
