@@ -4,17 +4,19 @@ This router handles endpoints that operate on the currently authenticated user,
 eliminating the need to pass user_id in the URL.
 """
 
-from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
 
 from src.auth import CurrentAuth
 from src.user.schemas import (
     ClearMemoryResponse,
     CustomInstructionsRequest,
     CustomInstructionsResponse,
+    DeleteMemoryResponse,
+    ProfileSlotResponse,
+    ProfileSlotUpdateRequest,
+    UserMemoriesResponse,
     UserSettingsResponse,
 )
 from src.user.service import (
@@ -34,24 +36,9 @@ router = APIRouter(
 )
 
 
-class UserMemoriesResponse(BaseModel):
-    """Current user's memory list response."""
-
-    memories: Sequence[object]
-    total: int
-
-
 @router.get("/settings")
-async def get_current_user_settings(
-    auth: CurrentAuth,
-) -> UserSettingsResponse:
-    """
-    Get current user settings including custom instructions and memory count.
-
-    Returns
-    -------
-        UserSettingsResponse: User's personalization settings
-    """
+async def get_current_user_settings(auth: CurrentAuth) -> UserSettingsResponse:
+    """Get current user settings including custom instructions and memory count."""
     return await get_user_settings(auth.user_id, auth.session)
 
 
@@ -60,16 +47,7 @@ async def update_current_user_instructions(
     auth: CurrentAuth,
     request: CustomInstructionsRequest,
 ) -> CustomInstructionsResponse:
-    """
-    Update custom instructions for AI personalization for current user.
-
-    Args:
-        request: Custom instructions to set
-
-    Returns
-    -------
-        CustomInstructionsResponse: Updated instructions and success status
-    """
+    """Update custom instructions for AI personalization for current user."""
     return await update_custom_instructions(auth.user_id, request.instructions, auth.session)
 
 
@@ -78,13 +56,7 @@ async def get_current_user_memories(
     auth: CurrentAuth,
     limit: Annotated[int, Query(ge=1, le=100, description="Max memories to return")] = 100,
 ) -> UserMemoriesResponse:
-    """
-    Get all memories for the current user.
-
-    Returns
-    -------
-        Dict with memories list and total count
-    """
+    """List the current user's active profile slots with provenance."""
     memories = await get_user_memories(auth.user_id, auth.session, limit=limit)
     return UserMemoriesResponse(memories=memories, total=len(memories))
 
@@ -94,19 +66,6 @@ async def clear_current_user_memories(auth: CurrentAuth) -> ClearMemoryResponse:
     """Delete all memories for the current user."""
     await clear_user_memories(auth.user_id, auth.session)
     return ClearMemoryResponse(cleared=True, message="All memories cleared successfully")
-
-
-class ProfileSlotUpdateRequest(BaseModel):
-    """Manual value for one profile slot."""
-
-    value: str
-
-
-class ProfileSlotResponse(BaseModel):
-    """Outcome of a manual slot operation."""
-
-    slot: str
-    status: str
 
 
 @router.put("/memories/slots/{slot}")
@@ -132,16 +91,7 @@ async def clear_current_user_profile_slot(
 
 
 @router.delete("/memories/{memory_id}")
-async def delete_current_user_memory(auth: CurrentAuth, memory_id: str) -> dict[str, str]:
-    """
-    Delete a specific memory for the current user.
-
-    Args:
-        memory_id: The ID of the memory to delete
-
-    Returns
-    -------
-        Dict with deletion confirmation
-    """
+async def delete_current_user_memory(auth: CurrentAuth, memory_id: str) -> DeleteMemoryResponse:
+    """Forget one profile-slot memory: deactivate it and tombstone its evidence."""
     await delete_user_memory(auth.user_id, memory_id, auth.session)
-    return {"status": "success", "message": "Memory deleted successfully"}
+    return DeleteMemoryResponse(deleted=True, message="Memory deleted successfully")

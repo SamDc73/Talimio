@@ -15,6 +15,7 @@ from src.memory.models import UserProfileSlot, UserProfileSlotEvent
 from src.user.models import UserPreferences as UserPreferencesModel
 from src.user.schemas import (
     CustomInstructionsResponse,
+    ProfileSlotItem,
     UserPreferences,
     UserSettingsResponse,
 )
@@ -163,19 +164,10 @@ async def _latest_applied_events(
     return latest
 
 
-async def get_user_memories(user_id: uuid.UUID, db_session: AsyncSession, *, limit: int = 100) -> list[dict]:
-    """
-    Get active profile-slot memories with provenance for inferred values.
-
-    Args:
-        user_id: Unique identifier for the user
-        db_session: Database session for reading profile slots
-        limit: Maximum number of memories to return
-
-    Returns
-    -------
-        List of memories with content, timestamps, and provenance metadata
-    """
+async def get_user_memories(
+    user_id: uuid.UUID, db_session: AsyncSession, *, limit: int = 100
+) -> list[ProfileSlotItem]:
+    """Return active profile slots, newest first, with provenance for inferred values."""
     stmt = (
         select(UserProfileSlot)
         .where(UserProfileSlot.user_id == user_id, UserProfileSlot.is_active.is_(True))
@@ -186,22 +178,24 @@ async def get_user_memories(user_id: uuid.UUID, db_session: AsyncSession, *, lim
     inferred_slots = [row.slot for row in rows if row.source == "inferred"]
     provenance = await _latest_applied_events(user_id, inferred_slots, db_session)
 
-    memories: list[dict] = []
+    memories: list[ProfileSlotItem] = []
     for row in rows:
-        metadata: dict[str, object] = {"slot": row.slot, "source": row.source}
-        if row.last_evidence_at is not None:
-            metadata["last_evidence_at"] = row.last_evidence_at.isoformat()
         event = provenance.get(row.slot)
-        if event is not None:
-            metadata["evidence_text"] = event.evidence_text
-            metadata["source_message_id"] = event.message_id
         memories.append(
-            {
-                "id": str(row.id),
-                "content": f"{row.slot}: {row.value}",
-                "timestamp": row.updated_at.isoformat(),
-                "metadata": metadata,
-            }
+            # model_validate: row.source is typed str; the schema's Literal
+            # (DB CHECK-backed) is enforced by pydantic at this boundary.
+            ProfileSlotItem.model_validate(
+                {
+                    "id": row.id,
+                    "slot": row.slot,
+                    "value": row.value,
+                    "source": row.source,
+                    "updated_at": row.updated_at,
+                    "last_evidence_at": row.last_evidence_at,
+                    "evidence_text": event.evidence_text if event is not None else None,
+                    "source_message_id": event.message_id if event is not None else None,
+                }
+            )
         )
     return memories
 

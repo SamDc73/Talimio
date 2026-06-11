@@ -1,5 +1,9 @@
 """User-related schemas for API endpoints."""
 
+import uuid
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel, Field, JsonValue
 
 from src.config.schema_casing import build_camel_config
@@ -46,5 +50,57 @@ class ClearMemoryResponse(BaseModel):
 
     cleared: bool = True
     message: str = "All memories cleared successfully"
+
+    model_config = build_camel_config()
+
+
+class DeleteMemoryResponse(BaseModel):
+    """Response schema for deleting one user memory."""
+
+    deleted: bool = True
+    message: str = "Memory deleted successfully"
+
+    model_config = build_camel_config()
+
+
+class ProfileSlotItem(BaseModel):
+    """One active profile slot with provenance — what the product remembers."""
+
+    id: uuid.UUID
+    slot: str
+    value: str
+    source: Literal["manual", "inferred"]
+    updated_at: datetime
+    last_evidence_at: datetime | None = None
+    evidence_text: str | None = None
+    source_message_id: str | None = None
+
+    model_config = build_camel_config()
+
+
+class UserMemoriesResponse(BaseModel):
+    """Current user's profile-slot memories."""
+
+    memories: list[ProfileSlotItem]
+    total: int
+
+    model_config = build_camel_config()
+
+
+class ProfileSlotUpdateRequest(BaseModel):
+    """Manual value for one profile slot."""
+
+    value: str
+
+    model_config = build_camel_config()
+
+
+class ProfileSlotResponse(BaseModel):
+    """Outcome of a manual slot operation."""
+
+    slot: str
+    # Mirrors memory's CommitStatus literals (set_profile_slot) plus "cleared"
+    # (clear endpoint) so both endpoints emit values from one aligned set.
+    status: Literal["applied", "noop", "rejected_stale", "rejected_manual", "cleared"]
 
     model_config = build_camel_config()
