@@ -3,10 +3,10 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from src.auth import CurrentAuth
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 from src.storage.exceptions import FileUploadError
 from src.storage.factory import get_default_storage_provider_name, get_storage_provider
 
@@ -14,20 +14,16 @@ from src.storage.factory import get_default_storage_provider_name, get_storage_p
 router = APIRouter(prefix="/api/v1/upload-sessions", tags=["upload-sessions"])
 
 
-class UploadSessionRequest(BaseModel):
+class UploadSessionRequest(CamelModel):
     """Request a direct upload session for a file."""
-
-    model_config = build_camel_config()
 
     filename: str
     content_type: str
     file_size: int | None = None
 
 
-class UploadSessionResponse(BaseModel):
+class UploadSessionResponse(CamelModel):
     """Provider-issued direct upload session details."""
-
-    model_config = build_camel_config()
 
     upload_url: str
     method: str

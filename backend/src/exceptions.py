@@ -2,9 +2,8 @@ from collections.abc import Mapping
 from enum import StrEnum
 
 from fastapi import status
-from pydantic import BaseModel
 
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 
 
 CANONICAL_ERROR_LOG_FIELDS: tuple[str, ...] = (
@@ -55,10 +54,8 @@ class ErrorCode(StrEnum):
     INTERNAL = "INTERNAL_ERROR"
 
 
-class ApiError(BaseModel):
+class ApiError(CamelModel):
     """Canonical API error payload."""
-
-    model_config = build_camel_config()
 
     category: str
     code: str
@@ -67,10 +64,8 @@ class ApiError(BaseModel):
     metadata: Mapping[str, object] | None = None
 
 
-class ApiErrorEnvelope(BaseModel):
+class ApiErrorEnvelope(CamelModel):
     """Canonical API error envelope."""
-
-    model_config = build_camel_config()
 
     error: ApiError
 

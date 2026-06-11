@@ -3,11 +3,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel
 
 from src.auth import CurrentAuth
 from src.books.models import Book
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 from src.storage.factory import get_storage_provider
 
 from .facade import BooksFacade
@@ -128,10 +127,8 @@ async def serve_book_file(book_id: uuid.UUID, auth: CurrentAuth) -> FileResponse
     )
 
 
-class BookPresignedUrlResponse(BaseModel):
+class BookPresignedUrlResponse(CamelModel):
     """Direct book download URL response."""
-
-    model_config = build_camel_config()
 
     url: str
     expires_in: int
@@ -187,10 +184,8 @@ async def update_book_chapter_status(
     )
 
 
-class RAGStatusResponse(BaseModel):
+class RAGStatusResponse(CamelModel):
     """Response model for RAG embedding status."""
-
-    model_config = build_camel_config()
 
     book_id: uuid.UUID
     rag_status: BookRagStatus

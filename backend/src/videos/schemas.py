@@ -4,33 +4,33 @@ from datetime import datetime
 from typing import Any, Literal
 from urllib.parse import parse_qs, urlparse
 
-from pydantic import BaseModel, Field, JsonValue, field_validator
+from pydantic import ConfigDict, Field, JsonValue, field_validator
 
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 
 
 VideoRagStatus = Literal["pending", "processing", "completed", "failed"]
 VideoLearningStatus = Literal["not_started", "in_progress", "completed"]
 
 
-class VideoBase(BaseModel):
+class VideoBase(CamelModel):
     """Base schema for video data."""
 
-    model_config = build_camel_config(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True)
 
-    youtube_id: str = Field(min_length=1, max_length=20, alias="youtubeId")
+    youtube_id: str = Field(min_length=1, max_length=20)
     url: str = Field(min_length=1, max_length=255)
     title: str = Field(min_length=1, max_length=500)
     channel: str = Field(min_length=1, max_length=255)
-    channel_id: str = Field(min_length=1, max_length=50, alias="channelId")
+    channel_id: str = Field(min_length=1, max_length=50)
     duration: int = Field(ge=0, description="Duration in seconds (0 for live/unknown)")
-    thumbnail_url: str | None = Field(None, max_length=500, alias="thumbnailUrl")
+    thumbnail_url: str | None = Field(None, max_length=500)
     description: str | None = None
     tags: list[str] | None = Field(default_factory=list)
-    published_at: datetime | None = Field(None, alias="publishedAt")
+    published_at: datetime | None = None
 
 
-class VideoCreate(BaseModel):
+class VideoCreate(CamelModel):
     """Schema for creating a new video."""
 
     url: str = Field(description="YouTube video URL")
@@ -60,10 +60,10 @@ class VideoCreate(BaseModel):
         return v
 
 
-class VideoUpdate(BaseModel):
+class VideoUpdate(CamelModel):
     """Schema for updating video data."""
 
-    model_config = build_camel_config(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True)
 
     title: str | None = Field(None, min_length=1, max_length=500)
     description: str | None = None
@@ -74,10 +74,10 @@ class VideoInDB(VideoBase):
     """Schema for video stored in database."""
 
     id: uuid.UUID
-    created_at: datetime = Field(alias="createdAt")
-    updated_at: datetime = Field(alias="updatedAt")
+    created_at: datetime
+    updated_at: datetime
 
-    model_config = build_camel_config(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -108,10 +108,8 @@ class VideoResponse(VideoInDB):
     already_exists: bool = Field(default=False, description="True if video already existed in library")
 
 
-class VideoListResponse(BaseModel):
+class VideoListResponse(CamelModel):
     """Schema for paginated video list response."""
-
-    model_config = build_camel_config()
 
     items: list[VideoResponse]
     total: int
@@ -119,82 +117,68 @@ class VideoListResponse(BaseModel):
     pages: int
 
 
-class VideoChapterBase(BaseModel):
+class VideoChapterBase(CamelModel):
     """Base schema for video chapter."""
 
-    model_config = build_camel_config()
-
-    chapter_number: int = Field(ge=1, alias="chapterNumber")
+    chapter_number: int = Field(ge=1)
     title: str = Field(max_length=500)
-    start_time: int | None = Field(None, ge=0, description="Start time in seconds", alias="startTime")
-    end_time: int | None = Field(None, ge=0, description="End time in seconds", alias="endTime")
+    start_time: int | None = Field(None, ge=0, description="Start time in seconds")
+    end_time: int | None = Field(None, ge=0, description="End time in seconds")
     status: VideoLearningStatus = "not_started"
 
 
 class VideoChapterResponse(VideoChapterBase):
     """Schema for video chapter response."""
 
-    model_config = build_camel_config(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    video_id: uuid.UUID = Field(alias="videoId")
-    created_at: datetime = Field(alias="createdAt")
-    updated_at: datetime = Field(alias="updatedAt")
+    video_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
 
 
-class VideoChapterStatusUpdate(BaseModel):
+class VideoChapterStatusUpdate(CamelModel):
     """Schema for updating video chapter status."""
-
-    model_config = build_camel_config()
 
     status: VideoLearningStatus
 
 
-class VideoChapterProgressSync(BaseModel):
+class VideoChapterProgressSync(CamelModel):
     """Schema for syncing chapter progress from web app."""
 
-    model_config = build_camel_config()
-
-    completed_chapter_ids: list[uuid.UUID] = Field(
-        description="List of completed chapter IDs", alias="completedChapterIds"
-    )
-    total_chapters: int = Field(gt=0, description="Total number of chapters", alias="totalChapters")
+    completed_chapter_ids: list[uuid.UUID] = Field(description="List of completed chapter IDs")
+    total_chapters: int = Field(gt=0, description="Total number of chapters")
 
 
-class TranscriptSegment(BaseModel):
+class TranscriptSegment(CamelModel):
     """Schema for video transcript segment with timestamp."""
 
-    model_config = build_camel_config()
-
-    start_time: float = Field(ge=0, description="Start time in seconds", alias="startTime")
-    end_time: float = Field(ge=0, description="End time in seconds", alias="endTime")
+    start_time: float = Field(ge=0, description="Start time in seconds")
+    end_time: float = Field(ge=0, description="End time in seconds")
     text: str = Field(description="Transcript text for this segment")
 
 
-class VideoTranscriptResponse(BaseModel):
+class VideoTranscriptResponse(CamelModel):
     """Schema for video transcript response."""
 
-    model_config = build_camel_config()
-
-    video_id: uuid.UUID = Field(alias="videoId")
+    video_id: uuid.UUID
     segments: list[TranscriptSegment] = Field(description="List of transcript segments")
-    total_segments: int = Field(alias="totalSegments")
+    total_segments: int
 
 
 class VideoDetailsResponse(VideoResponse):
     """Video details response with chapters, transcript status, and progress."""
 
-    model_config = build_camel_config()
-
     chapters: list[VideoChapterResponse]
-    transcript_info: dict[str, JsonValue] | None = Field(None, alias="transcriptInfo")
+    transcript_info: dict[str, JsonValue] | None = None
     progress: dict[str, JsonValue]
 
 
-class RAGStatusResponse(BaseModel):
+class RAGStatusResponse(CamelModel):
     """Response model for RAG embedding status."""
 
-    model_config = build_camel_config(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
     video_id: uuid.UUID
     rag_status: VideoRagStatus

@@ -5,25 +5,19 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
-
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 
 
-class TeachingProfileFieldSchema(BaseModel):
+class TeachingProfileFieldSchema(CamelModel):
     """One merged teaching-profile field with its provenance source."""
-
-    model_config = build_camel_config()
 
     name: str
     value: str
     source: Literal["explicit", "inferred"]
 
 
-class PedagogicalMemoryResponse(BaseModel):
+class PedagogicalMemoryResponse(CamelModel):
     """Everything pedagogical memory knows about this learner-course pair."""
-
-    model_config = build_camel_config()
 
     teaching_profile: list[TeachingProfileFieldSchema]
     avoid_list: list[str]
@@ -33,25 +27,19 @@ class PedagogicalMemoryResponse(BaseModel):
     claims: dict[str, list[str]]
 
 
-class SuppressClaimRequest(BaseModel):
+class SuppressClaimRequest(CamelModel):
     """One verbatim claim line to remove from the student card."""
-
-    model_config = build_camel_config()
 
     claim_text: str
 
 
-class SuppressClaimResponse(BaseModel):
+class SuppressClaimResponse(CamelModel):
     """Card revision after a successful suppression."""
-
-    model_config = build_camel_config()
 
     revision: int
 
 
-class ForgetMemoryResponse(BaseModel):
+class ForgetMemoryResponse(CamelModel):
     """Acknowledgement of an explicit pedagogical-memory forget."""
-
-    model_config = build_camel_config()
 
     status: Literal["forgotten"] = "forgotten"
