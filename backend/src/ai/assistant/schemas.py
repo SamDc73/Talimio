@@ -4,24 +4,24 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from pydantic import ConfigDict, Field, JsonValue, field_validator
+
+from src.config.schema_casing import CamelModel
 
 
-class LanguageModelMessage(BaseModel):
+class LanguageModelMessage(CamelModel):
     """Message shape received from assistant-ui data stream runtime."""
 
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = ConfigDict(extra="allow")
 
     id: str | None = None
     role: Literal["system", "user", "assistant", "tool"]
     content: JsonValue
-    created_at: str | None = Field(default=None, alias="createdAt")
+    created_at: str | None = None
 
 
-class ChatRequest(BaseModel):
+class ChatRequest(CamelModel):
     """Request schema for data-stream runtime chat endpoint."""
-
-    model_config = ConfigDict(populate_by_name=True)
 
     messages: list[LanguageModelMessage] = Field(
         default_factory=list,
@@ -29,77 +29,71 @@ class ChatRequest(BaseModel):
     )
     system: str | None = Field(default=None, description="Optional system message")
     tools: list[dict[str, JsonValue]] | dict[str, JsonValue] | None = Field(default=None)
-    run_config: dict[str, JsonValue] | None = Field(default=None, alias="runConfig")
+    run_config: dict[str, JsonValue] | None = Field(default=None)
     state: dict[str, JsonValue] | None = Field(default=None)
 
     # Model context from assistant-ui runtime
-    model_name: str | None = Field(default=None, alias="modelName", description="Model override from model context")
+    model_name: str | None = Field(default=None, description="Model override from model context")
     model: str | None = Field(default=None, description="Fallback model override key")
-    thread_id: uuid.UUID | None = Field(default=None, alias="threadId", description="Conversation thread identifier")
+    thread_id: uuid.UUID | None = Field(default=None, description="Conversation thread identifier")
 
     # Optional domain context fields
     context_type: Literal["book", "video", "course"] | None = Field(
-        None, alias="contextType", description="Type of resource providing context"
+        None, description="Type of resource providing context"
     )
-    context_id: uuid.UUID | None = Field(None, alias="contextId", description="ID of the context resource")
+    context_id: uuid.UUID | None = Field(None, description="ID of the context resource")
     context_meta: dict[str, JsonValue] | None = Field(
-        None, alias="contextMeta", description="Additional context metadata (page number, timestamp, etc.)"
+        None, description="Additional context metadata (page number, timestamp, etc.)"
     )
     pending_quote: str | None = Field(
-        default=None, alias="pendingQuote", description="Optional one-time quoted selection to prefix"
+        default=None, description="Optional one-time quoted selection to prefix"
     )
 
 
-class CreateConversationRequest(BaseModel):
+class CreateConversationRequest(CamelModel):
     """Create a new assistant conversation."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     title: str | None = Field(default=None, max_length=200)
-    context_type: Literal["book", "video", "course"] | None = Field(default=None, alias="contextType")
-    context_id: uuid.UUID | None = Field(default=None, alias="contextId")
-    context_meta: dict[str, JsonValue] | None = Field(default=None, alias="contextMeta")
+    context_type: Literal["book", "video", "course"] | None = None
+    context_id: uuid.UUID | None = None
+    context_meta: dict[str, JsonValue] | None = None
 
 
-class CreateConversationResponse(BaseModel):
+class CreateConversationResponse(CamelModel):
     """Conversation id response for assistant-ui thread initialization."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    remote_id: uuid.UUID = Field(alias="remoteId")
+    remote_id: uuid.UUID
 
 
-class RenameConversationRequest(BaseModel):
+class RenameConversationRequest(CamelModel):
     """Rename request for an assistant conversation."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     title: str | None = Field(default=None, max_length=200)
 
 
-class ConversationThreadResponse(BaseModel):
+class ConversationThreadResponse(CamelModel):
     """Single assistant conversation metadata response."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    remote_id: uuid.UUID = Field(alias="remoteId")
-    external_id: str | None = Field(default=None, alias="externalId")
+    remote_id: uuid.UUID
+    external_id: str | None = None
     status: Literal["regular", "archived"]
     title: str | None = None
-    context_type: Literal["book", "video", "course"] | None = Field(default=None, alias="contextType")
-    context_id: uuid.UUID | None = Field(default=None, alias="contextId")
-    context_meta: dict[str, JsonValue] = Field(default_factory=dict, alias="contextMeta")
-    head_message_id: str | None = Field(default=None, alias="headMessageId")
-    last_message_preview: str | None = Field(default=None, alias="lastMessagePreview")
-    message_count: int = Field(default=0, alias="messageCount")
-    created_at: datetime = Field(alias="createdAt")
-    updated_at: datetime = Field(alias="updatedAt")
+    context_type: Literal["book", "video", "course"] | None = None
+    context_id: uuid.UUID | None = None
+    context_meta: dict[str, JsonValue] = Field(default_factory=dict)
+    head_message_id: str | None = None
+    last_message_preview: str | None = None
+    message_count: int = 0
+    created_at: datetime
+    updated_at: datetime
 
 
-class ConversationListResponse(BaseModel):
+class ConversationListResponse(CamelModel):
     """Paginated assistant conversation list response."""
-
-    model_config = ConfigDict(populate_by_name=True)
 
     items: list[ConversationThreadResponse]
     page: int
@@ -107,14 +101,14 @@ class ConversationListResponse(BaseModel):
     total: int
 
 
-class ConversationHistoryItemRequest(BaseModel):
+class ConversationHistoryItemRequest(CamelModel):
     """Append payload item for assistant-ui thread history adapter."""
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(extra="forbid")
 
     message: dict[str, JsonValue]
-    parent_id: str | None = Field(default=None, alias="parentId")
-    run_config: dict[str, JsonValue] | None = Field(default=None, alias="runConfig")
+    parent_id: str | None = None
+    run_config: dict[str, JsonValue] | None = None
 
     @field_validator("message")
     @classmethod
@@ -126,29 +120,23 @@ class ConversationHistoryItemRequest(BaseModel):
         raise ValueError(msg)
 
 
-class ConversationHistoryItemResponse(BaseModel):
+class ConversationHistoryItemResponse(CamelModel):
     """History item response in assistant-ui exported repository format."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
     message: dict[str, JsonValue]
-    parent_id: str | None = Field(default=None, alias="parentId")
-    run_config: dict[str, JsonValue] | None = Field(default=None, alias="runConfig")
+    parent_id: str | None = None
+    run_config: dict[str, JsonValue] | None = None
 
 
-class ConversationHistoryResponse(BaseModel):
+class ConversationHistoryResponse(CamelModel):
     """Assistant-ui exported message repository payload."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
-    head_id: str | None = Field(default=None, alias="headId")
+    head_id: str | None = None
     messages: list[ConversationHistoryItemResponse]
 
 
-class AppendConversationHistoryResponse(BaseModel):
+class AppendConversationHistoryResponse(CamelModel):
     """History append result payload."""
 
-    model_config = ConfigDict(populate_by_name=True)
-
     appended: bool
-    head_id: str | None = Field(default=None, alias="headId")
+    head_id: str | None = None
