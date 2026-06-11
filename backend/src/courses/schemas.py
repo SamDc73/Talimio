@@ -87,6 +87,11 @@ class LessonDetailResponse(BaseModel):
     version_label: str | None = Field(None, description="Selected lesson version label")
     pass_label: str | None = Field(None, description="Selected lesson pass label")
     source_reason: str | None = Field(None, description="Why the selected version exists")
+    generation_status: CourseGenerationStatus = Field(
+        "ready",
+        description="Lesson content generation lifecycle status for the selected version",
+    )
+    generation_error: str | None = Field(None, description="Failure detail when generation_status is failed")
     available_versions: list[LessonVersionSummary] = Field(
         default_factory=list,
         description="Available version history for this lesson",

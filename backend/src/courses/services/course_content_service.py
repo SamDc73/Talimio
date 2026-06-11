@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
 
-from fastapi import BackgroundTasks
 from opentelemetry import trace
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -28,6 +27,11 @@ from src.courses.models import (
     Lesson,
 )
 from src.courses.services.course_attachments_service import CourseAttachmentsService
+from src.courses.services.generation_jobs import (
+    defer_course_outline_generation,
+    defer_lesson_version_generation,
+)
+from src.courses.services.lesson_version_service import LessonVersionService
 from src.database.session import async_session_maker
 from src.exceptions import NotFoundError
 
@@ -61,31 +65,16 @@ class CourseContentService:
         self,
         data: Mapping[str, object],
         user_id: uuid.UUID,
-        background_tasks: BackgroundTasks | None = None,
         book_ids: Sequence[uuid.UUID] | None = None,
         image_data_urls: Sequence[str] | None = None,
     ) -> Course:
-        """Create a new course and populate its lessons."""
-        return await self._create_course_with_session(
-            self.session,
-            data,
-            user_id,
-            background_tasks=background_tasks,
-            book_ids=book_ids,
-            image_data_urls=image_data_urls,
-        )
+        """Create a draft course in a ``generating`` state and defer outline generation.
 
-    async def _create_course_with_session(
-        self,
-        session: AsyncSession,
-        data: Mapping[str, object],
-        user_id: uuid.UUID,
-        *,
-        background_tasks: BackgroundTasks | None = None,
-        book_ids: Sequence[uuid.UUID] | None = None,
-        image_data_urls: Sequence[str] | None = None,
-    ) -> Course:
-        """Create a course using the provided session."""
+        Returns immediately; the procrastinate worker builds the outline and
+        eager-enqueues lesson content. The deferred job commits atomically with
+        the draft course row so a crash never leaves an enqueue without a course.
+        """
+        session = self.session
         session_data = dict(data)
         is_adaptive = bool(session_data.get("adaptive_enabled"))
         prompt_text = self._normalize_prompt_text(session_data.get("prompt", ""))
@@ -96,6 +85,8 @@ class CourseContentService:
         if not course.title or course.title == "Draft course":
             course.title = f"Generating: {prompt_text[:30]}..." if prompt_text else "Generating course..."
         course.generation_status = "generating"
+        # The prompt is needed by the outline job; stash it where the job reloads it.
+        course.description = prompt_text or course.description
 
         session.add(course)
         await session.flush()
@@ -105,137 +96,155 @@ class CourseContentService:
             # Attachment rows land in the same transaction as the course row;
             # generation never blocks the request on book embedding.
             await CourseAttachmentsService(session).attach_books(course_id, user_id, linked_book_ids)
+
+        await defer_course_outline_generation(
+            session,
+            course_id=course_id,
+            user_id=user_id,
+            image_data_urls=image_payload,
+            book_ids=linked_book_ids,
+        )
         await session.commit()
 
-        if background_tasks is not None:
-            background_tasks.add_task(
-                self._generate_course_background,
-                course_id,
-                dict(data),
-                user_id,
-                image_payload,
-                linked_book_ids,
-            )
-            logger.info(
-                "courses.generation.scheduled",
-                extra={
-                    "course_id": str(course_id),
-                    "user_id": str(user_id),
-                    "image_count": len(image_payload),
-                    "book_count": len(linked_book_ids),
-                    "adaptive_enabled": is_adaptive,
-                },
-            )
-        else:
-            await self._generate_course_background(
-                course_id,
-                dict(data),
-                user_id,
-                image_payload,
-                linked_book_ids,
-                raise_errors=True,
-            )
-            await session.refresh(course)
-
+        logger.info(
+            "courses.generation.scheduled",
+            extra={
+                "course_id": str(course_id),
+                "user_id": str(user_id),
+                "image_count": len(image_payload),
+                "book_count": len(linked_book_ids),
+                "adaptive_enabled": is_adaptive,
+            },
+        )
         return course
 
-    async def _generate_course_background(
+    async def run_outline_generation_job(
         self,
-        course_id: uuid.UUID,
-        data: Mapping[str, object],
-        user_id: uuid.UUID,
-        image_data_urls: Sequence[str] | None = None,
-        book_ids: Sequence[uuid.UUID] | None = None,
         *,
-        raise_errors: bool = False,
+        course_id: uuid.UUID,
+        user_id: uuid.UUID,
+        image_data_urls: Sequence[str],
+        book_ids: Sequence[uuid.UUID],
     ) -> None:
+        """Job body: build the outline in this dedicated session and eager-enqueue lesson content.
+
+        Owns its own commit/rollback. The course's ``description`` still holds the
+        original prompt (set at draft creation); it is overwritten with the
+        generated description once the outline lands.
+        """
         tracer = trace.get_tracer(__name__)
-        with tracer.start_as_current_span("courses.generation.background") as span:
-            async with async_session_maker() as session:
-                module_count = 0
-                lesson_count = 0
+        with tracer.start_as_current_span("courses.generation.outline") as span:
+            session = self.session
+            module_count = 0
+            lesson_count = 0
+            try:
+                span.set_attribute("app.course_id", str(course_id))
+                span.set_attribute("enduser.id", str(user_id))
+
+                course = await session.get(Course, course_id)
+                if course is None:
+                    logger.warning("courses.generation.course_missing", extra={"course_id": str(course_id)})
+                    course_missing = True
+                    span.set_attribute("app.course_generation.course_missing", course_missing)
+                    return
+                if course.generation_status == "ready":
+                    return  # a prior attempt already finished
+                if course.generation_status == "failed":
+                    # Retry of a previously-failed attempt: re-arm the generating state.
+                    course.generation_status = "generating"
+                    await session.commit()
+
+                is_adaptive = bool(course.adaptive_enabled)
+                prompt_text = self._normalize_prompt_text(course.description)
+                image_payload = list(image_data_urls)
+                book_id_list = list(book_ids)
+                span.set_attribute("app.adaptive_enabled", is_adaptive)
+                span.set_attribute("app.course_image_count", len(image_payload))
+                span.set_attribute("app.course_book_count", len(book_id_list))
+
+                logger.info(
+                    "courses.generation.started",
+                    extra={
+                        "course_id": str(course_id),
+                        "user_id": str(user_id),
+                        "image_count": len(image_payload),
+                        "book_count": len(book_id_list),
+                        "adaptive_enabled": is_adaptive,
+                    },
+                )
+
+                module_count, lesson_count = await self._build_and_persist_generated_course(
+                    session=session,
+                    course=course,
+                    session_data={},
+                    prompt_text=prompt_text,
+                    is_adaptive=is_adaptive,
+                    user_id=user_id,
+                    image_data_urls=image_payload,
+                    book_ids=book_id_list,
+                )
+                await self._handle_post_creation(session=session, course=course)
+                course.generation_status = "ready"
+                await self._enqueue_lesson_content_generation(session=session, course_id=course_id, user_id=user_id)
+                await session.commit()
+
+                span.set_attribute("app.course_module_count", module_count)
+                span.set_attribute("app.course_lesson_count", lesson_count)
+                logger.info(
+                    "courses.generation.completed",
+                    extra={
+                        "course_id": str(course_id),
+                        "user_id": str(user_id),
+                        "module_count": module_count,
+                        "lesson_count": lesson_count,
+                    },
+                )
+            except Exception as error:
+                span.record_exception(error)
+                logger.exception(
+                    "courses.generation.failed",
+                    extra={
+                        "course_id": str(course_id),
+                        "user_id": str(user_id),
+                        "module_count": module_count,
+                        "lesson_count": lesson_count,
+                    },
+                )
                 try:
-                    span.set_attribute("app.course_id", str(course_id))
-                    span.set_attribute("enduser.id", str(user_id))
+                    await session.rollback()
+                except SQLAlchemyError:
+                    logger.exception("courses.generation.rollback_error", extra={"course_id": str(course_id)})
+                await self._mark_generation_failed(course_id)
+                raise
 
-                    course = await session.get(Course, course_id)
-                    if not course:
-                        logger.warning("courses.generation.course_missing", extra={"course_id": str(course_id)})
-                        course_missing = True
-                        span.set_attribute("app.course_generation.course_missing", course_missing)
-                        await session.rollback()
-                        return
+    async def _enqueue_lesson_content_generation(
+        self,
+        *,
+        session: AsyncSession,
+        course_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        """Eager-enqueue first-pass content for each generated lesson.
 
-                    session_data = dict(data)
-                    is_adaptive = bool(session_data.get("adaptive_enabled"))
-                    prompt_text = self._normalize_prompt_text(session_data.pop("prompt", None))
-                    image_payload = list(image_data_urls or [])
-                    book_ids = list(book_ids or [])
-                    span.set_attribute("app.adaptive_enabled", is_adaptive)
-                    span.set_attribute("app.course_image_count", len(image_payload))
-                    span.set_attribute("app.course_book_count", len(book_ids))
-
-                    logger.info(
-                        "courses.generation.started",
-                        extra={
-                            "course_id": str(course_id),
-                            "user_id": str(user_id),
-                            "image_count": len(image_payload),
-                            "book_count": len(book_ids),
-                            "adaptive_enabled": is_adaptive,
-                        },
-                    )
-                    await session.commit()
-
-                    module_count, lesson_count = await self._build_and_persist_generated_course(
-                        session=session,
-                        course=course,
-                        session_data=session_data,
-                        prompt_text=prompt_text,
-                        is_adaptive=is_adaptive,
-                        user_id=user_id,
-                        image_data_urls=image_payload,
-                        book_ids=book_ids,
-                    )
-                    await session.commit()
-
-                    await session.refresh(course)
-                    await self._handle_post_creation(
-                        session=session,
-                        course=course,
-                        background_tasks=None,
-                    )
-                    course.generation_status = "ready"
-                    await session.commit()
-                    span.set_attribute("app.course_module_count", module_count)
-                    span.set_attribute("app.course_lesson_count", lesson_count)
-                    logger.info(
-                        "courses.generation.completed",
-                        extra={
-                            "course_id": str(course_id),
-                            "user_id": str(user_id),
-                            "module_count": module_count,
-                            "lesson_count": lesson_count,
-                        },
-                    )
-                except Exception as error:
-                    span.record_exception(error)
-                    logger.exception(
-                        "courses.generation.failed",
-                        extra={
-                            "course_id": str(course_id),
-                            "user_id": str(user_id),
-                            "module_count": module_count,
-                            "lesson_count": lesson_count,
-                        },
-                    )
-                    try:
-                        await session.rollback()
-                    except SQLAlchemyError:
-                        logger.exception("courses.generation.rollback_error", extra={"course_id": str(course_id)})
-                    await self._mark_generation_failed(course_id)
-                    if raise_errors:
-                        raise
+        Pre-generation means lessons are usually ``ready`` before the user opens
+        them; the per-version queueing lock makes lazy re-enqueues on read free.
+        """
+        lesson_version_service = LessonVersionService(session)
+        lessons = (
+            (await session.execute(select(Lesson).where(Lesson.course_id == course_id))).scalars().all()
+        )
+        for lesson in lessons:
+            if (lesson.content or "").strip():
+                continue
+            pending_version = await lesson_version_service.get_or_create_pending_initial_version(lesson=lesson)
+            if pending_version.generation_status != "generating":
+                continue
+            await defer_lesson_version_generation(
+                session,
+                version_id=pending_version.id,
+                user_id=user_id,
+                generation_mode="first_pass",
+            )
 
     async def _mark_generation_failed(self, course_id: uuid.UUID) -> None:
         """Best-effort flip of a course to the failed generation status.
@@ -565,27 +574,10 @@ class CourseContentService:
         *,
         session: AsyncSession,
         course: Course,
-        background_tasks: BackgroundTasks | None,
     ) -> None:
-        """Kick off background work for adaptive embeddings."""
+        """Backfill adaptive concept embeddings and confusors inside the outline job session."""
         if course.adaptive_enabled:
-            await self._handle_adaptive_embeddings(
-                session=session,
-                course_id=course.id,
-                background_tasks=background_tasks,
-            )
-
-    async def _handle_adaptive_embeddings(
-        self,
-        *,
-        session: AsyncSession,
-        course_id: uuid.UUID,
-        background_tasks: BackgroundTasks | None,
-    ) -> None:
-        if background_tasks is not None:
-            background_tasks.add_task(self._run_background_embeddings, course_id)
-            return
-        await self._run_embedding_pipeline(session, course_id)
+            await self._run_embedding_pipeline(session, course.id)
 
     async def _run_embedding_pipeline(
         self,
@@ -601,25 +593,6 @@ class CourseContentService:
             pairs = 0
         await session.flush()
         return updated, pairs
-
-    async def _run_background_embeddings(self, course_id: uuid.UUID) -> None:
-        """Generate embeddings for any concepts that were deferred and compute confusors.
-
-        Runs both steps in a single background task to ensure confusor computation
-        sees finalized embeddings.
-        """
-        try:
-            async with async_session_maker() as embedding_session:
-                updated, pairs = await self._run_embedding_pipeline(embedding_session, course_id)
-                await embedding_session.commit()
-                logger.info(
-                    "Background embedding task backfilled %s concepts and computed %s confusor pairs for course %s",
-                    updated,
-                    pairs,
-                    course_id,
-                )
-        except (SQLAlchemyError, RuntimeError, TimeoutError, TypeError, ValueError):
-            logger.exception("courses.background_embedding.failed", extra={"course_id": str(course_id)})
 
     async def update_course(
         self,
