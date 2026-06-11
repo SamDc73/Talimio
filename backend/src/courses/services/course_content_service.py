@@ -1,17 +1,15 @@
 """Course content service for course-specific operations."""
 
 import asyncio
-import base64
 import json
 import logging
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import cast
 
-from fastapi import BackgroundTasks, UploadFile
+from fastapi import BackgroundTasks
 from opentelemetry import trace
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -39,22 +37,12 @@ from .setup_commands_normalizer import normalize_setup_commands_payload
 
 logger = logging.getLogger(__name__)
 
-_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
-
 
 @dataclass(slots=True)
 class AdaptiveConceptBuildResult:
     """Container for adaptive concept seeding results."""
 
     concepts_by_index: list[Concept]
-
-
-@dataclass(slots=True)
-class CourseAttachmentIngestionResult:
-    """Container for uploaded course attachments and their searchability."""
-
-    image_data_urls: list[str]
-    has_searchable_documents: bool
 
 
 type PromptPayload = str | list[Mapping[str, object]]
@@ -74,8 +62,8 @@ class CourseContentService:
         data: Mapping[str, object],
         user_id: uuid.UUID,
         background_tasks: BackgroundTasks | None = None,
-        attachments: list[UploadFile] | None = None,
         book_ids: Sequence[uuid.UUID] | None = None,
+        image_data_urls: Sequence[str] | None = None,
     ) -> Course:
         """Create a new course and populate its lessons."""
         return await self._create_course_with_session(
@@ -83,8 +71,8 @@ class CourseContentService:
             data,
             user_id,
             background_tasks=background_tasks,
-            attachments=attachments,
             book_ids=book_ids,
+            image_data_urls=image_data_urls,
         )
 
     async def _create_course_with_session(
@@ -94,14 +82,15 @@ class CourseContentService:
         user_id: uuid.UUID,
         *,
         background_tasks: BackgroundTasks | None = None,
-        attachments: list[UploadFile] | None = None,
         book_ids: Sequence[uuid.UUID] | None = None,
+        image_data_urls: Sequence[str] | None = None,
     ) -> Course:
         """Create a course using the provided session."""
         session_data = dict(data)
         is_adaptive = bool(session_data.get("adaptive_enabled"))
         prompt_text = self._normalize_prompt_text(session_data.get("prompt", ""))
         linked_book_ids = await self._validate_linked_books(session, user_id, book_ids or [])
+        image_payload = list(image_data_urls or [])
 
         course = self._build_draft_course(session_data=session_data, user_id=user_id, is_adaptive=is_adaptive)
         if not course.title or course.title == "Draft course":
@@ -112,6 +101,10 @@ class CourseContentService:
         await session.flush()
         await session.refresh(course)
         course_id = course.id
+        if linked_book_ids:
+            # Attachment rows land in the same transaction as the course row;
+            # generation never blocks the request on book embedding.
+            await CourseAttachmentsService(session).attach_books(course_id, user_id, linked_book_ids)
         await session.commit()
 
         if background_tasks is not None:
@@ -120,7 +113,7 @@ class CourseContentService:
                 course_id,
                 dict(data),
                 user_id,
-                attachments,
+                image_payload,
                 linked_book_ids,
             )
             logger.info(
@@ -128,7 +121,7 @@ class CourseContentService:
                 extra={
                     "course_id": str(course_id),
                     "user_id": str(user_id),
-                    "attachment_count": len(attachments or []),
+                    "image_count": len(image_payload),
                     "book_count": len(linked_book_ids),
                     "adaptive_enabled": is_adaptive,
                 },
@@ -138,7 +131,7 @@ class CourseContentService:
                 course_id,
                 dict(data),
                 user_id,
-                attachments,
+                image_payload,
                 linked_book_ids,
                 raise_errors=True,
             )
@@ -151,7 +144,7 @@ class CourseContentService:
         course_id: uuid.UUID,
         data: Mapping[str, object],
         user_id: uuid.UUID,
-        attachments: list[UploadFile] | None = None,
+        image_data_urls: Sequence[str] | None = None,
         book_ids: Sequence[uuid.UUID] | None = None,
         *,
         raise_errors: bool = False,
@@ -175,10 +168,10 @@ class CourseContentService:
                     session_data = dict(data)
                     is_adaptive = bool(session_data.get("adaptive_enabled"))
                     prompt_text = self._normalize_prompt_text(session_data.pop("prompt", None))
-                    attachments = attachments or []
+                    image_payload = list(image_data_urls or [])
                     book_ids = list(book_ids or [])
                     span.set_attribute("app.adaptive_enabled", is_adaptive)
-                    span.set_attribute("app.course_attachment_count", len(attachments))
+                    span.set_attribute("app.course_image_count", len(image_payload))
                     span.set_attribute("app.course_book_count", len(book_ids))
 
                     logger.info(
@@ -186,7 +179,7 @@ class CourseContentService:
                         extra={
                             "course_id": str(course_id),
                             "user_id": str(user_id),
-                            "attachment_count": len(attachments),
+                            "image_count": len(image_payload),
                             "book_count": len(book_ids),
                             "adaptive_enabled": is_adaptive,
                         },
@@ -199,7 +192,7 @@ class CourseContentService:
                         prompt_text=prompt_text,
                         is_adaptive=is_adaptive,
                         user_id=user_id,
-                        attachments=attachments,
+                        image_data_urls=image_payload,
                         book_ids=book_ids,
                     )
                     await session.commit()
@@ -263,34 +256,27 @@ class CourseContentService:
         prompt_text: str,
         is_adaptive: bool,
         user_id: uuid.UUID,
-        attachments: list[UploadFile],
+        image_data_urls: Sequence[str],
         book_ids: Sequence[uuid.UUID],
     ) -> tuple[int, int]:
-        if attachments or book_ids:
+        image_payload = list(image_data_urls)
+        if book_ids:
+            # Attachment rows were created with the course row; embedding any
+            # pending books here keeps grounding off the request path.
             rag_service = RAGService()
-            attachment_result = await self._ingest_course_attachments(
-                rag_service=rag_service,
-                session=session,
-                user_id=user_id,
-                course_id=course.id,
-                attachments=attachments,
-                book_ids=book_ids,
-            )
+            await rag_service.ensure_attached_books_processed(session, course.id)
             prompt_text = await self._build_augmented_prompt(
                 rag_service=rag_service,
                 session=session,
                 user_id=user_id,
                 course_id=course.id,
                 prompt_text=prompt_text,
-                has_searchable_documents=attachment_result.has_searchable_documents,
-                image_count=len(attachment_result.image_data_urls),
-                has_linked_books=bool(book_ids),
+                has_searchable_documents=True,
+                image_count=len(image_payload),
+                has_linked_books=True,
             )
-            image_data_urls = attachment_result.image_data_urls
-        else:
-            image_data_urls = []
 
-        prompt_payload = self._build_prompt_payload(prompt_text, image_data_urls)
+        prompt_payload = self._build_prompt_payload(prompt_text, image_payload)
         adaptive_structure = await self._build_adaptive_structure(
             is_adaptive=is_adaptive,
             prompt=prompt_payload,
@@ -428,39 +414,6 @@ class CourseContentService:
                 raise NotFoundError(resource_type, str(book_id))
         return linked_book_ids
 
-    async def _ingest_course_attachments(
-        self,
-        *,
-        rag_service: RAGService,
-        session: AsyncSession,
-        user_id: uuid.UUID,
-        course_id: uuid.UUID,
-        attachments: list[UploadFile],
-        book_ids: Sequence[uuid.UUID],
-    ) -> CourseAttachmentIngestionResult:
-        """Inline images as LLM data URLs and attach books for RAG search."""
-        image_data_urls: list[str] = []
-        has_searchable_documents = False
-        for attachment in attachments:
-            raw_filename = attachment.filename or "attachment"
-            filename = Path(raw_filename).name
-            extension = Path(filename).suffix.lower()
-            file_content = await attachment.read()
-            if extension in _IMAGE_EXTENSIONS:
-                data_url = self._build_image_data_url(file_content, attachment.content_type, extension)
-                image_data_urls.append(data_url)
-        if book_ids:
-            await CourseAttachmentsService(session).attach_books(course_id, user_id, book_ids)
-            # Running inside the background generation task, so embedding
-            # pending books here serializes attachment -> grounding without
-            # blocking the create request.
-            await rag_service.ensure_attached_books_processed(session, course_id)
-            has_searchable_documents = True
-        return CourseAttachmentIngestionResult(
-            image_data_urls=image_data_urls,
-            has_searchable_documents=has_searchable_documents,
-        )
-
     async def _build_augmented_prompt(
         self,
         *,
@@ -562,21 +515,13 @@ class CourseContentService:
 
         return not is_course_request
 
-    def _build_prompt_payload(self, prompt_text: str, image_data_urls: list[str]) -> PromptPayload:
+    def _build_prompt_payload(self, prompt_text: str, image_data_urls: Sequence[str]) -> PromptPayload:
         """Return text-only or multimodal prompt payload for course generation."""
         if not image_data_urls:
             return prompt_text
 
         image_parts = [{"type": "image_url", "image_url": {"url": url}} for url in image_data_urls]
         return [{"type": "text", "text": prompt_text}, *image_parts]
-
-    def _build_image_data_url(self, file_content: bytes, content_type: str | None, extension: str) -> str:
-        """Build a base64 data URL for image inputs."""
-        mime_type = content_type
-        if not mime_type:
-            mime_type = "image/png" if extension == ".png" else "image/jpeg"
-        encoded = base64.b64encode(file_content).decode("utf-8")
-        return f"data:{mime_type};base64,{encoded}"
 
     def _apply_course_updates(self, course: Course, session_data: MutableCoursePayload) -> None:
         """Apply generated payload fields to the draft course."""

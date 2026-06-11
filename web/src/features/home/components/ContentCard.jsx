@@ -1,6 +1,8 @@
+import { useQueryClient } from "@tanstack/react-query"
 import { motion } from "framer-motion"
 import { Archive, MoreHorizontal, Pin, Tag, X } from "lucide-react"
 import { useState } from "react"
+import { getBookAttachmentConflict } from "@/api/contentApi"
 import { Button } from "@/components/Button"
 import { ConfirmationDialog } from "@/components/ConfirmationDialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/Popover"
@@ -9,6 +11,7 @@ import TagChip from "@/features/home/components/TagChip"
 import TagEditModal from "@/features/home/components/TagEditModal"
 import { useArchiveContent, useDeleteContent } from "@/features/home/hooks/use-content-queries"
 import { VARIANTS } from "@/features/home/utils/contentConstants"
+import { contentKeys } from "@/lib/content-query-cache"
 
 function formatDuration(seconds) {
 	if (!seconds) return "Unknown duration"
@@ -24,11 +27,13 @@ function formatDuration(seconds) {
 function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index, onClick }) {
 	const [hover, setHover] = useState(false)
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+	const [attachmentConflict, setAttachmentConflict] = useState(null)
 	const [showTagEditModal, setShowTagEditModal] = useState(false)
 
 	// Use React Query mutations
 	const deleteContentMutation = useDeleteContent()
 	const archiveContentMutation = useArchiveContent()
+	const queryClient = useQueryClient()
 
 	const progressValue = item.progress ?? 0
 	const isArchived = item.status === "archived"
@@ -46,21 +51,71 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 		return action
 	}
 
+	const resolveCourseTitles = (courseIds) => {
+		const titlesById = new Map()
+		for (const [, data] of queryClient.getQueriesData({ queryKey: contentKeys.all })) {
+			const items = data?.items || data?.pages?.flatMap((page) => page?.items || []) || []
+			for (const cached of items) {
+				if (cached?.type === "course" && cached?.id) {
+					titlesById.set(String(cached.id), cached.title)
+				}
+			}
+		}
+		return courseIds.map((courseId) => titlesById.get(String(courseId))).filter(Boolean)
+	}
+
 	const handleConfirmDelete = () => {
 		// Close dialog immediately for instant feedback
 		setShowDeleteConfirm(false)
 
 		// Use React Query mutation (handles optimistic update, backend call, notifications)
-		deleteContentMutation.mutate({
-			itemId: item.id,
-			itemType: item.type,
-		})
+		deleteContentMutation.mutate(
+			{
+				itemId: item.id,
+				itemType: item.type,
+			},
+			{
+				onError: (error) => {
+					// Books attached to courses return 409; surface the cascade confirm.
+					const conflict = getBookAttachmentConflict(error)
+					if (conflict) {
+						setAttachmentConflict({
+							...conflict,
+							courseTitles: resolveCourseTitles(conflict.courseIds),
+						})
+					}
+				},
+			}
+		)
 
 		// Notify parent if provided (e.g., to clear pins)
 		if (onDelete) {
 			onDelete(item.id, item.type)
 		}
 	}
+
+	const handleConfirmForceDelete = () => {
+		setAttachmentConflict(null)
+		deleteContentMutation.mutate({
+			itemId: item.id,
+			itemType: item.type,
+			force: true,
+		})
+		if (onDelete) {
+			onDelete(item.id, item.type)
+		}
+	}
+
+	const attachmentConflictDescription = (() => {
+		if (!attachmentConflict) return ""
+		const count = attachmentConflict.attachmentCount
+		const titles = attachmentConflict.courseTitles || []
+		const courseLabel =
+			titles.length > 0
+				? `${count} course${count === 1 ? "" : "s"} (${titles.join(", ")})`
+				: `${count} course${count === 1 ? "" : "s"}`
+		return `This book is attached to ${courseLabel}. Deleting will remove it from all of them, along with its file and embeddings.`
+	})()
 
 	const handleArchive = () => {
 		// Prevent multiple clicks
@@ -220,6 +275,15 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 				description="This action cannot be undone. This item will be permanently removed from your library."
 				itemName={item.title}
 				onConfirm={handleConfirmDelete}
+			/>
+
+			<ConfirmationDialog
+				open={Boolean(attachmentConflict)}
+				onOpenChange={(open) => !open && setAttachmentConflict(null)}
+				title="Book is attached to courses"
+				description={attachmentConflictDescription}
+				confirmText="Delete anyway"
+				onConfirm={handleConfirmForceDelete}
 			/>
 
 			<TagEditModal

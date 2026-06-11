@@ -1,12 +1,13 @@
 
 """Pydantic schemas for the unified courses API."""
 
+import re
 import uuid
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
 
 from src.config.schema_casing import to_camel
 from src.courses.models import CourseGenerationStatus
@@ -194,6 +195,38 @@ class CourseUpdate(BaseModel):
     adaptive_enabled: bool | None = Field(None, description="Enable or disable adaptive scheduling")
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+_IMAGE_DATA_URL_PREFIX = re.compile(r"^data:image/(png|jpe?g);base64,")
+# Roughly 6MB of binary payload once base64 overhead is stripped.
+_MAX_IMAGE_DATA_URL_CHARS = 8_000_000
+
+
+class CourseCreateRequest(BaseModel):
+    """JSON body for course creation: books by reference, images inline."""
+
+    prompt: str = Field(min_length=1, max_length=20_000, description="Course generation prompt")
+    adaptive_enabled: bool = Field(default=False, description="Enable adaptive scheduling")
+    book_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50, description="Books to attach")
+    image_data_urls: list[str] = Field(
+        default_factory=list,
+        max_length=8,
+        description="Inline base64 image data URLs prepended to the LLM prompt; never persisted",
+    )
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+    @field_validator("image_data_urls")
+    @classmethod
+    def _validate_image_data_urls(cls, values: list[str]) -> list[str]:
+        for value in values:
+            if not _IMAGE_DATA_URL_PREFIX.match(value):
+                message = "Image attachments must be data:image/(png|jpg|jpeg);base64 URLs"
+                raise ValueError(message)
+            if len(value) > _MAX_IMAGE_DATA_URL_CHARS:
+                message = "Image attachment exceeds the size budget"
+                raise ValueError(message)
+        return values
 
 
 class CourseAttachmentRead(BaseModel):
