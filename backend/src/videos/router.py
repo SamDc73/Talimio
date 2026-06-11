@@ -2,9 +2,9 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
-from pydantic import BaseModel
 
 from src.auth import CurrentAuth
+from src.config.schema_casing import CamelModel
 from src.videos.facade import VideosFacade
 from src.videos.schemas import (
     VideoChapterProgressSync,
@@ -22,7 +22,7 @@ from src.videos.schemas import (
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 
 
-class VideoChapterExtractionResponse(BaseModel):
+class VideoChapterExtractionResponse(CamelModel):
     """Created chapter count and chapter payloads."""
 
     count: int
