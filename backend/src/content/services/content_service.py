@@ -14,8 +14,8 @@ from src.books.models import Book
 from src.content.schemas import ContentListResponse, ContentStatusFilter, ContentType, normalize_content_type
 from src.content.services.content_transform_service import ContentProjectionRow, ContentTransformService
 from src.content.services.query_builder_service import QueryBuilderService
-from src.courses.models import Course, CourseConcept, UserConceptState
-from src.exceptions import NotFoundError
+from src.courses.models import Course, CourseAttachment, CourseConcept, UserConceptState
+from src.exceptions import ConflictError, NotFoundError
 from src.videos.models import Video
 
 
@@ -338,11 +338,44 @@ class ContentService:
             )
         )
 
+    async def _ensure_book_detached_or_forced(
+        self,
+        session: AsyncSession,
+        book_id: uuid.UUID,
+        *,
+        force: bool,
+    ) -> None:
+        """Raise 409 BOOK_HAS_ATTACHMENTS when an attached book is deleted without force."""
+        if force:
+            return
+        course_ids = (
+            (
+                await session.execute(
+                    select(CourseAttachment.course_id).where(CourseAttachment.book_id == book_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not course_ids:
+            return
+        message = "Book is attached to courses; detach it or re-send with force=true"
+        raise ConflictError(
+            message,
+            error_code="BOOK_HAS_ATTACHMENTS",
+            metadata={
+                "attachmentCount": len(course_ids),
+                "courseIds": [str(course_id) for course_id in course_ids],
+            },
+        )
+
     async def delete_content(
         self,
         content_type: ContentType,
         content_id: uuid.UUID,
         user_id: uuid.UUID,
+        *,
+        force: bool = False,
     ) -> None:
         """Delete a content item and all related references."""
         canonical_content_type = normalize_content_type(content_type)
@@ -354,6 +387,9 @@ class ContentService:
         row = await session.get(model, content_id)
         if row is None or getattr(row, "user_id", None) != user_id:
             raise NotFoundError(content_type.value, str(content_id))
+
+        if canonical_content_type == ContentType.BOOK:
+            await self._ensure_book_detached_or_forced(session, content_id, force=force)
 
         # Remove any stored files that rely on row attributes before deleting the row.
         if content_type == ContentType.BOOK:

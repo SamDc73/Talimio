@@ -25,6 +25,8 @@ from src.courses.schemas import (
     CodeExecuteRequest,
     CodeExecuteResponse,
     ConceptReviewRequest,
+    CourseAttachmentBulkCreate,
+    CourseAttachmentRead,
     CourseListResponse,
     CourseResponse,
     CourseUpdate,
@@ -47,6 +49,7 @@ from src.courses.schemas import (
     SelfAssessmentResponse,
 )
 from src.courses.services.code_execution_service import CodeExecutionService, WorkspaceFile
+from src.courses.services.course_attachments_service import CourseAttachmentsService
 
 
 router = APIRouter(
@@ -70,6 +73,11 @@ def get_courses_facade(auth: CurrentAuth) -> CoursesFacade:
 def get_code_execution_service(auth: CurrentAuth) -> CodeExecutionService:
     """Get code execution service instance."""
     return CodeExecutionService(auth.session)
+
+
+def get_course_attachments_service(auth: CurrentAuth) -> CourseAttachmentsService:
+    """Get course attachments service instance."""
+    return CourseAttachmentsService(auth.session)
 
 
 def get_ai_service_dependency() -> AIService:
@@ -222,6 +230,38 @@ async def update_course(
     """Update a course."""
     # Exclude None fields to avoid overwriting NOT NULL columns with NULL
     return await facade.update_course(course_id, auth.user_id, request.model_dump(exclude_none=True))
+
+
+@router.get("/{course_id}/attachments")
+async def list_course_attachments(
+    course_id: uuid.UUID,
+    auth: CurrentAuth,
+    svc: Annotated[CourseAttachmentsService, Depends(get_course_attachments_service)],
+) -> list[CourseAttachmentRead]:
+    """List books attached to a course."""
+    return await svc.list_attachments(course_id, auth.user_id)
+
+
+@router.post("/{course_id}/attachments")
+async def attach_books_to_course(
+    course_id: uuid.UUID,
+    payload: CourseAttachmentBulkCreate,
+    auth: CurrentAuth,
+    svc: Annotated[CourseAttachmentsService, Depends(get_course_attachments_service)],
+) -> list[CourseAttachmentRead]:
+    """Attach books to a course idempotently; returns the full current list."""
+    return await svc.attach_books(course_id, auth.user_id, payload.book_ids)
+
+
+@router.delete("/{course_id}/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def detach_book_from_course(
+    course_id: uuid.UUID,
+    attachment_id: uuid.UUID,
+    auth: CurrentAuth,
+    svc: Annotated[CourseAttachmentsService, Depends(get_course_attachments_service)],
+) -> None:
+    """Delete one attachment link; the book stays in the library."""
+    await svc.detach(course_id, attachment_id, auth.user_id)
 
 
 @router.get("/{course_id}/lessons/{lesson_id}")

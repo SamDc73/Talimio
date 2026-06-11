@@ -310,15 +310,26 @@ class VectorRAG:
     def _build_search_scope(
         *, doc_type: str, doc_id: uuid.UUID | None, course_id: uuid.UUID | None
     ) -> tuple[str, dict[str, object]]:
+        if course_id:
+            # Course scope is the union of legacy copied chunks (doc_type='course',
+            # metadata-keyed) and book chunks reachable through course_attachments.
+            # The legacy arm disappears with the course_documents migration.
+            scope = (
+                "("
+                "(doc_type = :doc_type AND metadata->>'course_id' = :course_id)"
+                " OR (doc_type = 'book' AND doc_id IN ("
+                "SELECT book_id FROM course_attachments WHERE course_id = CAST(:course_id AS uuid)"
+                "))"
+                ")"
+            )
+            return scope, {"doc_type": doc_type, "course_id": str(course_id)}
+
         predicates = ["doc_type = :doc_type"]
         params: dict[str, object] = {"doc_type": doc_type}
 
         if doc_id:
             predicates.append("doc_id = :doc_id")
             params["doc_id"] = str(doc_id)
-        if course_id:
-            predicates.append("metadata->>'course_id' = :course_id")
-            params["course_id"] = str(course_id)
 
         return " AND ".join(predicates), params
 

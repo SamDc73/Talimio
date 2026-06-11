@@ -794,6 +794,13 @@ class RAGService:
                     WHERE chunk.doc_type = :doc_type
                       AND chunk.metadata->>'course_id' = :course_id
                     LIMIT 1
+                ) OR EXISTS (
+                    SELECT 1
+                    FROM course_attachments ca
+                    JOIN rag_document_chunks chunk
+                      ON chunk.doc_type = 'book' AND chunk.doc_id = ca.book_id
+                    WHERE ca.course_id = CAST(:course_id AS uuid)
+                    LIMIT 1
                 )
                 """,
             ),
