@@ -81,33 +81,21 @@ export function AuthProvider({ children }) {
 			const normalizedFullName = fullName.trim()
 			const normalizedEmail = email.trim().toLowerCase()
 			const normalizedUsername = (username || "").trim()
-			const response = await api.post("/auth/signup", {
+			const { message } = await api.post("/auth/signup", {
 				fullName: normalizedFullName,
 				email: normalizedEmail,
 				password,
 				username: normalizedUsername || null,
 			})
 
-			// Handle the response - it now returns data directly
-			const responseData = response
-
-			// Check if email confirmation is required
-			if (responseData.emailConfirmationRequired || !responseData.user) {
-				return {
-					success: true,
-					emailConfirmationRequired: true,
-					message: responseData.message || "Signup request received. Please sign in if your account is ready.",
-				}
+			// Signup never authenticates inline: the response is uniform regardless of
+			// whether the email already exists (anti-enumeration), so the user always
+			// signs in afterward once their account is ready.
+			return {
+				success: true,
+				emailConfirmationRequired: true,
+				message: message || "Signup request received. Please sign in if your account is ready.",
 			}
-
-			const { user } = responseData
-
-			// No token handling needed - cookies are set by backend
-			// Update state
-			setUser(user)
-			setIsAuthenticated(true)
-
-			return { success: true }
 		} catch (error) {
 			const detailMessage = getErrorDetailMessage(error)
 			return {
