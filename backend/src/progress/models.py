@@ -5,32 +5,15 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, JsonValue, field_validator
+from pydantic import Field, JsonValue, field_validator
+
+from src.config.schema_casing import CamelModel
 
 
 ContentType = Literal["book", "video", "course"]
 
 
-class ProgressMetadata(BaseModel):
-    """Type-specific metadata for progress tracking."""
-
-    # Book-specific
-    current_page: int | None = None
-    total_pages: int | None = None
-
-    # Video-specific
-    position: float | None = None  # Seconds
-    duration: float | None = None  # Total duration in seconds
-
-    # Course-specific
-    completed_lessons: list[str] | None = Field(default_factory=list)
-
-    # Generic
-    last_accessed: datetime | None = None
-    notes: str | None = None
-
-
-class ProgressUpdate(BaseModel):
+class ProgressUpdate(CamelModel):
     """Request model for updating progress."""
 
     progress_percentage: float = Field(ge=0, le=100)
@@ -43,7 +26,7 @@ class ProgressUpdate(BaseModel):
         return round(v, 2)
 
 
-class ProgressResponse(BaseModel):
+class ProgressResponse(CamelModel):
     """Response model for progress data."""
 
     id: uuid.UUID | None
