@@ -23,7 +23,7 @@ class VideoBase(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     channel: str = Field(min_length=1, max_length=255)
     channel_id: str = Field(min_length=1, max_length=50, alias="channelId")
-    duration: int = Field(gt=0, description="Duration in seconds")
+    duration: int = Field(ge=0, description="Duration in seconds (0 for live/unknown)")
     thumbnail_url: str | None = Field(None, max_length=500, alias="thumbnailUrl")
     description: str | None = None
     tags: list[str] | None = Field(default_factory=list)
