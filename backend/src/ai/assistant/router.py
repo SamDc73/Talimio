@@ -80,7 +80,7 @@ async def create_conversation(
         context_meta=request.context_meta,
     )
 
-    return CreateConversationResponse(remoteId=conversation.id)
+    return CreateConversationResponse(remote_id=conversation.id)
 
 
 @router.get("/conversations")
