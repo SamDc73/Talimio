@@ -468,7 +468,7 @@ def _add_source_routing_state(packet: dict[str, JsonValue], context_bundle: Buil
             {
                 "title": item.title,
                 "sourceType": item.source_type,
-                "documentId": item.document_id,
+                "bookId": str(item.book_id) if item.book_id else None,
                 "chunkIndex": item.chunk_index,
                 "totalChunks": item.total_chunks,
                 "relevanceScore": item.similarity,

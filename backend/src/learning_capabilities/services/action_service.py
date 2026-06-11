@@ -15,6 +15,7 @@ from src.ai.errors import AIRuntimeError
 from src.ai.models import GeneratedLesson
 from src.ai.tools.figures import build_figure_finder_function_tool
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
+from src.books.models import Book
 from src.courses.models import Course, LearningQuestion, Lesson
 from src.courses.schemas import (
     AttemptAnswerPayload,
@@ -23,18 +24,24 @@ from src.courses.schemas import (
     CourseResponse,
     PracticeDrillItem,
 )
+from src.courses.services.course_attachments_service import CourseAttachmentsService
 from src.courses.services.inline_question_materializer import InlineQuestionMaterializer
 from src.courses.services.lesson_service import LessonService
 from src.courses.services.practice_drill_service import PracticeDrillService
-from src.exceptions import ConflictError
+from src.exceptions import ConflictError, NotFoundError
 from src.learning_capabilities.errors import LearningCapabilitiesValidationError
 from src.learning_capabilities.schemas import (
     AppendCourseLessonCapabilityInput,
     AppendCourseLessonCapabilityOutput,
+    AttachBookToCourseCapabilityInput,
+    AttachBookToCourseCapabilityOutput,
     ChatConceptProbe,
+    CourseAttachmentItem,
     CourseMode,
     CreateCourseCapabilityInput,
     CreateCourseCapabilityOutput,
+    DetachBookFromCourseCapabilityInput,
+    DetachBookFromCourseCapabilityOutput,
     ExtendLessonWithContextCapabilityInput,
     GenerateConceptProbeCapabilityInput,
     GenerateConceptProbeCapabilityOutput,
@@ -58,6 +65,8 @@ class CourseCapabilityPort(Protocol):
         self,
         course_data: dict[str, object],
         user_id: uuid.UUID,
+        *,
+        book_ids: list[uuid.UUID] | None = None,
     ) -> CourseResponse:
         """Create a course from capability input."""
         ...
@@ -100,6 +109,7 @@ class LearningCapabilityActionService:
         created_course = await self._course_capability_port.create_course(
             {"prompt": payload.prompt.strip(), "adaptive_enabled": payload.adaptive_enabled},
             user_id=user_id,
+            book_ids=list(payload.book_ids),
         )
 
         result = CreateCourseCapabilityOutput(
@@ -116,6 +126,123 @@ class LearningCapabilityActionService:
         )
         _log_mutation(
             capability_name="create_course",
+            user_id=user_id,
+            payload=payload.model_dump(mode="json"),
+            result=result.model_dump(mode="json"),
+        )
+        return result
+
+    async def attach_book_to_course(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: AttachBookToCourseCapabilityInput,
+    ) -> AttachBookToCourseCapabilityOutput:
+        """Attach owned books to an owned course; idempotent on duplicates."""
+        if not payload.confirmed:
+            return await self._build_attach_confirmation(user_id=user_id, payload=payload)
+
+        attachments = await CourseAttachmentsService(self._session).attach_books(
+            payload.course_id,
+            user_id,
+            payload.book_ids,
+        )
+        result = AttachBookToCourseCapabilityOutput(
+            status="completed",
+            message="Books attached. The course now searches them as sources.",
+            course_id=payload.course_id,
+            attachments=[
+                CourseAttachmentItem(
+                    id=attachment.id,
+                    book_id=attachment.book_id,
+                    title=attachment.title,
+                    rag_status=attachment.rag_status,
+                    archived=attachment.archived,
+                    created_at=attachment.created_at,
+                )
+                for attachment in attachments
+            ],
+        )
+        _log_mutation(
+            capability_name="attach_book_to_course",
+            user_id=user_id,
+            payload=payload.model_dump(mode="json"),
+            result={"status": result.status, "attachment_count": len(result.attachments)},
+        )
+        return result
+
+    async def _build_attach_confirmation(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: AttachBookToCourseCapabilityInput,
+    ) -> AttachBookToCourseCapabilityOutput:
+        """Build confirmation copy that names the books and flags archived ones."""
+        rows = (
+            (
+                await self._session.execute(
+                    select(Book).where(Book.user_id == user_id, Book.id.in_(payload.book_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        labels = [f"{book.title} (archived)" if book.archived else book.title for book in rows]
+        book_list = ", ".join(labels) if labels else f"{len(payload.book_ids)} book(s)"
+        return AttachBookToCourseCapabilityOutput(
+            status="confirmation_required",
+            message="Attaching books changes what grounds this course.",
+            course_id=payload.course_id,
+            tool_ui=[
+                ToolUiConfirmation(
+                    title="Attach books?",
+                    message=f"Attach {book_list} to this course? Nothing is copied; archived books stay archived.",
+                    action_name="attach_book_to_course",
+                )
+            ],
+        )
+
+    async def detach_book_from_course(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: DetachBookFromCourseCapabilityInput,
+    ) -> DetachBookFromCourseCapabilityOutput:
+        """Detach one book from a course; the book and its chunks are untouched."""
+        if not payload.confirmed:
+            return DetachBookFromCourseCapabilityOutput(
+                status="confirmation_required",
+                message="Removing the book changes only this course's grounding.",
+                course_id=payload.course_id,
+                book_id=payload.book_id,
+                tool_ui=[
+                    ToolUiConfirmation(
+                        title="Remove book from course?",
+                        message=(
+                            "The book stays in your library with its file and embeddings; "
+                            "only this course's grounding changes."
+                        ),
+                        action_name="detach_book_from_course",
+                    )
+                ],
+            )
+
+        attachments_service = CourseAttachmentsService(self._session)
+        attachments = await attachments_service.list_attachments(payload.course_id, user_id)
+        attachment = next((item for item in attachments if item.book_id == payload.book_id), None)
+        if attachment is None:
+            resource_type = "attachment"
+            raise NotFoundError(resource_type, str(payload.book_id))
+        await attachments_service.detach(payload.course_id, attachment.id, user_id)
+
+        result = DetachBookFromCourseCapabilityOutput(
+            status="completed",
+            message="Book removed from this course. It stays in your library.",
+            course_id=payload.course_id,
+            book_id=payload.book_id,
+        )
+        _log_mutation(
+            capability_name="detach_book_from_course",
             user_id=user_id,
             payload=payload.model_dump(mode="json"),
             result=result.model_dump(mode="json"),

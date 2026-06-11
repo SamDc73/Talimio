@@ -1,8 +1,9 @@
 """Facade entrypoint for learning capability execution."""
 
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.facade import CoursesFacade
@@ -11,11 +12,15 @@ from src.learning_capabilities.errors import LearningCapabilitiesBadRequestError
 from src.learning_capabilities.schemas import (
     AppendCourseLessonCapabilityInput,
     AppendCourseLessonCapabilityOutput,
+    AttachBookToCourseCapabilityInput,
+    AttachBookToCourseCapabilityOutput,
     BuildContextBundleCapabilityInput,
     BuildContextBundleCapabilityOutput,
     CapabilityDescriptor,
     CreateCourseCapabilityInput,
     CreateCourseCapabilityOutput,
+    DetachBookFromCourseCapabilityInput,
+    DetachBookFromCourseCapabilityOutput,
     ExtendLessonWithContextCapabilityInput,
     GenerateConceptProbeCapabilityInput,
     GenerateConceptProbeCapabilityOutput,
@@ -32,9 +37,15 @@ from src.learning_capabilities.schemas import (
     GetLessonWindowsCapabilityInput,
     GetLessonWindowsCapabilityOutput,
     LessonMutationCapabilityOutput,
+    ListBooksCapabilityInput,
+    ListBooksCapabilityOutput,
+    ListCourseAttachmentsCapabilityInput,
+    ListCourseAttachmentsCapabilityOutput,
     ListRelevantCoursesCapabilityInput,
     ListRelevantCoursesCapabilityOutput,
     RegenerateLessonWithContextCapabilityInput,
+    SearchBooksCapabilityInput,
+    SearchBooksCapabilityOutput,
     SearchConceptsCapabilityInput,
     SearchConceptsCapabilityOutput,
     SearchCourseSourcesCapabilityInput,
@@ -48,6 +59,11 @@ from src.learning_capabilities.services.action_service import LearningCapability
 from src.learning_capabilities.services.authorization_service import LearningCapabilityAuthorizationService
 from src.learning_capabilities.services.context_packet_service import LearningContextPacketService
 from src.learning_capabilities.services.query_service import LearningCapabilityQueryService
+
+
+# Dispatch tables erase per-capability types; inputs are validated by the
+# paired model before the handler runs.
+type _CapabilityHandler = Callable[..., Awaitable[BaseModel]]
 
 
 class LearningCapabilitiesFacade:  # noqa: PLR0904
@@ -107,6 +123,51 @@ class LearningCapabilitiesFacade:  # noqa: PLR0904
     ) -> SearchCourseSourcesCapabilityOutput:
         """Execute `search_course_sources` capability."""
         return await self._query_service.search_course_sources(user_id=user_id, payload=payload)
+
+    async def search_books(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: SearchBooksCapabilityInput,
+    ) -> SearchBooksCapabilityOutput:
+        """Execute `search_books` capability."""
+        return await self._query_service.search_books(user_id=user_id, payload=payload)
+
+    async def list_books(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: ListBooksCapabilityInput,
+    ) -> ListBooksCapabilityOutput:
+        """Execute `list_books` capability."""
+        return await self._query_service.list_books(user_id=user_id, payload=payload)
+
+    async def list_course_attachments(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: ListCourseAttachmentsCapabilityInput,
+    ) -> ListCourseAttachmentsCapabilityOutput:
+        """Execute `list_course_attachments` capability."""
+        return await self._query_service.list_course_attachments(user_id=user_id, payload=payload)
+
+    async def attach_book_to_course(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: AttachBookToCourseCapabilityInput,
+    ) -> AttachBookToCourseCapabilityOutput:
+        """Execute `attach_book_to_course` capability."""
+        return await self._action_service.attach_book_to_course(user_id=user_id, payload=payload)
+
+    async def detach_book_from_course(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: DetachBookFromCourseCapabilityInput,
+    ) -> DetachBookFromCourseCapabilityOutput:
+        """Execute `detach_book_from_course` capability."""
+        return await self._action_service.detach_book_from_course(user_id=user_id, payload=payload)
 
     async def get_course_state(
         self,
@@ -233,64 +294,28 @@ class LearningCapabilitiesFacade:  # noqa: PLR0904
         payload: Mapping[str, object],
     ) -> dict[str, object]:
         """Execute a read capability by name."""
-        if capability_name == "search_lessons":
-            result = await self.search_lessons(
-                user_id=user_id,
-                payload=SearchLessonsCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "search_concepts":
-            result = await self.search_concepts(
-                user_id=user_id,
-                payload=SearchConceptsCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "search_course_sources":
-            result = await self.search_course_sources(
-                user_id=user_id,
-                payload=SearchCourseSourcesCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "list_relevant_courses":
-            result = await self.list_relevant_courses(
-                user_id=user_id,
-                payload=ListRelevantCoursesCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "get_course_state":
-            result = await self.get_course_state(
-                user_id=user_id,
-                payload=GetCourseStateCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "get_course_outline_state":
-            result = await self.get_course_outline_state(
-                user_id=user_id,
-                payload=GetCourseOutlineStateCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "get_lesson_state":
-            result = await self.get_lesson_state(
-                user_id=user_id,
-                payload=GetLessonStateCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "get_lesson_windows":
-            result = await self.get_lesson_windows(
-                user_id=user_id,
-                payload=GetLessonWindowsCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "get_concept_tutor_context":
-            result = await self.get_concept_tutor_context(
-                user_id=user_id,
-                payload=GetConceptTutorContextCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "get_course_frontier":
-            result = await self.get_course_frontier(
-                user_id=user_id,
-                payload=GetCourseFrontierCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "build_context_bundle":
-            result = await self.build_context_bundle(
-                user_id=user_id,
-                payload=BuildContextBundleCapabilityInput.model_validate(payload),
-            )
-        else:
+        read_dispatch: dict[str, tuple[type[BaseModel], _CapabilityHandler]] = {
+            "search_lessons": (SearchLessonsCapabilityInput, self.search_lessons),
+            "search_concepts": (SearchConceptsCapabilityInput, self.search_concepts),
+            "search_course_sources": (SearchCourseSourcesCapabilityInput, self.search_course_sources),
+            "list_relevant_courses": (ListRelevantCoursesCapabilityInput, self.list_relevant_courses),
+            "search_books": (SearchBooksCapabilityInput, self.search_books),
+            "list_books": (ListBooksCapabilityInput, self.list_books),
+            "list_course_attachments": (ListCourseAttachmentsCapabilityInput, self.list_course_attachments),
+            "get_course_state": (GetCourseStateCapabilityInput, self.get_course_state),
+            "get_course_outline_state": (GetCourseOutlineStateCapabilityInput, self.get_course_outline_state),
+            "get_lesson_state": (GetLessonStateCapabilityInput, self.get_lesson_state),
+            "get_lesson_windows": (GetLessonWindowsCapabilityInput, self.get_lesson_windows),
+            "get_concept_tutor_context": (GetConceptTutorContextCapabilityInput, self.get_concept_tutor_context),
+            "get_course_frontier": (GetCourseFrontierCapabilityInput, self.get_course_frontier),
+            "build_context_bundle": (BuildContextBundleCapabilityInput, self.build_context_bundle),
+        }
+        entry = read_dispatch.get(capability_name)
+        if entry is None:
             detail = f"Unknown read capability '{capability_name}'"
             raise LearningCapabilitiesBadRequestError(detail)
+        input_model, handler = entry
+        result = await handler(user_id=user_id, payload=input_model.model_validate(payload))
         return result.model_dump(by_alias=True, mode="json")
 
     async def execute_action_capability(
@@ -301,37 +326,26 @@ class LearningCapabilitiesFacade:  # noqa: PLR0904
         payload: Mapping[str, object],
     ) -> dict[str, object]:
         """Execute a write capability by name."""
-        if capability_name == "create_course":
-            result = await self.create_course(
-                user_id=user_id,
-                payload=CreateCourseCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "append_course_lesson":
-            result = await self.append_course_lesson(
-                user_id=user_id,
-                payload=AppendCourseLessonCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "extend_lesson_with_context":
-            result = await self.extend_lesson_with_context(
-                user_id=user_id,
-                payload=ExtendLessonWithContextCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "regenerate_lesson_with_context":
-            result = await self.regenerate_lesson_with_context(
-                user_id=user_id,
-                payload=RegenerateLessonWithContextCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "generate_concept_probe":
-            result = await self.generate_concept_probe(
-                user_id=user_id,
-                payload=GenerateConceptProbeCapabilityInput.model_validate(payload),
-            )
-        elif capability_name == "submit_concept_probe_result":
-            result = await self.submit_concept_probe_result(
-                user_id=user_id,
-                payload=SubmitConceptProbeResultCapabilityInput.model_validate(payload),
-            )
-        else:
+        action_dispatch: dict[str, tuple[type[BaseModel], _CapabilityHandler]] = {
+            "create_course": (CreateCourseCapabilityInput, self.create_course),
+            "attach_book_to_course": (AttachBookToCourseCapabilityInput, self.attach_book_to_course),
+            "detach_book_from_course": (DetachBookFromCourseCapabilityInput, self.detach_book_from_course),
+            "append_course_lesson": (AppendCourseLessonCapabilityInput, self.append_course_lesson),
+            "extend_lesson_with_context": (ExtendLessonWithContextCapabilityInput, self.extend_lesson_with_context),
+            "regenerate_lesson_with_context": (
+                RegenerateLessonWithContextCapabilityInput,
+                self.regenerate_lesson_with_context,
+            ),
+            "generate_concept_probe": (GenerateConceptProbeCapabilityInput, self.generate_concept_probe),
+            "submit_concept_probe_result": (
+                SubmitConceptProbeResultCapabilityInput,
+                self.submit_concept_probe_result,
+            ),
+        }
+        entry = action_dispatch.get(capability_name)
+        if entry is None:
             detail = f"Unknown action capability '{capability_name}'"
             raise LearningCapabilitiesBadRequestError(detail)
+        input_model, handler = entry
+        result = await handler(user_id=user_id, payload=input_model.model_validate(payload))
         return result.model_dump(by_alias=True, mode="json")

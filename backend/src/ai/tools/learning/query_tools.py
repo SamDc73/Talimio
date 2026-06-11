@@ -59,7 +59,7 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
         ),
         (
             "search_course_sources",
-            "Retrieve uploaded source excerpts for one course. Use for source, reference, or document questions. Ask a follow-up if course_id is missing.",
+            "Retrieve attached book source excerpts for one course. Use for source, reference, or document questions. Ask a follow-up if course_id is missing.",
             {
                 "type": "object",
                 "additionalProperties": False,
@@ -69,10 +69,48 @@ def build_learning_query_tools(*, user_id: uuid.UUID) -> list[FunctionToolDefini
                     "limit": {"type": "integer", "minimum": 1, "maximum": 20},
                     "source_types": {
                         "type": "array",
-                        "items": {"type": "string", "enum": ["course_document"]},
+                        "items": {"type": "string", "enum": ["book"]},
                     },
                 },
                 "required": ["course_id", "query"],
+            },
+        ),
+        (
+            "search_books",
+            "Search every book in the learner's library by topic. Results carry archived and ragStatus flags; mention archived state in conversation instead of filtering.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                },
+                "required": ["query"],
+            },
+        ),
+        (
+            "list_books",
+            "List every book the learner owns with archived and ragStatus flags. Use to browse the library before attaching books to a course.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "page": {"type": "integer", "minimum": 1},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                },
+                "required": [],
+            },
+        ),
+        (
+            "list_course_attachments",
+            "List the books attached to one course with embedding status. Ask a follow-up if course_id is missing.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "course_id": {"type": "string", "format": "uuid"},
+                },
+                "required": ["course_id"],
             },
         ),
         (

@@ -15,7 +15,7 @@ CapabilityKind = Literal["read", "write", "generation"]
 ContextType = Literal["book", "video", "course"]
 CourseMode = Literal["adaptive", "standard"]
 ConceptMatchSource = Literal["embedding", "lexical"]
-CourseSourceType = Literal["course_document"]
+CourseSourceType = Literal["book"]
 TutorCauseKind = Literal["current_concept", "recent_miss", "prerequisite_gap", "semantic_confusor"]
 TutorCauseSource = Literal["course_context", "probe_event", "concept_graph", "concept_similarity"]
 TutorMove = Literal[
@@ -32,7 +32,7 @@ TutorMove = Literal[
 
 
 def _default_course_source_types() -> list[CourseSourceType]:
-    return ["course_document"]
+    return ["book"]
 
 
 def _default_tutor_moves() -> list[TutorMove]:
@@ -280,12 +280,12 @@ class CourseSourceExcerpt(BaseModel):
     """Compact course-source excerpt for assistant grounding."""
 
     course_id: uuid.UUID
-    source_type: CourseSourceType = "course_document"
+    source_type: CourseSourceType = "book"
     title: str | None = None
     excerpt: str
     similarity: float
     chunk_id: str
-    document_id: int | None = None
+    book_id: uuid.UUID | None = None
     chunk_index: int | None = None
     total_chunks: int | None = None
 
@@ -744,11 +744,129 @@ class ActionStatusMixin(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class BookMatch(BaseModel):
+    """Compact book result for AI-facing book discovery.
+
+    Carries archived and ragStatus flags; never filtered by them.
+    """
+
+    book_id: uuid.UUID
+    title: str
+    author: str | None = None
+    archived: bool = False
+    rag_status: str = "pending"
+    excerpt: str | None = None
+    similarity: float | None = None
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class SearchBooksCapabilityInput(BaseModel):
+    """Input payload for user-wide book search. No archived filter exists."""
+
+    query: str = Field(min_length=1)
+    limit: int = Field(default=8, ge=1, le=20)
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class SearchBooksCapabilityOutput(BaseModel):
+    """Output payload for user-wide book search."""
+
+    items: list[BookMatch] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class ListBooksCapabilityInput(BaseModel):
+    """Input payload for listing every book the user owns."""
+
+    page: int = Field(default=1, ge=1)
+    limit: int = Field(default=20, ge=1, le=50)
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class ListBooksCapabilityOutput(BaseModel):
+    """Output payload for the book listing capability."""
+
+    items: list[BookMatch] = Field(default_factory=list)
+    total: int = 0
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class CourseAttachmentItem(BaseModel):
+    """One course attachment with denormalized book fields."""
+
+    id: uuid.UUID
+    kind: Literal["book"] = "book"
+    book_id: uuid.UUID
+    title: str
+    rag_status: str
+    archived: bool
+    created_at: datetime
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class ListCourseAttachmentsCapabilityInput(BaseModel):
+    """Input payload for listing one course's attachments."""
+
+    course_id: uuid.UUID
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class ListCourseAttachmentsCapabilityOutput(BaseModel):
+    """Output payload for listing one course's attachments."""
+
+    course_id: uuid.UUID
+    items: list[CourseAttachmentItem] = Field(default_factory=list)
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class AttachBookToCourseCapabilityInput(BaseModel):
+    """Input payload for attaching books to a course."""
+
+    course_id: uuid.UUID
+    book_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
+    confirmed: bool = False
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class AttachBookToCourseCapabilityOutput(ActionStatusMixin):
+    """Output payload for attaching books to a course."""
+
+    course_id: uuid.UUID | None = None
+    attachments: list[CourseAttachmentItem] = Field(default_factory=list)
+
+
+class DetachBookFromCourseCapabilityInput(BaseModel):
+    """Input payload for detaching one book from a course."""
+
+    course_id: uuid.UUID
+    book_id: uuid.UUID
+    confirmed: bool = False
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
+class DetachBookFromCourseCapabilityOutput(ActionStatusMixin):
+    """Output payload for detaching one book from a course."""
+
+    course_id: uuid.UUID | None = None
+    book_id: uuid.UUID | None = None
+
+
 class CreateCourseCapabilityInput(BaseModel):
     """Input payload for course creation capability."""
 
     prompt: str = Field(min_length=1)
     adaptive_enabled: bool = False
+    book_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
     confirmed: bool = False
 
     model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
