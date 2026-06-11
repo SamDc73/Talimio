@@ -368,6 +368,17 @@ class BooksFacade:
         if file_size is None or file_size <= 0:
             message = "file_size is required for direct upload finalization"
             raise ValidationError(message)
+
+        # Confirm the browser actually completed the direct upload; otherwise we
+        # would create a library row whose /file and presigned URL 404 in storage.
+        if not await storage.exists(file_path):
+            logger.warning(
+                "books.direct_upload.object_missing",
+                extra={"user_id": str(user_id), "storage_key": file_path},
+            )
+            message = "Uploaded file was not found in storage; complete the upload before finalizing"
+            raise ValidationError(message)
+
         metadata = BookMetadata(file_type=file_type)
         resolved_file_size = file_size
         file_hash = None
