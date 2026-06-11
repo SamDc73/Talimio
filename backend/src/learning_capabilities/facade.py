@@ -3,7 +3,7 @@
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 
-from pydantic import BaseModel
+from pydantic import BaseModel  # noqa: TID251 - not an HTTP schema
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.facade import CoursesFacade

@@ -118,10 +118,14 @@ fixable = ["ALL"]
 preview = true
 future-annotations = false
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"pydantic.BaseModel".msg = "HTTP API schemas inherit src.config.schema_casing.CamelModel; for LLM structured-output or internal models mark the exception with `# noqa: TID251`."
+
 [tool.ruff.lint.flake8-type-checking]
 exempt-modules = ["typing", "typing_extensions"]
 runtime-evaluated-base-classes = [
     "pydantic.BaseModel",
+    "src.config.schema_casing.CamelModel",
     "pydantic_settings.BaseSettings",
     "sqlalchemy.orm.DeclarativeBase",
     "src.database.base.Base",

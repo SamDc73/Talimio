@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator  # noqa: TID251 - not an HTTP schema
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -9,7 +9,7 @@ from typing import TypeVar, cast
 
 import litellm
 from opentelemetry import trace
-from pydantic import BaseModel, JsonValue, ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError  # noqa: TID251 - not an HTTP schema
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_DEFAULT

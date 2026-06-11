@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Literal, cast
 if TYPE_CHECKING:
     from src.memory.models import UserProfileSlot
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field  # noqa: TID251 - not an HTTP schema
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 

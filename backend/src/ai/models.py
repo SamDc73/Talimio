@@ -4,7 +4,15 @@ import json
 import re
 from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,  # noqa: TID251 - not an HTTP schema
+    ConfigDict,
+    Field,
+    JsonValue,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 
 def _normalize_slug_text(value: object) -> str:
