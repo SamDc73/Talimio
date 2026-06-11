@@ -427,9 +427,12 @@ class LearningCapabilityQueryService:
         *,
         user_id: uuid.UUID,
         payload: ListRelevantCoursesCapabilityInput,
-        include_archived: bool = True,
     ) -> ListRelevantCoursesCapabilityOutput:
-        """List course matches with compact progress signals."""
+        """List course matches with compact progress signals.
+
+        AI-facing reads see everything the user owns; the archived flag
+        travels in the data so the model can mention it, never as a filter.
+        """
         query_service = CourseQueryService(self._session)
         progress_service = CourseProgressService(self._session)
         courses, _ = await query_service.list_courses(
@@ -437,7 +440,6 @@ class LearningCapabilityQueryService:
             page=1,
             per_page=payload.limit,
             search=payload.query.strip(),
-            include_archived=include_archived,
         )
 
         items: list[CourseMatch] = []
@@ -449,6 +451,7 @@ class LearningCapabilityQueryService:
                     title=course.title,
                     description=course.description,
                     adaptive_enabled=course.adaptive_enabled,
+                    archived=course.archived,
                     completion_percentage=_float_or_none(progress.get("completion_percentage")) or 0.0,
                 )
             )
@@ -473,6 +476,7 @@ class LearningCapabilityQueryService:
             title=course.title,
             description=course.description,
             adaptive_enabled=course.adaptive_enabled,
+            archived=course.archived,
             completion_percentage=_float_or_none(progress.get("completion_percentage")) or 0.0,
             total_lessons=_int_or_none(progress.get("total_lessons")) or len(course.modules),
             completed_lessons=completed_lessons,
@@ -493,13 +497,13 @@ class LearningCapabilityQueryService:
             page=1,
             per_page=limit,
             search=None,
-            include_archived=False,
         )
         return [
             CourseCatalogEntry(
                 course_id=course.id,
                 title=course.title,
                 adaptive_enabled=course.adaptive_enabled,
+                archived=course.archived,
             )
             for course in courses
         ]
@@ -518,7 +522,6 @@ class LearningCapabilityQueryService:
             page=1,
             per_page=limit,
             search=None,
-            include_archived=False,
         )
         adaptive_courses = [course for course in courses if course.adaptive_enabled]
         if not adaptive_courses:
@@ -546,6 +549,7 @@ class LearningCapabilityQueryService:
                 AdaptiveCatalogEntry(
                     course_id=course.id,
                     title=course.title,
+                    archived=course.archived,
                     completion_percentage=_float_or_none(progress.get("completion_percentage")) or 0.0,
                     current_lesson_id=current_lesson_id,
                     current_lesson_title=lesson_title_by_id.get(current_lesson_id) if current_lesson_id is not None else None,

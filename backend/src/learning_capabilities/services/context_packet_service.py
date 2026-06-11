@@ -34,12 +34,12 @@ class LearningContextPacketService:
         context_type = payload.context_type
         relevant_courses = []
         if query_text:
-            include_archived = context_type == "course"
+            # One rule everywhere: AI-facing reads see everything; archived
+            # travels as a flag in the data, never as a query parameter.
             relevant_courses = (
                 await self._query_service.list_relevant_courses(
                     user_id=user_id,
                     payload=ListRelevantCoursesCapabilityInput(query=query_text, limit=6),
-                    include_archived=include_archived,
                 )
             ).items
 
@@ -114,6 +114,7 @@ class LearningContextPacketService:
                         title=course_state.title,
                         description=course_state.description,
                         adaptive_enabled=course_state.adaptive_enabled,
+                        archived=course_state.archived,
                         completion_percentage=course_state.completion_percentage,
                     )
                 ]
