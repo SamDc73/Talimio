@@ -223,7 +223,7 @@ export function useCourseService(courseId = null) {
 		 */
 		async fetchCourses(options = {}) {
 			const { page = 1, perPage = 20, search } = options
-			const queryParams = { page, per_page: perPage }
+			const queryParams = { page, perPage }
 			if (search) queryParams.search = search
 
 			return await getCourses.execute(null, { queryParams })

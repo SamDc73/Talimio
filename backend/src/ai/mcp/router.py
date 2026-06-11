@@ -46,7 +46,7 @@ def _serialize_server(server: UserMCPServer) -> MCPServerResponse:
 async def list_servers(
     auth: CurrentAuth,
     page: Annotated[int, Query(ge=1, description="Page number")] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+    page_size: Annotated[int, Query(alias="pageSize", ge=1, le=100, description="Items per page")] = 20,
 ) -> MCPServerListResponse:
     """Return all MCP servers configured by the authenticated user."""
     servers, total = await paginate_user_mcp_servers(auth.session, auth.user_id, page=page, page_size=page_size)

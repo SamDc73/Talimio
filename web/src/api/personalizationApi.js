@@ -21,7 +21,7 @@ export async function getUserSettings() {
  * Fetch stored MCP servers for the authenticated user
  */
 export async function listMcpServers({ page = 1, pageSize = 50 } = {}) {
-	return api.get(`/mcp/servers?page=${page}&page_size=${pageSize}`)
+	return api.get(`/mcp/servers?page=${page}&pageSize=${pageSize}`)
 }
 
 /**

@@ -16,10 +16,10 @@ import { api } from "@/lib/apiClient"
 
 function buildBookListUrl(search) {
 	const params = new URLSearchParams({
-		content_type: "book",
+		contentType: "book",
 		status: "all",
 		page: "1",
-		page_size: "100",
+		pageSize: "100",
 	})
 	if (search?.trim()) {
 		params.set("search", search.trim())
