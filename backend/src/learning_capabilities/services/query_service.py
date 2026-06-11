@@ -15,14 +15,15 @@ from src.ai.rag.embeddings import VectorRAG
 from src.ai.rag.exceptions import RagUnavailableError
 from src.ai.rag.schemas import SearchResult
 from src.ai.rag.service import RAGService
+from src.books.models import Book
 from src.config.settings import get_settings
 from src.courses.models import (
     Concept,
     ConceptPrerequisite,
     ConceptSimilarity,
     Course,
+    CourseAttachment,
     CourseConcept,
-    CourseDocument,
     LearningQuestion,
     Lesson,
     LessonVersion,
@@ -231,11 +232,11 @@ class LearningCapabilityQueryService:
         course_id: uuid.UUID,
         query_text: str,
     ) -> SourceFocus | None:
-        """Return a tiny source focus when embedded course documents can ground the turn."""
+        """Return a tiny source focus when completed attached books can ground the turn."""
         compact_query = query_text.strip()
         if len(compact_query) < _SOURCE_FOCUS_QUERY_MIN_CHARS:
             return None
-        if not await self._has_embedded_course_documents(course_id=course_id):
+        if not await self._has_completed_attached_books(course_id=course_id):
             return None
 
         try:
@@ -817,16 +818,19 @@ class LearningCapabilityQueryService:
         )
         return GetCourseFrontierCapabilityOutput(state=state)
 
-    async def _has_embedded_course_documents(self, *, course_id: uuid.UUID) -> bool:
-        document_id = await self._session.scalar(
-            select(CourseDocument.id)
+    async def _has_completed_attached_books(self, *, course_id: uuid.UUID) -> bool:
+        # No archived predicate on purpose: archived books keep grounding
+        # their courses. Pending/processing books do NOT satisfy the gate.
+        attachment_id = await self._session.scalar(
+            select(CourseAttachment.id)
+            .join(Book, Book.id == CourseAttachment.book_id)
             .where(
-                CourseDocument.course_id == course_id,
-                CourseDocument.status == "embedded",
+                CourseAttachment.course_id == course_id,
+                Book.rag_status == "completed",
             )
             .limit(1)
         )
-        return document_id is not None
+        return attachment_id is not None
 
     async def _get_lesson_focus(self, *, course_id: uuid.UUID, lesson_id: uuid.UUID) -> LessonFocus | None:
         lesson = await self._session.scalar(

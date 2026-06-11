@@ -13,7 +13,7 @@ from typing import cast
 
 from fastapi import BackgroundTasks, UploadFile
 from opentelemetry import trace
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,9 +27,9 @@ from src.courses.models import (
     ConceptSimilarity,
     Course,
     CourseConcept,
-    CourseDocument,
     Lesson,
 )
+from src.courses.services.course_attachments_service import CourseAttachmentsService
 from src.database.session import async_session_maker
 from src.exceptions import NotFoundError
 
@@ -40,11 +40,6 @@ from .setup_commands_normalizer import normalize_setup_commands_payload
 logger = logging.getLogger(__name__)
 
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
-_BOOK_RAG_STATUS_COMPLETED = "completed"
-_BOOK_RAG_STATUS_PROCESSING = "processing"
-_COURSE_DOCUMENT_STATUS_EMBEDDED = "embedded"
-_RAG_DOC_TYPE_BOOK = "book"
-_RAG_DOC_TYPE_COURSE = "course"
 
 
 @dataclass(slots=True)
@@ -443,7 +438,7 @@ class CourseContentService:
         attachments: list[UploadFile],
         book_ids: Sequence[uuid.UUID],
     ) -> CourseAttachmentIngestionResult:
-        """Inline images as LLM data URLs and link books for RAG search."""
+        """Inline images as LLM data URLs and attach books for RAG search."""
         image_data_urls: list[str] = []
         has_searchable_documents = False
         for attachment in attachments:
@@ -454,165 +449,17 @@ class CourseContentService:
             if extension in _IMAGE_EXTENSIONS:
                 data_url = self._build_image_data_url(file_content, attachment.content_type, extension)
                 image_data_urls.append(data_url)
-        for book_id in book_ids:
-            await self._link_book_to_course_documents(
-                rag_service=rag_service,
-                session=session,
-                user_id=user_id,
-                course_id=course_id,
-                book_id=book_id,
-            )
+        if book_ids:
+            await CourseAttachmentsService(session).attach_books(course_id, user_id, book_ids)
+            # Running inside the background generation task, so embedding
+            # pending books here serializes attachment -> grounding without
+            # blocking the create request.
+            await rag_service.ensure_attached_books_processed(session, course_id)
             has_searchable_documents = True
         return CourseAttachmentIngestionResult(
             image_data_urls=image_data_urls,
             has_searchable_documents=has_searchable_documents,
         )
-
-    async def _link_book_to_course_documents(
-        self,
-        *,
-        rag_service: RAGService,
-        session: AsyncSession,
-        user_id: uuid.UUID,
-        course_id: uuid.UUID,
-        book_id: uuid.UUID,
-    ) -> None:
-        book = await self._get_owned_book(session, user_id, book_id)
-        document = CourseDocument(
-            course_id=course_id,
-            book_id=book.id,
-            document_type=book.file_type,
-            title=book.title,
-            file_path=None,
-            status="pending",
-        )
-        session.add(document)
-        await session.flush()
-
-        await self._ensure_book_chunks_available(
-            rag_service=rag_service,
-            session=session,
-            course_id=course_id,
-            book=book,
-        )
-        copied_chunks = await self._copy_book_chunks_to_course_document(
-            session=session,
-            book=book,
-            course_id=course_id,
-            document_id=document.id,
-        )
-        if copied_chunks == 0:
-            msg = f"Book {book.id} has no RAG chunks to link into course {course_id}"
-            raise RuntimeError(msg)
-
-        now = datetime.now(UTC)
-        document.status = _COURSE_DOCUMENT_STATUS_EMBEDDED
-        document.processed_at = now
-        document.embedded_at = now
-        await session.flush()
-        logger.info(
-            "courses.generation.book_linked",
-            extra={
-                "course_id": str(course_id),
-                "book_id": str(book.id),
-                "course_document_id": document.id,
-                "chunk_count": copied_chunks,
-            },
-        )
-
-    async def _get_owned_book(self, session: AsyncSession, user_id: uuid.UUID, book_id: uuid.UUID) -> Book:
-        result = await session.execute(select(Book).where(Book.id == book_id, Book.user_id == user_id))
-        book = result.scalar_one_or_none()
-        if book is None:
-            resource_type = "book"
-            raise NotFoundError(resource_type, str(book_id))
-        return book
-
-    async def _ensure_book_chunks_available(
-        self,
-        *,
-        rag_service: RAGService,
-        session: AsyncSession,
-        course_id: uuid.UUID,
-        book: Book,
-    ) -> None:
-        if book.rag_status == _BOOK_RAG_STATUS_COMPLETED:
-            return
-
-        if book.rag_status == _BOOK_RAG_STATUS_PROCESSING:
-            logger.warning(
-                "courses.generation.book_rag_busy",
-                extra={"course_id": str(course_id), "book_id": str(book.id), "rag_status": book.rag_status},
-            )
-            msg = f"Book {book.id} is already processing RAG chunks"
-            raise RuntimeError(msg)
-
-        if book.rag_status != _BOOK_RAG_STATUS_COMPLETED:
-            logger.info(
-                "courses.generation.book_rag_started",
-                extra={"course_id": str(course_id), "book_id": str(book.id), "rag_status": book.rag_status},
-            )
-            await rag_service.process_book(session, book.id)
-            await session.refresh(book)
-
-        if book.rag_status != _BOOK_RAG_STATUS_COMPLETED:
-            msg = f"Book {book.id} did not finish RAG processing"
-            raise RuntimeError(msg)
-
-    async def _copy_book_chunks_to_course_document(
-        self,
-        *,
-        session: AsyncSession,
-        book: Book,
-        course_id: uuid.UUID,
-        document_id: int,
-    ) -> int:
-        course_doc_id = uuid.uuid5(
-            uuid.NAMESPACE_DNS,
-            f"course_{course_id}_document_{document_id}",
-        )
-        extra_metadata = {
-            "course_id": str(course_id),
-            "document_id": document_id,
-            "source_book_id": str(book.id),
-            "source_doc_type": _RAG_DOC_TYPE_BOOK,
-            "title": book.title,
-        }
-        result = await session.execute(
-            text(
-                """
-                INSERT INTO rag_document_chunks
-                    (doc_id, doc_type, chunk_index, content, metadata, embedding, created_at)
-                SELECT
-                    :course_doc_id,
-                    :course_doc_type,
-                    chunk_index,
-                    content,
-                    COALESCE(metadata, '{}'::jsonb) || CAST(:extra_metadata AS jsonb),
-                    embedding,
-                    NOW()
-                FROM rag_document_chunks
-                WHERE doc_id = :book_id AND doc_type = :book_doc_type
-                ON CONFLICT (doc_id, chunk_index)
-                DO UPDATE SET
-                    doc_type = EXCLUDED.doc_type,
-                    content = EXCLUDED.content,
-                    metadata = EXCLUDED.metadata,
-                    embedding = EXCLUDED.embedding
-                RETURNING id
-                """
-            ),
-            {
-                "course_doc_id": course_doc_id,
-                "course_doc_type": _RAG_DOC_TYPE_COURSE,
-                "book_id": book.id,
-                "book_doc_type": _RAG_DOC_TYPE_BOOK,
-                "extra_metadata": json.dumps(extra_metadata),
-            },
-        )
-        copied_rows = result.fetchall()
-        await session.flush()
-        return len(copied_rows)
 
     async def _build_augmented_prompt(
         self,
