@@ -29,7 +29,7 @@ class UserProfileSlot(Base):
 
     __tablename__ = "user_profile_slots"
     __table_args__ = (
-        CheckConstraint("source IN ('manual', 'inferred', 'legacy_migration')", name="source_allowed"),
+        CheckConstraint("source IN ('manual', 'inferred')", name="source_allowed"),
         Index(
             "user_profile_slots_user_id_slot_active_key",
             "user_id",
@@ -88,10 +88,10 @@ class UserProfileSlotEvent(Base):
 
     __tablename__ = "user_profile_slot_events"
     __table_args__ = (
-        CheckConstraint("op IN ('set', 'clear', 'ignore', 'defer')", name="op_allowed"),
+        CheckConstraint("op IN ('set', 'clear', 'defer')", name="op_allowed"),
         CheckConstraint("confidence >= 0 AND confidence <= 1", name="confidence_range"),
         CheckConstraint(
-            "status IN ('applied', 'noop', 'rejected_stale', 'rejected_manual', 'shadow')",
+            "status IN ('applied', 'noop', 'rejected_stale', 'rejected_manual')",
             name="status_allowed",
         ),
         Index("user_profile_slot_events_user_id_created_at_idx", "user_id", "created_at"),
@@ -296,7 +296,7 @@ class TeachingEvent(Base):
     __table_args__ = (
         CheckConstraint(
             "event_type IN ('lesson_version_shown', 'check_answered', 'lesson_regenerated', "
-            "'lesson_completed', 'delayed_outcome', 'preference_stated')",
+            "'lesson_completed', 'delayed_outcome')",
             name="event_type_allowed",
         ),
         Index("teaching_events_user_id_course_id_occurred_at_idx", "user_id", "course_id", "occurred_at"),

@@ -210,7 +210,11 @@ class LessonVersionWindow(Base):
 
 
 class LessonFeedbackEvent(Base):
-    """Raw regeneration feedback linked to a lesson and optional course-scoped reuse."""
+    """Learner-authored course evidence: regenerate critiques and chat-stated preferences.
+
+    Chat-stated preferences have no lesson, so lesson_id is nullable. The table
+    has no user_id on purpose: the course implies its owner.
+    """
 
     __tablename__ = "lesson_feedback_events"
 
@@ -220,10 +224,10 @@ class LessonFeedbackEvent(Base):
         ForeignKey("courses.id", ondelete="CASCADE"),
         nullable=False,
     )
-    lesson_id: Mapped[uuid.UUID] = mapped_column(
+    lesson_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("lessons.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
     )
     lesson_version_id: Mapped[uuid.UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
@@ -231,7 +235,6 @@ class LessonFeedbackEvent(Base):
         nullable=True,
     )
     critique_text: Mapped[str] = mapped_column(Text, nullable=False)
-    apply_across_course: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Typed facets extracted by the pedagogical updater; raw critique stays canonical.
     pace_signal: Mapped[str | None] = mapped_column(Text, nullable=True)
     modality_signal: Mapped[str | None] = mapped_column(Text, nullable=True)

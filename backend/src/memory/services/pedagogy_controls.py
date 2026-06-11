@@ -4,11 +4,10 @@ Inspect surfaces the merged teaching profile (with per-field source) and the
 StudentCard claims exactly as stored — each claim line already carries its
 lifecycle, confidence, and evidence refs as plain text, which IS the
 provenance display. Suppress removes one claim line through the same
-text-editor edit path the updater uses. Forget soft-deletes the card and the
-inferred profile immediately in the caller's transaction, then defers an
-async cascade that redacts learner-authored evidence (critiques and card
-revision snapshots); system-measured teaching events survive as minimal
-structural records.
+text-editor edit path the updater uses. Forget is one atomic transaction:
+barrier first, then card soft-delete, inferred-profile delete, and redaction
+of learner-authored evidence (critiques, card revision snapshots, retrieval
+notes); system-measured teaching events survive as minimal structural records.
 """
 
 from __future__ import annotations
@@ -21,20 +20,12 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.exceptions import BadRequestError
-from src.jobs import QUEUE_MAINTENANCE, defer_job
 from src.memory.models import CourseTeachingProfile, PedagogicalNote, StudentCard, StudentCardRevision
-from src.memory.services.pedagogy_service import get_merged_teaching_profile
+from src.memory.services.pedagogy_service import TeachingSource, get_merged_teaching_profile
 from src.memory.services.student_card import SECTION_HEADERS, CardEditError, card_replace, lock_card
 
 
-PEDAGOGY_FORGET_TASK_NAME = "pedagogy.forget_cleanup"
-
 _REDACTED = "[redacted]"
-
-
-def forget_queueing_lock(user_id: uuid.UUID | str, course_id: uuid.UUID | str) -> str:
-    """Queueing lock that collapses duplicate forget cascades per learner-course pair."""
-    return f"pedagogy:forget:{user_id}:{course_id}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +34,7 @@ class TeachingProfileField:
 
     name: str
     value: str
-    source: str  # 'explicit' | 'inferred'
+    source: TeachingSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,15 +109,22 @@ async def suppress_claim(session: AsyncSession, *, user_id: uuid.UUID, course_id
 
 
 async def forget_pedagogical_memory(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> None:
-    """Forget pedagogical memory now; the deferred cascade redacts evidence after commit.
+    """Forget pedagogical memory atomically in the caller's transaction.
 
-    Immediate, in the caller's transaction: soft-delete the card and drop the
-    inferred teaching-profile row (explicit learner-stated settings stay).
+    Barrier first: the watermark upsert blocks until any in-flight updater
+    commits and stops pending jobs from rebuilding the card from pre-forget
+    evidence (monotonic via GREATEST). Every redaction is bounded by the
+    returned boundary, so evidence the learner creates after forgetting
+    survives. Critique text and extracted facets are redacted in place;
+    ``facets_extracted_at`` stays so the updater never re-extracts. Card
+    revision snapshots are blanked but keep their structural rows; retrieval
+    notes are redacted and tombstoned so search never returns them. Teaching
+    events are system-measured outcomes and survive untouched, as does the
+    explicit learner-stated teaching profile.
     """
-    # Barrier first: blocks on the watermark row until any in-flight updater
-    # commits, and stops pending jobs from rebuilding the card from
-    # pre-forget evidence. Monotonic via GREATEST.
-    forget_cutoff = (
+    from src.courses.models import LessonFeedbackEvent
+
+    boundary = (
         await session.execute(
             text(
                 """
@@ -165,65 +163,36 @@ async def forget_pedagogical_memory(session: AsyncSession, *, user_id: uuid.UUID
         )
     )
 
-    await defer_job(
-        session,
-        task_name=PEDAGOGY_FORGET_TASK_NAME,
-        queue=QUEUE_MAINTENANCE,
-        args={"user_id": str(user_id), "course_id": str(course_id), "cutoff": forget_cutoff.isoformat()},
-        queueing_lock=forget_queueing_lock(user_id, course_id),
+    await session.execute(
+        update(LessonFeedbackEvent)
+        .where(LessonFeedbackEvent.course_id == course_id, LessonFeedbackEvent.created_at <= boundary)
+        .values(
+            critique_text=_REDACTED,
+            pace_signal=None,
+            modality_signal=None,
+            example_style_signal=None,
+            quiz_density_signal=None,
+            tone_signal=None,
+            strategy_request_signal=None,
+        )
     )
+
+    await session.execute(
+        update(PedagogicalNote)
+        .where(
+            PedagogicalNote.user_id == user_id,
+            PedagogicalNote.course_id == course_id,
+            PedagogicalNote.deleted_at.is_(None),
+            PedagogicalNote.created_at <= boundary,
+        )
+        .values(note=_REDACTED, scene_trace=_REDACTED, verbatim_quote="", deleted_at=datetime.now(UTC))
+    )
+
+    if card is not None:
+        await session.execute(
+            update(StudentCardRevision)
+            .where(StudentCardRevision.card_id == card.id, StudentCardRevision.created_at <= boundary)
+            .values(card_text=_REDACTED, tool_call={})
+        )
+
     await session.flush()
-
-
-async def run_forget_cleanup(user_id: uuid.UUID, course_id: uuid.UUID, cutoff: datetime) -> None:
-    """Async forget cascade (worker entry): redact learner-authored evidence.
-
-    Every redaction is bounded by ``cutoff`` (the watermark value the forget
-    barrier committed), so evidence the learner creates after forgetting is
-    never swept up by a late-running cascade. Critique text and extracted
-    facets are redacted in place; ``facets_extracted_at`` stays so the updater
-    never re-extracts. Card revision snapshots are blanked but keep their
-    structural rows, and retrieval notes are redacted and tombstoned so search
-    never returns them. Teaching events are system-measured outcomes and
-    survive untouched.
-    """
-    from src.courses.models import LessonFeedbackEvent
-    from src.database.session import async_session_maker
-
-    async with async_session_maker() as session:
-        await session.execute(
-            update(LessonFeedbackEvent)
-            .where(LessonFeedbackEvent.course_id == course_id, LessonFeedbackEvent.created_at <= cutoff)
-            .values(
-                critique_text=_REDACTED,
-                pace_signal=None,
-                modality_signal=None,
-                example_style_signal=None,
-                quiz_density_signal=None,
-                tone_signal=None,
-                strategy_request_signal=None,
-            )
-        )
-
-        await session.execute(
-            update(PedagogicalNote)
-            .where(
-                PedagogicalNote.user_id == user_id,
-                PedagogicalNote.course_id == course_id,
-                PedagogicalNote.deleted_at.is_(None),
-                PedagogicalNote.created_at <= cutoff,
-            )
-            .values(note=_REDACTED, scene_trace=_REDACTED, verbatim_quote="", deleted_at=datetime.now(UTC))
-        )
-
-        card_id = await session.scalar(
-            select(StudentCard.id).where(StudentCard.user_id == user_id, StudentCard.course_id == course_id)
-        )
-        if card_id is not None:
-            await session.execute(
-                update(StudentCardRevision)
-                .where(StudentCardRevision.card_id == card_id, StudentCardRevision.created_at <= cutoff)
-                .values(card_text=_REDACTED, tool_call={})
-            )
-
-        await session.commit()

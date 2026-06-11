@@ -15,16 +15,17 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.memory.models import UserProfileSlot, UserProfileSlotEvent
 from src.memory.services.profile_slots import is_known_slot
+from src.user.models import UserPreferences
 
 
-SlotSource = Literal["manual", "inferred", "legacy_migration"]
+SlotSource = Literal["manual", "inferred"]
 CommitStatus = Literal["applied", "noop", "rejected_stale", "rejected_manual"]
 
 
@@ -63,30 +64,12 @@ def build_profile_block(slots: list[UserProfileSlot]) -> str:
 
 async def get_custom_instructions(session: AsyncSession, user_id: uuid.UUID) -> str:
     """Return the user's raw custom-instructions text ('' when unset)."""
-    from src.user.models import UserPreferences
-
     preferences = await session.get(UserPreferences, user_id)
     if preferences is None:
         return ""
     nested = preferences.preferences.get("user_preferences")
     raw = nested.get("custom_instructions") if isinstance(nested, dict) else None
     return raw.strip() if isinstance(raw, str) else ""
-
-
-async def build_memory_context(session: AsyncSession, user_id: uuid.UUID) -> str:
-    """One merged profile context: custom instructions (verbatim) plus active slots.
-
-    This is the single durable-memory block prompts receive; custom instructions
-    and profile slots are never injected as parallel sources.
-    """
-    parts: list[str] = []
-    instructions = await get_custom_instructions(session, user_id)
-    if instructions:
-        parts.append(f"User custom instructions:\n{instructions}")
-    profile_block = build_profile_block(await get_active_slots(session, user_id))
-    if profile_block:
-        parts.append(f"User profile (durable preferences):\n{profile_block}")
-    return "\n\n".join(parts)
 
 
 async def set_slot(
@@ -185,8 +168,8 @@ async def redact_slot_evidence(session: AsyncSession, *, user_id: uuid.UUID, slo
     )
     if slot is not None:
         stmt = stmt.where(UserProfileSlotEvent.slot == slot)
-    result = await session.execute(stmt)
-    return getattr(result, "rowcount", 0) or 0
+    result = cast("CursorResult[Any]", await session.execute(stmt))
+    return result.rowcount or 0
 
 
 async def record_skip_event(
@@ -194,10 +177,10 @@ async def record_skip_event(
     *,
     user_id: uuid.UUID,
     slot: str,
-    op: Literal["ignore", "defer"],
+    op: Literal["defer"],
     evidence: SlotEvidence | None = None,
 ) -> SlotCommitResult:
-    """Log an ignore/defer decision for audit without touching canonical state."""
+    """Log a defer decision for audit without touching canonical state."""
     _validate_slot(slot)
     _record_event(
         session,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -16,7 +17,7 @@ class TeachingProfileFieldSchema(BaseModel):
 
     name: str
     value: str
-    source: str
+    source: Literal["explicit", "inferred"]
 
 
 class PedagogicalMemoryResponse(BaseModel):
@@ -53,4 +54,4 @@ class ForgetMemoryResponse(BaseModel):
 
     model_config = build_camel_config()
 
-    status: str = "forgotten"
+    status: Literal["forgotten"] = "forgotten"

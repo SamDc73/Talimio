@@ -121,23 +121,14 @@ async def defer_pedagogy_update(session: AsyncSession, *, user_id: uuid.UUID, co
     )
 
 
-async def maybe_trigger_update(
-    session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID, high_signal: bool = False
-) -> bool:
-    """Defer the updater once enough new evidence has accumulated past the watermark.
+async def maybe_trigger_update(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> bool:
+    """Defer the updater once enough new measured evidence has accumulated past the watermark.
 
-    ``high_signal`` evidence (the learner speaking in their own words: critiques,
-    stated preferences) skips the threshold and consolidates immediately, so the
-    very next lesson generation already knows. Passive evidence (quiz answers,
-    completions) keeps the sleep-time economics.
-
-    Two cheap index-backed counts, no lock: an off-by-one race only changes
-    when the job is queued, and the queueing lock collapses duplicates anyway.
+    Authored evidence never comes through here — its writer defers directly,
+    in the same transaction. Two cheap index-backed counts, no lock: an
+    off-by-one race only changes when the job is queued, and the queueing lock
+    collapses duplicates anyway.
     """
-    if high_signal:
-        await defer_pedagogy_update(session, user_id=user_id, course_id=course_id)
-        return True
-
     from src.courses.models import LessonFeedbackEvent
 
     last_processed_at = (
@@ -323,7 +314,6 @@ async def _extract_facets(*, user_id: uuid.UUID, pending_events: list[LessonFeed
             {
                 "event_index": index,
                 "critique_text": event.critique_text,
-                "apply_across_course": event.apply_across_course,
                 "created_at": str(event.created_at),
             }
             for index, event in enumerate(pending_events)
@@ -526,7 +516,6 @@ def _build_card_session_payload(
             {
                 "created_at": str(event.created_at),
                 "critique_text": event.critique_text,
-                "apply_across_course": event.apply_across_course,
                 "facets": {name: getattr(event, name) for name in _FACET_SIGNAL_FIELDS if getattr(event, name)},
             }
             for event in new_feedback

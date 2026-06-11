@@ -171,6 +171,7 @@ class PracticeDrillService:
             seen_questions=seen_questions,
             seen_signatures=seen_signatures,
             user_id=user_id,
+            course_id=course_id,
             count=count,
         )
 
@@ -211,6 +212,7 @@ class PracticeDrillService:
         seen_questions: set[str],
         seen_signatures: set[str],
         user_id: uuid.UUID,
+        course_id: uuid.UUID,
         count: int,
     ) -> list[PracticeDrillItem]:
         candidate_count = max(count * 2, count + 3)
@@ -223,6 +225,7 @@ class PracticeDrillService:
             family_guidance=generation_context.family_guidance,
             count=candidate_count,
             user_id=user_id,
+            course_id=course_id,
         )
         predicted_batch = await self._predict_p_correct_batch(
             questions=[item.question for item in question_batch],
@@ -230,6 +233,7 @@ class PracticeDrillService:
             concept_name=concept.name,
             review_status=generation_context.review_status,
             user_id=user_id,
+            course_id=course_id,
         )
 
         ranked_candidates = sorted(
@@ -448,6 +452,7 @@ class PracticeDrillService:
         family_guidance: str,
         count: int,
         user_id: uuid.UUID,
+        course_id: uuid.UUID,
     ) -> list[_QuestionPayload]:
         payload = await self._llm_client.generate_practice_question_batch(
             concept=concept.name,
@@ -460,6 +465,7 @@ class PracticeDrillService:
             count=count,
             response_model=_QuestionBatchPayload,
             user_id=user_id,
+            course_id=course_id,
         )
         return [question for question in payload.questions if getattr(question, "probe_family", probe_family) == probe_family]
 
@@ -471,6 +477,7 @@ class PracticeDrillService:
         concept_name: str,
         review_status: str,
         user_id: uuid.UUID,
+        course_id: uuid.UUID,
     ) -> list[float]:
         if not questions:
             return []
@@ -490,6 +497,7 @@ class PracticeDrillService:
             predictions_example=prediction_example,
             response_model=_PredictionBatchPayload,
             user_id=user_id,
+            course_id=course_id,
         )
         predictions = payload.predicted_p_correct
         if len(predictions) != len(questions):

@@ -12,7 +12,7 @@ from opentelemetry import trace
 from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_COURSE_PLANNER, AGENT_ID_DEFAULT
+from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_DEFAULT
 from src.ai.errors import (
     AIProviderError,
     AIRateLimitOrQuotaError,
@@ -229,6 +229,7 @@ class _LLMRequest:
     sandbox_context: SandboxToolContext | None
     tool_choice: str | None
     user_id: uuid.UUID | None
+    course_id: uuid.UUID | None
     model: str
     num_retries: int | None
     max_completion_tokens: int | None
@@ -363,6 +364,7 @@ class LLMClient:
         sandbox_context: SandboxToolContext | None,
         tool_choice: str | None,
         user_id: str | uuid.UUID | None,
+        course_id: uuid.UUID | None,
         model: str | None,
         num_retries: int | None,
         max_completion_tokens: int | None,
@@ -381,6 +383,7 @@ class LLMClient:
             sandbox_context=sandbox_context,
             tool_choice=tool_choice,
             user_id=self._normalize_user_id(user_id),
+            course_id=course_id,
             model=model or settings.primary_llm_model,
             num_retries=num_retries,
             max_completion_tokens=max_completion_tokens,
@@ -508,7 +511,9 @@ class LLMClient:
     async def _assemble_request_context(self, request: _LLMRequest) -> None:
         """Ordered context assembly: normalize -> memory -> tools."""
         if request.enable_memory and request.user_id is not None:
-            request.messages = await self._inject_memory_into_messages(request.messages, request.user_id)
+            request.messages = await self._inject_memory_into_messages(
+                request.messages, request.user_id, request.course_id
+            )
 
         if not request.enable_tools:
             request.tool_plan = build_request_tool_plan(
@@ -562,7 +567,6 @@ class LLMClient:
 
         if request.user_id is not None and self._agent_id == AGENT_ID_ASSISTANT:
             from src.ai.tools.learning import build_learning_action_tools, build_learning_query_tools
-            from src.ai.tools.memory import build_learner_memory_search_tool
 
             function_tools.extend(build_learning_query_tools(user_id=request.user_id))
             function_tools.extend(
@@ -573,19 +577,13 @@ class LLMClient:
                     learner_context=_metadata_text(request.metadata, "assistant_probe_context"),
                 )
             )
-            function_tools.append(
-                build_learner_memory_search_tool(
-                    user_id=request.user_id,
-                    course_id=_metadata_uuid(request.metadata, "assistant_course_id"),
-                )
-            )
 
-        if request.user_id is not None and self._agent_id == AGENT_ID_COURSE_PLANNER:
+        if request.enable_memory and request.user_id is not None:
             from src.ai.tools.memory import build_learner_memory_search_tool
 
-            # Cross-course recall: what helped or hurt this learner elsewhere
-            # shapes how a new course gets structured.
-            function_tools.append(build_learner_memory_search_tool(user_id=request.user_id))
+            function_tools.append(
+                build_learner_memory_search_tool(user_id=request.user_id, course_id=request.course_id)
+            )
 
         return build_request_tool_plan(
             model=request.model,
@@ -895,6 +893,7 @@ class LLMClient:
         sandbox_context: SandboxToolContext | None = None,
         tool_choice: str | None = None,
         user_id: str | uuid.UUID | None = None,
+        course_id: uuid.UUID | None = None,
         model: str | None = None,
         num_retries: int | None = None,
         max_completion_tokens: int | None = None,
@@ -903,7 +902,11 @@ class LLMClient:
         enable_memory: bool = True,
         enable_tools: bool = True,
     ) -> object:
-        """Shared execution engine for free-form and structured generation."""
+        """Shared execution engine for free-form and structured generation.
+
+        ``(user_id, course_id, enable_memory)`` is the call's full memory scope:
+        it decides both the injected memory block and the search tool.
+        """
         request = self._build_request(
             messages=messages,
             response_model=response_model,
@@ -913,6 +916,7 @@ class LLMClient:
             sandbox_context=sandbox_context,
             tool_choice=tool_choice,
             user_id=user_id,
+            course_id=course_id,
             model=model,
             num_retries=num_retries,
             max_completion_tokens=max_completion_tokens,
@@ -1681,51 +1685,36 @@ class LLMClient:
             )
         return normalized
 
-    async def _inject_memory_into_messages(self, messages: list[ChatMessage], user_id: uuid.UUID) -> list[ChatMessage]:
-        """Inject user memory context into the conversation."""
-        profile_block = await self._load_canonical_profile_block(user_id)
-        if not profile_block:
+    async def _inject_memory_into_messages(
+        self, messages: list[ChatMessage], user_id: uuid.UUID, course_id: uuid.UUID | None
+    ) -> list[ChatMessage]:
+        """Inject the composed memory context into the conversation."""
+        memory_block = await self._load_memory_block(user_id, course_id)
+        if not memory_block:
             return messages
 
-        memory_context = MEMORY_CONTEXT_SYSTEM_PROMPT.format(memory_context=profile_block)
+        memory_context = MEMORY_CONTEXT_SYSTEM_PROMPT.format(memory_context=memory_block)
         memory_message = {"role": "system", "content": memory_context}
 
         if messages and messages[0].get("role") == "system":
             return [messages[0], memory_message, *messages[1:]]
         return [memory_message, *messages]
 
-    async def _load_canonical_profile_block(self, user_id: uuid.UUID) -> str:
-        """Read the merged canonical memory context; failures never break the request."""
+    async def _load_memory_block(self, user_id: uuid.UUID, course_id: uuid.UUID | None) -> str:
+        """Read the composed memory context; failures never break the request."""
         try:
             from sqlalchemy.exc import SQLAlchemyError
 
-            from src.memory import build_memory_context
+            from src.memory import compose_memory_context
         except ImportError as error:
-            self._logger.warning("Failed to import profile memory for user %s: %s", user_id, error)
+            self._logger.warning("Failed to import memory for user %s: %s", user_id, error)
             return ""
 
         try:
             async with async_session_maker() as session:
-                return await build_memory_context(session, user_id)
+                return await compose_memory_context(session, user_id, course_id)
         except (SQLAlchemyError, *_MEMORY_OPERATION_ERROR_TYPES) as error:
-            self._logger.warning("Failed to load profile block for user %s: %s", user_id, error)
-            return ""
-
-    async def _load_pedagogy_context(self, user_id: uuid.UUID, course_id: uuid.UUID) -> str:
-        """Load the StudentCard + teaching profile block; failures never break generation."""
-        try:
-            from sqlalchemy.exc import SQLAlchemyError
-
-            from src.memory import build_pedagogy_context
-        except ImportError as error:
-            self._logger.warning("Failed to import pedagogy memory for course %s: %s", course_id, error)
-            return ""
-
-        try:
-            async with async_session_maker() as session:
-                return await build_pedagogy_context(session, user_id=user_id, course_id=course_id)
-        except (SQLAlchemyError, *_MEMORY_OPERATION_ERROR_TYPES) as error:
-            self._logger.warning("Failed to load pedagogy context for course %s: %s", course_id, error)
+            self._logger.warning("Failed to load memory block for user %s: %s", user_id, error)
             return ""
 
     def _slug_tool_key(self, server_name: str, tool_name: str) -> str:
@@ -1911,23 +1900,17 @@ class LLMClient:
             msg = "Lesson context must not be empty"
             raise ValueError(msg)
 
-        normalized_user_id = self._normalize_user_id(user_id)
-
         messages = [
             {"role": "system", "content": LESSON_GENERATION_PROMPT},
             {"role": "user", "content": context_text},
         ]
 
-        if course_id is not None and normalized_user_id is not None:
-            pedagogy_block = await self._load_pedagogy_context(normalized_user_id, course_id)
-            if pedagogy_block:
-                messages.insert(1, {"role": "system", "content": pedagogy_block})
-
         try:
             result = await self.get_completion(
                 messages,
                 response_model=GeneratedLesson,
-                user_id=normalized_user_id,
+                user_id=user_id,
+                course_id=course_id,
                 function_tools=function_tools,
             )
         except _GENERATION_WRAPPER_ERROR_TYPES as error:
@@ -2078,9 +2061,15 @@ class LLMClient:
         count: int,
         response_model: type[T],
         user_id: str | uuid.UUID | None = None,
+        course_id: uuid.UUID | None = None,
         model: str | None = None,
     ) -> T:
-        """Generate a structured batch of practice questions."""
+        """Generate a structured batch of practice questions.
+
+        Memory-aware by the standard scope rule: question style follows the
+        StudentCard and teaching profile. Grading stays memory-blind — it
+        judges the answer, not the learner.
+        """
         prompt = PRACTICE_GENERATION_PROMPT.format(
             count=count,
             concept=concept,
@@ -2100,8 +2089,8 @@ class LLMClient:
             messages,
             response_model=response_model,
             user_id=user_id,
+            course_id=course_id,
             model=model,
-            enable_memory=False,
         )
         if not isinstance(result, response_model):
             msg = f"Expected {response_model.__name__} from practice generation structured output"
@@ -2124,6 +2113,7 @@ class LLMClient:
         predictions_example: str,
         response_model: type[T],
         user_id: str | uuid.UUID | None = None,
+        course_id: uuid.UUID | None = None,
         model: str | None = None,
     ) -> T:
         """Predict p(correct) values for a batch of candidate practice questions."""
@@ -2151,8 +2141,8 @@ class LLMClient:
             messages,
             response_model=response_model,
             user_id=user_id,
+            course_id=course_id,
             model=model,
-            enable_memory=False,
         )
         if not isinstance(result, response_model):
             msg = f"Expected {response_model.__name__} from practice prediction structured output"
