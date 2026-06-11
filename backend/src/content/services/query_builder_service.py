@@ -39,6 +39,7 @@ class QueryBuilderService:
             column("count2"),
             column("count3"),
             column("archived"),
+            column("processing_status"),
             column("toc_progress"),
             column("table_of_contents"),
         ).subquery("combined")
@@ -96,6 +97,11 @@ class QueryBuilderService:
                 0 as count2,
                 0 as count3,
                 COALESCE(v.archived, false) as archived,
+                CASE v.rag_status
+                    WHEN 'completed' THEN 'ready'
+                    WHEN 'failed' THEN 'failed'
+                    ELSE 'processing'
+                END as processing_status,
                 NULL::text as toc_progress,
                 NULL::text as table_of_contents
             FROM videos v
@@ -152,6 +158,11 @@ class QueryBuilderService:
                 0 as count2,
                 0 as count3,
                 COALESCE(b.archived, false) as archived,
+                CASE b.rag_status
+                    WHEN 'completed' THEN 'ready'
+                    WHEN 'failed' THEN 'failed'
+                    ELSE 'processing'
+                END as processing_status,
                 '{}'::text as toc_progress,
                 NULL::text as table_of_contents
             FROM books b
@@ -207,6 +218,11 @@ class QueryBuilderService:
                 ) as count2,
                 0 as count3,
                 COALESCE(c.archived, false) as archived,
+                CASE c.generation_status
+                    WHEN 'ready' THEN 'ready'
+                    WHEN 'failed' THEN 'failed'
+                    ELSE 'processing'
+                END as processing_status,
                 NULL::text as toc_progress,
                 NULL::text as table_of_contents
             FROM courses c

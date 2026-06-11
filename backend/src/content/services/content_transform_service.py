@@ -5,7 +5,7 @@ import logging
 import re
 import uuid
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, cast
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import JsonValue
@@ -13,6 +13,7 @@ from pydantic import JsonValue
 from src.content.schemas import (
     BookContent,
     ContentMetadata,
+    ContentProcessingStatus,
     CourseContent,
     ProgressData,
     VideoContent,
@@ -40,6 +41,7 @@ class ContentProjectionRow(Protocol):
     last_accessed: datetime | None
     tags: str | None
     archived: bool
+    processing_status: str
     toc_progress: str | None
 
 
@@ -149,6 +151,7 @@ class ContentTransformService:
             progress=progress,
             tags=_safe_parse_tags(row.tags),
             status="archived" if row.archived else "active",
+            processing_status=cast("ContentProcessingStatus", row.processing_status),
             metadata=metadata,
         )
 
@@ -177,6 +180,7 @@ class ContentTransformService:
             progress=progress,
             tags=_safe_parse_tags(row.tags),
             status="archived" if row.archived else "active",
+            processing_status=cast("ContentProcessingStatus", row.processing_status),
             toc_progress=toc_progress,
             metadata=metadata,
         )
@@ -206,5 +210,6 @@ class ContentTransformService:
             progress=progress,
             tags=_safe_parse_tags(row.tags),
             status="archived" if row.archived else "active",
+            processing_status=cast("ContentProcessingStatus", row.processing_status),
             metadata=metadata,
         )
