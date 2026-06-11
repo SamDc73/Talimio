@@ -261,20 +261,6 @@
 		},
 		{
 			"includes": [
-				"src/__lint_fixtures__/EffectEventDepsFixture.jsx",
-				"src/__lint_fixtures__/NestedComponentFixture.jsx"
-			],
-			"linter": {
-				"rules": {
-					"correctness": {
-						"noNestedComponentDefinitions": "off",
-						"useExhaustiveDependencies": "off"
-					}
-				}
-			}
-		},
-		{
-			"includes": [
 				"src/components/Dialog.jsx",
 				"src/components/Sheet.jsx",
 				"src/components/DropdownMenu.jsx",
