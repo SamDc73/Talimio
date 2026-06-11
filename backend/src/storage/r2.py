@@ -29,6 +29,8 @@ class _S3Client(Protocol):
 
     async def get_object(self, **kwargs: object) -> dict[str, _StorageBody]: ...
 
+    async def head_object(self, **kwargs: object) -> object: ...
+
     async def put_bucket_cors(self, **kwargs: object) -> object: ...
 
 
@@ -154,6 +156,19 @@ class R2Storage(AbstractStorage):
                 return await response["Body"].read()
         except ClientError as e:
             msg = f"Failed to download from R2: {key}"
+            raise FileDownloadError(msg) from e
+
+    async def exists(self, key: str) -> bool:
+        """Return whether an object exists at the key via a HEAD request."""
+        try:
+            async with await self._get_client() as client:
+                await client.head_object(Bucket=self.bucket_name, Key=key)
+                return True
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code")
+            if error_code in {"NoSuchKey", "NotFound", "404"}:
+                return False
+            msg = f"Failed to check R2 object existence: {key}"
             raise FileDownloadError(msg) from e
 
     async def set_cors_policy(self) -> None:

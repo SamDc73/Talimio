@@ -69,3 +69,12 @@ class AbstractStorage(ABC):
     async def create_upload_session(self, *, key: str, content_type: str, content_length: int | None = None) -> StorageUploadSession:
         """Create a direct upload session for a storage key."""
         raise NotImplementedError
+
+    @abstractmethod
+    async def exists(self, key: str) -> bool:
+        """Return whether an object exists at the storage key.
+
+        Used to confirm a browser-direct upload actually landed before a
+        library row is created for it.
+        """
+        raise NotImplementedError

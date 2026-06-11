@@ -102,6 +102,10 @@ class LocalStorage(AbstractStorage):
             msg = f"Failed to delete file locally: {key}"
             raise FileDeleteError(msg) from e
 
+    async def exists(self, key: str) -> bool:
+        """Return whether a file exists at the storage key."""
+        return self._get_full_path(key).exists()
+
     async def create_upload_session(
         self,
         *,

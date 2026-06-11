@@ -44,6 +44,8 @@ class _S3Client(Protocol):
 
     async def get_object(self, **kwargs: object) -> dict[str, _S3Body]: ...
 
+    async def head_object(self, **kwargs: object) -> object: ...
+
     async def delete_object(self, **kwargs: object) -> object: ...
 
     async def generate_presigned_url(self, **kwargs: object) -> str: ...
@@ -123,6 +125,19 @@ class GCSStorage(AbstractStorage):
                 msg = f"File not found: {key}"
                 raise StorageFileNotFoundError(msg) from e
             msg = f"Failed to download from GCS: {key}"
+            raise FileDownloadError(msg) from e
+
+    async def exists(self, key: str) -> bool:
+        """Return whether an object exists at the key via a HEAD request."""
+        try:
+            async with await self._get_client() as client:
+                await client.head_object(Bucket=self.bucket_name, Key=key)
+                return True
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code")
+            if error_code in {"NoSuchKey", "NotFound", "404"}:
+                return False
+            msg = f"Failed to check GCS object existence: {key}"
             raise FileDownloadError(msg) from e
 
     async def get_download_url(self, key: str, expires_in: int = 3600) -> str:
