@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 CONTENT_TYPE_BOOK = "book"
 CONTENT_TYPE_VIDEO = "video"
+RAG_STATUS_PENDING = "pending"
 RAG_STATUS_PROCESSING = "processing"
 RAG_STATUS_COMPLETED = "completed"
 RAG_STATUS_FAILED = "failed"
@@ -224,15 +225,20 @@ class RAGService:
             book = await session.get(Book, book_id)
             if not book:
                 logger.warning("Book %s not found for processing", book_id)
+                await session.rollback()
                 return
 
             if not await self._validate_book_file(book):
                 await session.flush()
+                await session.commit()
                 return
 
             # Mark processing
             book.rag_status = RAG_STATUS_PROCESSING
             await session.flush()
+            # Match the video path: persist status before slow storage,
+            # parsing, and embedding work so no DB transaction stays open.
+            await session.commit()
 
             file_bytes = await self._download_book_bytes(book)
             text_content = await self._parse_book_to_text(book, file_bytes)
@@ -246,6 +252,13 @@ class RAGService:
             )
             if not self._has_valid_chunks(chunks):
                 await self._mark_book_failed_without_chunks(session, book, book_id)
+                await session.commit()
+                return
+
+            book = await session.get(Book, book_id)
+            if not book:
+                logger.info("Book %s was deleted before chunk storage started", book_id)
+                await session.rollback()
                 return
 
             # Store chunks
@@ -258,10 +271,18 @@ class RAGService:
                 per_chunk_metadata=per_chunk_metadata,
             )
 
+            book = await session.get(Book, book_id)
+            if not book:
+                await self.delete_chunks_by_doc_id(session, book_id, doc_type=CONTENT_TYPE_BOOK)
+                logger.info("Book %s was deleted during embedding; cleaned up chunks", book_id)
+                await session.commit()
+                return
+
             # Mark completed
             book.rag_status = RAG_STATUS_COMPLETED
             book.rag_processed_at = datetime.now(UTC)
             await session.flush()
+            await session.commit()
 
             logger.info("Successfully processed book %s", book_id)
 
@@ -275,10 +296,11 @@ class RAGService:
             logger.exception("Failed to process book %s", book_id)
             # Best-effort mark failed
             try:
+                await session.rollback()
                 book = await session.get(Book, book_id)
                 if book:
                     book.rag_status = RAG_STATUS_FAILED
-                    await session.flush()
+                    await session.commit()
             except SQLAlchemyError:
                 logger.debug("Failed to set book %s failed status after processing error", book_id, exc_info=True)
             raise
@@ -287,8 +309,8 @@ class RAGService:
         """Embed any attached books that have not completed RAG processing.
 
         This is the serialization point between attachment and grounding:
-        lesson generation calls it before searching, so pending books finish
-        embedding instead of silently returning empty results.
+        Course generation calls it before building the grounding prompt, so
+        newly attached pending books finish embedding off the request path.
         """
         book_ids = (
             (
@@ -297,7 +319,7 @@ class RAGService:
                     .join(Book, Book.id == CourseAttachment.book_id)
                     .where(
                         CourseAttachment.course_id == course_id,
-                        Book.rag_status != RAG_STATUS_COMPLETED,
+                        Book.rag_status == RAG_STATUS_PENDING,
                     )
                 )
             )
@@ -306,6 +328,8 @@ class RAGService:
         )
         for book_id in book_ids:
             await self.process_book(session, book_id)
+        if not book_ids:
+            await session.commit()
 
     async def process_video(self, session: AsyncSession, video_id: uuid.UUID) -> None:
         """Process a video (transcript segments to chunks → embed → index)."""
@@ -397,6 +421,7 @@ class RAGService:
     ) -> list[SearchResult]:
         """Search documents scoped by session and user ownership."""
         await self._ensure_course_owned(session, user_id, course_id)
+        await session.commit()
         return await self.search_course_documents(session, course_id, query, top_k)
 
     async def search_course_documents(
@@ -418,6 +443,7 @@ class RAGService:
                 limit=search_limit,
                 course_id=course_id,
             )
+            await session.commit()
 
             if not should_rerank:
                 logger.info(
@@ -451,8 +477,9 @@ class RAGService:
         top_k: int = LESSON_CONTEXT_TOP_K,
     ) -> list[SearchResult]:
         """Search course sources with lesson-specific query expansion and context packing."""
-        await self.ensure_attached_books_processed(session, course_id)
-        if not await self._has_searchable_attached_book_chunks(session=session, course_id=course_id):
+        has_searchable_chunks = await self._has_searchable_attached_book_chunks(session=session, course_id=course_id)
+        await session.commit()
+        if not has_searchable_chunks:
             return []
 
         retrieval_query = self._append_level_hint(query, learner_level=learner_level)

@@ -163,6 +163,7 @@ class CourseContentService:
                         logger.warning("courses.generation.course_missing", extra={"course_id": str(course_id)})
                         course_missing = True
                         span.set_attribute("app.course_generation.course_missing", course_missing)
+                        await session.rollback()
                         return
 
                     session_data = dict(data)
@@ -184,6 +185,7 @@ class CourseContentService:
                             "adaptive_enabled": is_adaptive,
                         },
                     )
+                    await session.commit()
 
                     module_count, lesson_count = await self._build_and_persist_generated_course(
                         session=session,

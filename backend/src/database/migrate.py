@@ -161,7 +161,11 @@ async def _execute_migration_sql(*, conn: AsyncConnection, sql_content: str) -> 
     # scans for client-side placeholders even without parameters, which breaks
     # migrations containing literal "%" (e.g. plpgsql RAISE messages).
     raw_connection = await conn.get_raw_connection()
-    await raw_connection.driver_connection.execute(sql_content)
+    driver_connection = raw_connection.driver_connection
+    if driver_connection is None:
+        msg = "Raw database driver connection is unavailable"
+        raise RuntimeError(msg)
+    await driver_connection.execute(sql_content)
 
 
 async def _record_applied_migration(conn: AsyncConnection, *, filename: str) -> None:
