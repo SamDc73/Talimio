@@ -65,7 +65,10 @@ export function UserAvatarMenu() {
 
 	return (
 		<>
-			<DropdownMenu open={open} onOpenChange={setOpen}>
+			{/* modal={false} keeps the menu from locking body pointer-events; a modal menu
+			    closing while PersonalizationDialog opens leaves the page unclickable
+			    (radix-ui/primitives#2122) */}
+			<DropdownMenu open={open} onOpenChange={setOpen} modal={false}>
 				<DropdownMenuTrigger asChild>
 					<TooltipButton
 						variant="ghost"
@@ -84,7 +87,7 @@ export function UserAvatarMenu() {
 						</button>
 					</TooltipButton>
 				</DropdownMenuTrigger>
-				<DropdownMenuContent className="w-56 border-border" align="end" forceMount>
+				<DropdownMenuContent className="w-56 border-border" align="end">
 					<DropdownMenuLabel className="font-normal">
 						<div className="flex flex-col space-y-1">
 							<p className="text-sm/none font-medium ">{user?.username || user?.email?.split("@")[0] || "User"}</p>
