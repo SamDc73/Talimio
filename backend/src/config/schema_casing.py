@@ -1,6 +1,6 @@
 """Shared casing helpers for API schema serialization."""
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict  # noqa: TID251 - not an HTTP schema
 
 
 def to_camel(field_name: str) -> str:

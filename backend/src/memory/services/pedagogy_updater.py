@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src.courses.models import LessonFeedbackEvent
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue  # noqa: TID251 - not an HTTP schema
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -5,7 +5,7 @@ import logging
 import uuid
 from typing import ReadOnly, TypedDict
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue  # noqa: TID251 - not an HTTP schema
 from sqlalchemy import and_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
