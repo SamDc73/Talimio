@@ -228,16 +228,14 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 
 	const handleViewMemories = async () => {
 		setView(VIEW.MEMORIES)
-		if (memories.length === 0) {
-			setIsLoadingMemories(true)
-			try {
-				const userMemories = await getUserMemories()
-				setMemories(userMemories)
-			} catch (error) {
-				logger.error("Failed to load memories", error)
-			} finally {
-				setIsLoadingMemories(false)
-			}
+		setIsLoadingMemories(true)
+		try {
+			const userMemories = await getUserMemories()
+			setMemories(userMemories)
+		} catch (error) {
+			logger.error("Failed to load memories", error)
+		} finally {
+			setIsLoadingMemories(false)
 		}
 	}
 
