@@ -775,8 +775,6 @@ class CodeExecuteResponse(BaseModel):
     stdout: str | None = None
     stderr: str | None = None
     status: str | None = None
-    time: float | None = None
-    memory: float | None = None
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
