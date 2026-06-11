@@ -2,16 +2,14 @@
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 
 
-class SearchRequest(BaseModel):
+class SearchRequest(CamelModel):
     """Schema for RAG search request."""
 
     query: str = Field(min_length=1, description="Search query")
     top_k: int = Field(default=5, ge=1, le=20, description="Number of results to return")
-
-    model_config = build_camel_config()
 
     @field_validator("query")
     @classmethod
@@ -22,15 +20,13 @@ class SearchRequest(BaseModel):
         raise ValueError(message)
 
 
-class SearchResult(BaseModel):
+class SearchResult(CamelModel):
     """Schema for RAG search result."""
 
     chunk_id: str = Field(description="Unique chunk identifier")
     content: str = Field(description="Chunk text content")
     similarity_score: float = Field(description="Retrieval or rerank score used for result ordering")
     metadata: dict[str, JsonValue] = Field(default_factory=dict, description="Chunk metadata")
-
-    model_config = build_camel_config()
 
 
 class MultiViewQueryExpansion(BaseModel):
@@ -51,20 +47,16 @@ class UtilityBatchFilterResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class SearchResponse(BaseModel):
+class SearchResponse(CamelModel):
     """Schema for RAG search response."""
 
     results: list[SearchResult]
     total: int
 
-    model_config = build_camel_config()
 
-
-class DefaultResponse(BaseModel):
+class DefaultResponse(CamelModel):
     """Standard response following best practices."""
 
     status: bool
     message: str
     details: dict[str, JsonValue] = Field(default_factory=dict)
-
-    model_config = build_camel_config()

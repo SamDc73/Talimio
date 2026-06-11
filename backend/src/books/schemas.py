@@ -2,9 +2,9 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import ConfigDict, Field, field_validator
 
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 
 
 BookRagStatus = Literal["pending", "processing", "completed", "failed"]
@@ -13,30 +13,28 @@ BookFileType = Literal["pdf", "epub"]
 MEDIA_TYPES: dict[BookFileType, str] = {"pdf": "application/pdf", "epub": "application/epub+zip"}
 
 
-class BookCreate(BaseModel):
+class BookCreate(CamelModel):
     """Schema for finalizing a direct upload into a book record."""
 
-    model_config = build_camel_config(extra="forbid")
+    model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=1, max_length=500)
-    file_path: str = Field(alias="filePath")
-    storage_provider: str = Field(alias="storageProvider")
-    file_size: int | None = Field(default=None, alias="fileSize")
+    file_path: str
+    storage_provider: str
+    file_size: int | None = None
     author: str | None = Field(default=None, max_length=200)
     subtitle: str | None = Field(default=None, max_length=500)
     description: str | None = None
     isbn: str | None = Field(default=None, max_length=20)
     language: str | None = Field(default=None, max_length=10)
-    publication_year: int | None = Field(default=None, ge=1000, le=2030, alias="publicationYear")
+    publication_year: int | None = Field(default=None, ge=1000, le=2030)
     publisher: str | None = Field(default=None, max_length=200)
     tags: list[str] = Field(default_factory=list)
-    process_in_background: bool = Field(default=True, alias="processInBackground")
+    process_in_background: bool = True
 
 
-class BookUpdate(BaseModel):
+class BookUpdate(CamelModel):
     """Schema for updating a book."""
-
-    model_config = build_camel_config()
 
     title: str | None = Field(None, max_length=500)
     subtitle: str | None = Field(None, max_length=500)
@@ -44,45 +42,41 @@ class BookUpdate(BaseModel):
     description: str | None = None
     isbn: str | None = Field(None, max_length=20)
     language: str | None = Field(None, max_length=10)
-    publication_year: int | None = Field(None, ge=1000, le=2030, alias="publicationYear")
+    publication_year: int | None = Field(None, ge=1000, le=2030)
     publisher: str | None = Field(None, max_length=200)
     tags: list[str] | None = None
-    table_of_contents: list[dict] | None = Field(None, alias="tableOfContents")
+    table_of_contents: list[dict] | None = None
 
 
-class TableOfContentsItem(BaseModel):
+class TableOfContentsItem(CamelModel):
     """Schema for table of contents item."""
-
-    model_config = build_camel_config()
 
     id: str
     title: str
     page: int | None = None
-    start_page: int | None = Field(None, alias="startPage")
-    end_page: int | None = Field(None, alias="endPage")
+    start_page: int | None = None
+    end_page: int | None = None
     level: int = 0  # 0 for chapters, 1 for sections, etc.
     children: list[TableOfContentsItem] = Field(default_factory=list)
 
 
-class BookTocChapterResponse(BaseModel):
+class BookTocChapterResponse(CamelModel):
     """Canonical chapter response for book table-of-contents endpoints."""
-
-    model_config = build_camel_config()
 
     id: str
     title: str
     page: int | None = None
-    start_page: int | None = Field(default=None, alias="startPage")
-    end_page: int | None = Field(default=None, alias="endPage")
+    start_page: int | None = None
+    end_page: int | None = None
     level: int = 0
     completed: bool = False
     children: list[BookTocChapterResponse] = Field(default_factory=list)
 
 
-class BookResponse(BaseModel):
+class BookResponse(CamelModel):
     """Schema for book response."""
 
-    model_config = build_camel_config(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     title: str
@@ -91,10 +85,10 @@ class BookResponse(BaseModel):
     description: str | None = None
     isbn: str | None = None
     language: str | None = None
-    publication_year: int | None = Field(None, alias="publicationYear")
+    publication_year: int | None = None
     publisher: str | None = None
     tags: list[str] = Field(default_factory=list)
-    file_type: BookFileType = Field(alias="fileType")
+    file_type: BookFileType
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -113,12 +107,12 @@ class BookResponse(BaseModel):
             return v
         return []
 
-    file_path: str = Field(alias="filePath")
-    storage_provider: str = Field(alias="storageProvider")
-    file_size: int = Field(alias="fileSize")
-    total_pages: int | None = Field(None, alias="totalPages")
-    table_of_contents: list[TableOfContentsItem] | None = Field(None, alias="tableOfContents")
-    rag_status: BookRagStatus = Field(alias="ragStatus")
+    file_path: str
+    storage_provider: str
+    file_size: int
+    total_pages: int | None = None
+    table_of_contents: list[TableOfContentsItem] | None = None
+    rag_status: BookRagStatus
 
     @field_validator("table_of_contents", mode="before")
     @classmethod
@@ -137,52 +131,46 @@ class BookResponse(BaseModel):
             return v
         return None
 
-    rag_processed_at: datetime | None = Field(None, alias="ragProcessedAt")
-    created_at: datetime = Field(alias="createdAt")
-    updated_at: datetime = Field(alias="updatedAt")
+    rag_processed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
-class BookProgressBase(BaseModel):
+class BookProgressBase(CamelModel):
     """Base schema for book progress."""
 
-    model_config = build_camel_config()
-
-    current_page: int = Field(default=1, ge=1, alias="currentPage")
-    progress_percentage: float = Field(default=0.0, ge=0.0, le=100.0, alias="progressPercentage")
-    reading_time_minutes: int = Field(default=0, ge=0, alias="readingTimeMinutes")
+    current_page: int = Field(default=1, ge=1)
+    progress_percentage: float = Field(default=0.0, ge=0.0, le=100.0)
+    reading_time_minutes: int = Field(default=0, ge=0)
     status: BookLearningStatus = "not_started"
     notes: str | None = None
     bookmarks: list[int] = Field(default_factory=list)
-    toc_progress: dict[str, bool] = Field(
-        default_factory=dict, alias="tocProgress"
-    )  # Maps section IDs to completion status
+    toc_progress: dict[str, bool] = Field(default_factory=dict)  # Maps section IDs to completion status
 
 
-class BookProgressUpdate(BaseModel):
+class BookProgressUpdate(CamelModel):
     """Schema for updating book progress."""
 
-    model_config = build_camel_config()
-
-    current_page: int | None = Field(None, ge=1, alias="currentPage")
-    total_pages: int | None = Field(None, ge=1, alias="totalPages")
-    progress_percentage: float | None = Field(None, ge=0.0, le=100.0, alias="progressPercentage")
-    reading_time_minutes: int | None = Field(None, ge=0, alias="readingTimeMinutes")
+    current_page: int | None = Field(None, ge=1)
+    total_pages: int | None = Field(None, ge=1)
+    progress_percentage: float | None = Field(None, ge=0.0, le=100.0)
+    reading_time_minutes: int | None = Field(None, ge=0)
     status: BookLearningStatus | None = None
     notes: str | None = None
     bookmarks: list[int] | None = None
-    toc_progress: dict[str, bool] | None = Field(None, alias="tocProgress")  # Maps section IDs to completion status
+    toc_progress: dict[str, bool] | None = None  # Maps section IDs to completion status
 
 
 class BookProgressResponse(BookProgressBase):
     """Schema for book progress response."""
 
-    model_config = build_camel_config(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID | None = None  # Optional - might not exist for unsaved progress
-    book_id: uuid.UUID = Field(alias="bookId")
-    total_pages_read: int = Field(alias="totalPagesRead")
-    last_read_at: datetime | None = Field(alias="lastReadAt")
-    created_at: datetime | None = Field(None, alias="createdAt")  # None if not yet saved
+    book_id: uuid.UUID
+    total_pages_read: int
+    last_read_at: datetime | None
+    created_at: datetime | None = None  # None if not yet saved
 
     @field_validator("bookmarks", mode="before")
     @classmethod
@@ -219,7 +207,7 @@ class BookProgressResponse(BookProgressBase):
             return result
         return []
 
-    updated_at: datetime | None = Field(None, alias="updatedAt")  # None if not yet saved
+    updated_at: datetime | None = None  # None if not yet saved
 
     @field_validator("toc_progress", mode="before")
     @classmethod
@@ -245,43 +233,37 @@ class BookWithProgress(BookResponse):
     progress: BookProgressResponse | None = None
 
 
-class BookChapterBase(BaseModel):
+class BookChapterBase(CamelModel):
     """Base schema for book chapter."""
 
-    model_config = build_camel_config()
-
-    chapter_number: int = Field(ge=1, alias="chapterNumber")
+    chapter_number: int = Field(ge=1)
     title: str = Field(max_length=500)
-    start_page: int | None = Field(None, ge=1, alias="startPage")
-    end_page: int | None = Field(None, ge=1, alias="endPage")
+    start_page: int | None = Field(None, ge=1)
+    end_page: int | None = Field(None, ge=1)
     status: BookLearningStatus = "not_started"
 
 
 class BookChapterResponse(BookChapterBase):
     """Schema for book chapter response."""
 
-    model_config = build_camel_config(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    book_id: uuid.UUID = Field(alias="bookId")
-    created_at: datetime | None = Field(None, alias="createdAt")  # None if not from database
-    updated_at: datetime | None = Field(None, alias="updatedAt")  # None if not from database
+    book_id: uuid.UUID
+    created_at: datetime | None = None  # None if not from database
+    updated_at: datetime | None = None  # None if not from database
 
 
-class BookChapterStatusUpdate(BaseModel):
+class BookChapterStatusUpdate(CamelModel):
     """Schema for updating book chapter status."""
-
-    model_config = build_camel_config()
 
     status: BookLearningStatus
 
 
-class BookChapterBatchStatusUpdate(BaseModel):
+class BookChapterBatchStatusUpdate(CamelModel):
     """Schema for batch updating book chapter statuses."""
 
-    model_config = build_camel_config()
-
-    chapter_id: uuid.UUID = Field(alias="chapterId")
+    chapter_id: uuid.UUID
     status: BookLearningStatus
 
 

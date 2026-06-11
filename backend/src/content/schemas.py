@@ -2,9 +2,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import ConfigDict, Field, JsonValue
 
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 
 
 class ContentType(StrEnum):
@@ -32,17 +32,15 @@ ContentStatusFilter = Literal["active", "archived", "all"]
 ContentProcessingStatus = Literal["ready", "processing", "failed"]
 
 
-class ProgressData(BaseModel):
+class ProgressData(CamelModel):
     """Standardized progress data structure."""
 
     percentage: float = Field(ge=0, le=100)
     completed_items: int = Field(ge=0)
     total_items: int = Field(ge=0)
 
-    model_config = build_camel_config()
 
-
-class ContentMetadata(BaseModel):
+class ContentMetadata(CamelModel):
     """Type-specific metadata container."""
 
     # Course-specific
@@ -57,10 +55,10 @@ class ContentMetadata(BaseModel):
     pages: int | None = None
     file_type: str | None = None
 
-    model_config = build_camel_config(extra="allow")
+    model_config = ConfigDict(extra="allow")
 
 
-class ContentItemBase(BaseModel):
+class ContentItemBase(CamelModel):
     """Base model for all content items with common fields."""
 
     # Core fields (REQUIRED for all types)
@@ -86,8 +84,6 @@ class ContentItemBase(BaseModel):
     # Type-specific metadata
     metadata: ContentMetadata = Field(default_factory=ContentMetadata)
 
-    model_config = build_camel_config()
-
 
 class VideoContent(ContentItemBase):
     """Model for video content items."""
@@ -96,8 +92,6 @@ class VideoContent(ContentItemBase):
     channel: str  # Required for videos
     length: int | None = None  # Duration in seconds
     thumbnail_url: str | None = None
-
-    model_config = build_camel_config()
 
 
 class BookContent(ContentItemBase):
@@ -109,8 +103,6 @@ class BookContent(ContentItemBase):
     current_page: int = 0
     toc_progress: dict[str, JsonValue] | None = None  # Internal use
 
-    model_config = build_camel_config()
-
 
 class CourseContent(ContentItemBase):
     """Model for course content items."""
@@ -120,15 +112,11 @@ class CourseContent(ContentItemBase):
     lesson_count: int = 0
     completed_lessons: int = 0
 
-    model_config = build_camel_config()
 
-
-class ContentListResponse(BaseModel):
+class ContentListResponse(CamelModel):
     """Response model for paginated content list."""
 
     items: list[VideoContent | BookContent | CourseContent]
     total: int
     page: int
     per_page: int  # Changed from page_size to match spec
-
-    model_config = build_camel_config()

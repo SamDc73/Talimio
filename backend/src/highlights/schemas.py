@@ -4,22 +4,20 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, Field
 
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 
 
-class HighlightCreate(BaseModel):
+class HighlightCreate(CamelModel):
     """Schema for creating a new highlight."""
 
     source_data: dict[str, object] = Field(
         description="Web-highlighter source data containing startMeta, endMeta, text, etc."
     )
 
-    model_config = build_camel_config()
 
-
-class HighlightResponse(BaseModel):
+class HighlightResponse(CamelModel):
     """Schema for highlight response."""
 
     id: uuid.UUID
@@ -30,4 +28,4 @@ class HighlightResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = build_camel_config(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)

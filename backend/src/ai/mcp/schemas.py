@@ -6,15 +6,15 @@ from datetime import datetime
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import AliasChoices, AnyHttpUrl, BaseModel, Field, SecretStr, ValidationInfo, field_validator
+from pydantic import AliasChoices, AnyHttpUrl, ConfigDict, Field, SecretStr, ValidationInfo, field_validator
 
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 
 
 AuthType = Literal["none", "bearer"]
 
 
-class MCPServerCreateRequest(BaseModel):
+class MCPServerCreateRequest(CamelModel):
     """Schema for creating a user-managed MCP server."""
 
     url: AnyHttpUrl
@@ -27,8 +27,6 @@ class MCPServerCreateRequest(BaseModel):
         description="Static headers to send with every MCP request",
     )
     enabled: bool = True
-
-    model_config = build_camel_config()
 
     @field_validator("url")
     @classmethod
@@ -86,10 +84,10 @@ class MCPServerCreateRequest(BaseModel):
         return {name: secret.get_secret_value() for name, secret in self.static_headers.items()}
 
 
-class MCPServerResponse(BaseModel):
+class MCPServerResponse(CamelModel):
     """Response payload for MCP server entries."""
 
-    model_config = build_camel_config(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
     name: str
@@ -102,10 +100,8 @@ class MCPServerResponse(BaseModel):
     updated_at: datetime
 
 
-class MCPServerListResponse(BaseModel):
+class MCPServerListResponse(CamelModel):
     """Paginated MCP server collection."""
-
-    model_config = build_camel_config()
 
     items: list[MCPServerResponse]
     total: int
