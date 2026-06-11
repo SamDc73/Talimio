@@ -33,6 +33,7 @@ from src.courses.models import (
 )
 from src.courses.services.concept_graph_service import ConceptGraphService
 from src.courses.services.concept_scheduler_service import LectorSchedulerService
+from src.courses.services.course_attachments_service import CourseAttachmentsService
 from src.courses.services.course_progress_service import CourseProgressService
 from src.courses.services.course_query_service import CourseQueryService
 from src.courses.services.frontier_builder import build_course_frontier
@@ -41,10 +42,12 @@ from src.learning_capabilities.schemas import (
     ActiveChatProbe,
     ActiveProbeSuggestion,
     AdaptiveCatalogEntry,
+    BookMatch,
     ConceptFocus,
     ConceptMatch,
     ConceptMatchSource,
     ConceptRelationSignal,
+    CourseAttachmentItem,
     CourseCatalogEntry,
     CourseFrontierState,
     CourseMatch,
@@ -72,9 +75,15 @@ from src.learning_capabilities.schemas import (
     LessonMatch,
     LessonState,
     LessonWindowState,
+    ListBooksCapabilityInput,
+    ListBooksCapabilityOutput,
+    ListCourseAttachmentsCapabilityInput,
+    ListCourseAttachmentsCapabilityOutput,
     ListRelevantCoursesCapabilityInput,
     ListRelevantCoursesCapabilityOutput,
     RecentProbeSignal,
+    SearchBooksCapabilityInput,
+    SearchBooksCapabilityOutput,
     SearchConceptsCapabilityInput,
     SearchConceptsCapabilityOutput,
     SearchCourseSourcesCapabilityInput,
@@ -206,10 +215,10 @@ class LearningCapabilityQueryService:
         user_id: uuid.UUID,
         payload: SearchCourseSourcesCapabilityInput,
     ) -> SearchCourseSourcesCapabilityOutput:
-        """Search uploaded course sources with course ownership enforced first."""
+        """Search attached book sources with course ownership enforced first."""
         query_service = CourseQueryService(self._session)
         course = await query_service.get_course(payload.course_id, user_id)
-        if "course_document" not in payload.source_types:
+        if "book" not in payload.source_types:
             return SearchCourseSourcesCapabilityOutput(course_id=course.id, items=[])
         query_text = payload.query.strip()
         if not query_text:
@@ -224,6 +233,172 @@ class LearningCapabilityQueryService:
         )
         items = [_build_source_excerpt(course_id=course.id, result=result) for result in results]
         return SearchCourseSourcesCapabilityOutput(course_id=course.id, items=items)
+
+    async def search_books(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: SearchBooksCapabilityInput,
+    ) -> SearchBooksCapabilityOutput:
+        """Search every book the user owns — archived included, no filters.
+
+        Vector search over book chunks ranks grounded matches first; a
+        title/author lexical pass catches books without completed embeddings.
+        """
+        query_text = payload.query.strip()
+        if not query_text:
+            return SearchBooksCapabilityOutput(items=[])
+
+        matches: dict[uuid.UUID, BookMatch] = {}
+        for match in await self._match_books_by_embedding(
+            user_id=user_id, query_text=query_text, limit=payload.limit
+        ):
+            matches.setdefault(match.book_id, match)
+
+        if len(matches) < payload.limit:
+            pattern = f"%{query_text}%"
+            lexical_rows = (
+                await self._session.execute(
+                    select(Book)
+                    .where(Book.user_id == user_id)
+                    .where(or_(Book.title.ilike(pattern), Book.author.ilike(pattern)))
+                    .order_by(Book.updated_at.desc())
+                    .limit(payload.limit)
+                )
+            ).scalars().all()
+            for book in lexical_rows:
+                matches.setdefault(
+                    book.id,
+                    BookMatch(
+                        book_id=book.id,
+                        title=book.title,
+                        author=book.author or None,
+                        archived=book.archived,
+                        rag_status=book.rag_status,
+                    ),
+                )
+
+        return SearchBooksCapabilityOutput(items=list(matches.values())[: payload.limit])
+
+    async def _match_books_by_embedding(
+        self,
+        *,
+        user_id: uuid.UUID,
+        query_text: str,
+        limit: int,
+    ) -> list[BookMatch]:
+        try:
+            query_embedding = await VectorRAG().generate_embedding(query_text)
+        except _CONCEPT_EMBEDDING_FALLBACK_ERROR_TYPES:
+            logger.warning(
+                "learning_capability.book_embedding.unavailable",
+                extra={"user_id": str(user_id)},
+                exc_info=True,
+            )
+            return []
+
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    SELECT DISTINCT ON (b.id)
+                        b.id AS book_id,
+                        b.title AS title,
+                        b.author AS author,
+                        b.archived AS archived,
+                        b.rag_status AS rag_status,
+                        chunk.content AS content,
+                        GREATEST(
+                            0.0::double precision,
+                            1.0::double precision - (chunk.embedding <=> CAST(:query_embedding AS vector))
+                        ) AS similarity
+                    FROM rag_document_chunks chunk
+                    JOIN books b ON b.id = chunk.doc_id
+                    WHERE chunk.doc_type = 'book'
+                      AND b.user_id = :user_id
+                      AND chunk.embedding IS NOT NULL
+                    ORDER BY b.id, chunk.embedding <=> CAST(:query_embedding AS vector)
+                    LIMIT :limit
+                    """
+                ),
+                {
+                    "user_id": str(user_id),
+                    "query_embedding": _format_vector(query_embedding),
+                    "limit": limit,
+                },
+            )
+        ).all()
+
+        matches = [
+            BookMatch(
+                book_id=row.book_id,
+                title=row.title,
+                author=row.author or None,
+                archived=row.archived,
+                rag_status=row.rag_status,
+                excerpt=_compact_text(row.content, _SOURCE_EXCERPT_CHARS),
+                similarity=float(row.similarity or 0.0),
+            )
+            for row in rows
+        ]
+        matches.sort(key=lambda match: match.similarity or 0.0, reverse=True)
+        return matches
+
+    async def list_books(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: ListBooksCapabilityInput,
+    ) -> ListBooksCapabilityOutput:
+        """List every book the user owns — archived included, no filters."""
+        total = (
+            await self._session.execute(
+                select(func.count(Book.id)).where(Book.user_id == user_id)
+            )
+        ).scalar_one()
+        rows = (
+            await self._session.execute(
+                select(Book)
+                .where(Book.user_id == user_id)
+                .order_by(Book.created_at.desc())
+                .offset((payload.page - 1) * payload.limit)
+                .limit(payload.limit)
+            )
+        ).scalars().all()
+        items = [
+            BookMatch(
+                book_id=book.id,
+                title=book.title,
+                author=book.author or None,
+                archived=book.archived,
+                rag_status=book.rag_status,
+            )
+            for book in rows
+        ]
+        return ListBooksCapabilityOutput(items=items, total=int(total))
+
+    async def list_course_attachments(
+        self,
+        *,
+        user_id: uuid.UUID,
+        payload: ListCourseAttachmentsCapabilityInput,
+    ) -> ListCourseAttachmentsCapabilityOutput:
+        """Return one course's attachments with denormalized book fields."""
+        attachments = await CourseAttachmentsService(self._session).list_attachments(
+            payload.course_id, user_id
+        )
+        items = [
+            CourseAttachmentItem(
+                id=attachment.id,
+                book_id=attachment.book_id,
+                title=attachment.title,
+                rag_status=attachment.rag_status,
+                archived=attachment.archived,
+                created_at=attachment.created_at,
+            )
+            for attachment in attachments
+        ]
+        return ListCourseAttachmentsCapabilityOutput(course_id=payload.course_id, items=items)
 
     async def get_source_focus(
         self,
@@ -1397,16 +1572,27 @@ def _compact_text(value: str | None, limit: int) -> str | None:
 
 def _build_source_excerpt(*, course_id: uuid.UUID, result: SearchResult) -> CourseSourceExcerpt:
     metadata = result.metadata if isinstance(result.metadata, dict) else {}
+    chunk_id = str(getattr(result, "chunk_id", ""))
     return CourseSourceExcerpt(
         course_id=course_id,
         title=_metadata_str(metadata, "title"),
         excerpt=_compact_text(getattr(result, "content", ""), _SOURCE_EXCERPT_CHARS) or "",
         similarity=float(getattr(result, "similarity_score", 0.0) or 0.0),
-        chunk_id=str(getattr(result, "chunk_id", "")),
-        document_id=_metadata_int(metadata, "document_id"),
+        chunk_id=chunk_id,
+        book_id=_book_id_from_chunk_id(chunk_id),
         chunk_index=_metadata_int(metadata, "chunk_index"),
         total_chunks=_metadata_int(metadata, "total_chunks"),
     )
+
+
+def _book_id_from_chunk_id(chunk_id: str) -> uuid.UUID | None:
+    # Chunk ids are formatted "{doc_id}_{chunk_index}"; for course sources the
+    # doc is always a book.
+    doc_part = chunk_id.rsplit("_", 1)[0] if "_" in chunk_id else chunk_id
+    try:
+        return uuid.UUID(doc_part)
+    except ValueError:
+        return None
 
 
 def _metadata_str(metadata: dict[str, JsonValue], key: str) -> str | None:

@@ -23,16 +23,52 @@ def build_learning_action_tools(
     tool_specs: list[tuple[str, str, Mapping[str, object]]] = [
         (
             "create_course",
-            "Create a new course from a learner prompt. Requires confirmation.",
+            "Create a new course from a learner prompt, optionally grounded in library books. Requires confirmation.",
             {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
                     "prompt": {"type": "string"},
                     "adaptive_enabled": {"type": "boolean"},
+                    "book_ids": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "uuid"},
+                    },
                     "confirmed": {"type": "boolean"},
                 },
                 "required": ["prompt"],
+            },
+        ),
+        (
+            "attach_book_to_course",
+            "Attach library books to a course as grounding sources. Archived books are attachable. Requires confirmation.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "course_id": {"type": "string", "format": "uuid"},
+                    "book_ids": {
+                        "type": "array",
+                        "items": {"type": "string", "format": "uuid"},
+                        "minItems": 1,
+                    },
+                    "confirmed": {"type": "boolean"},
+                },
+                "required": ["course_id", "book_ids"],
+            },
+        ),
+        (
+            "detach_book_from_course",
+            "Remove one book from a course's grounding. The book stays in the library. Requires confirmation.",
+            {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "course_id": {"type": "string", "format": "uuid"},
+                    "book_id": {"type": "string", "format": "uuid"},
+                    "confirmed": {"type": "boolean"},
+                },
+                "required": ["course_id", "book_id"],
             },
         ),
         (
