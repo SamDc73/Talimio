@@ -91,6 +91,7 @@ class CourseMatch(BaseModel):
     title: str
     description: str
     adaptive_enabled: bool
+    archived: bool = False
     completion_percentage: float = 0.0
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
@@ -103,6 +104,7 @@ class CourseState(BaseModel):
     title: str
     description: str
     adaptive_enabled: bool
+    archived: bool = False
     completion_percentage: float = 0.0
     total_lessons: int = 0
     completed_lessons: list[uuid.UUID] = Field(default_factory=list)
@@ -117,6 +119,7 @@ class CourseCatalogEntry(BaseModel):
     course_id: uuid.UUID
     title: str
     adaptive_enabled: bool = False
+    archived: bool = False
 
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
@@ -126,6 +129,7 @@ class AdaptiveCatalogEntry(BaseModel):
 
     course_id: uuid.UUID
     title: str
+    archived: bool = False
     completion_percentage: float = 0.0
     current_lesson_id: uuid.UUID | None = None
     current_lesson_title: str | None = None
