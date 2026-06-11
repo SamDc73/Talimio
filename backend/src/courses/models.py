@@ -8,7 +8,6 @@ from typing import Literal
 from pgvector.sqlalchemy import Vector
 from pydantic import JsonValue
 from sqlalchemy import (
-    TIMESTAMP,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -38,7 +37,6 @@ _DEFAULT_LEARNER_PROFILE = {
     "semantic_sensitivity": 1.0,
 }
 
-CourseDocumentStatus = Literal["pending", "processing", "embedded", "failed"]
 LearningQuestionStatus = Literal["active", "answered", "expired"]
 CourseGenerationStatus = Literal["generating", "ready", "failed"]
 
@@ -76,11 +74,6 @@ class Course(Base):
 
     lessons: Mapped[list[Lesson]] = relationship(
         "Lesson",
-        back_populates="course",
-        cascade="all, delete-orphan",
-    )
-    documents: Mapped[list[CourseDocument]] = relationship(
-        "CourseDocument",
         back_populates="course",
         cascade="all, delete-orphan",
     )
@@ -253,33 +246,6 @@ class LessonFeedbackEvent(Base):
         nullable=False,
         default=lambda: datetime.now(UTC),
     )
-
-
-class CourseDocument(Base):
-    """Documents attached to courses for reference and RAG ingestion."""
-
-    __tablename__ = "course_documents"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    course_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("courses.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    document_type: Mapped[str | None] = mapped_column(String(50))
-    title: Mapped[str] = mapped_column(String(255))
-    file_path: Mapped[str | None] = mapped_column(String(500))
-    book_id: Mapped[uuid.UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("books.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC))
-    processed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
-    embedded_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
-    status: Mapped[CourseDocumentStatus] = mapped_column(String(20), default="pending")
-
-    course: Mapped[Course] = relationship("Course", back_populates="documents")
 
 
 class CourseAttachment(Base):
@@ -670,7 +636,6 @@ __all__ = [
     "Course",
     "CourseAttachment",
     "CourseConcept",
-    "CourseDocument",
     "LearningAttempt",
     "LearningQuestion",
     "Lesson",

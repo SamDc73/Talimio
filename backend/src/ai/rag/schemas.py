@@ -1,43 +1,8 @@
 """RAG system Pydantic schemas."""
 
-import uuid
-from datetime import datetime
-from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 from src.config.schema_casing import build_camel_config
-
-
-CourseDocumentStatus = Literal["pending", "processing", "embedded", "failed"]
-
-
-class DocumentResponse(BaseModel):
-    """Schema for document response."""
-
-    id: int
-    course_id: uuid.UUID
-    document_type: str
-    title: str
-    file_path: str | None = None
-    content_hash: str | None = None
-    created_at: datetime
-    processed_at: datetime | None = None
-    embedded_at: datetime | None = None
-    status: CourseDocumentStatus
-
-    model_config = build_camel_config()
-
-
-class DocumentList(BaseModel):
-    """Schema for paginated document list response."""
-
-    documents: list[DocumentResponse]
-    total: int
-    page: int
-    size: int
-
-    model_config = build_camel_config()
 
 
 class SearchRequest(BaseModel):

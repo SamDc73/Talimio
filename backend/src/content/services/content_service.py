@@ -4,7 +4,6 @@ import logging
 import uuid
 from typing import Protocol, cast
 
-from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import Float, Numeric, and_, case, cast as sql_cast, column, func, select, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.exc import SQLAlchemyError
@@ -228,41 +227,6 @@ class ContentService:
             except (OSError, RuntimeError, TypeError, ValueError):
                 logger.exception("Non-fatal: failed to delete stored file for book")
 
-    async def _delete_course_document_files(self, session: AsyncSession, course_id: uuid.UUID) -> None:
-        """Delete any local source files for course documents.
-
-        Course reference docs (used for course RAG) are stored on the local filesystem
-        during upload/processing. We remove any lingering files here to guarantee
-        no leftovers after a hard delete.
-        """
-        try:
-            result = await session.execute(
-                text(
-                    """
-                    SELECT id, file_path FROM course_documents
-                    WHERE course_id = :course_id AND file_path IS NOT NULL
-                    """
-                ),
-                {"course_id": str(course_id)},
-            )
-            rows = result.fetchall()
-            for row in rows:
-                file_path = getattr(row, "file_path", None)
-                if not file_path:
-                    continue
-                # Best-effort local unlink; ignore failures
-                try:
-                    from pathlib import Path
-
-                    p = Path(file_path)
-                    if await run_in_threadpool(p.exists):
-                        await run_in_threadpool(p.unlink)
-                except OSError:
-                    logger.debug("Non-fatal: failed to delete course doc file %s", file_path)
-        except SQLAlchemyError:
-            # Don't block overall deletion if this best-effort cleanup fails
-            logger.debug("Course document file cleanup failed for course %s", course_id)
-
     async def _prune_orphan_tags(self, session: AsyncSession) -> None:
         """Remove Tag rows that are no longer referenced by any content.
 
@@ -394,9 +358,6 @@ class ContentService:
         # Remove any stored files that rely on row attributes before deleting the row.
         if content_type == ContentType.BOOK:
             await self._delete_book_file(cast("StoredBookRow", row))
-        elif content_type == ContentType.COURSE:
-            # Also remove any lingering uploaded course document source files
-            await self._delete_course_document_files(session, content_id)
 
         # Cross-module cleanup
         await self._delete_progress_for_content(session, content_id)
