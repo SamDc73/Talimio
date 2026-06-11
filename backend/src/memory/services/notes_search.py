@@ -46,7 +46,7 @@ _HYBRID_CANDIDATE_MULTIPLIER = 4
 #   single-leg hit has RRF score >= 1/(_RRF_K + 2*limit) — i.e. it ranks within
 #   the top 2*limit of its own leg.
 # - _RERANK_SCORE_FLOOR: when rerank relevance scores are available they are
-#   the better signal; hits below this cutoff are dropped.
+#   the better signal; hits below this floor are dropped.
 _DENSE_SCORE_FLOOR = 0.30
 _RERANK_SCORE_FLOOR = 0.30
 

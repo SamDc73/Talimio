@@ -9,6 +9,7 @@ lock make redelivery idempotent; the LLM only proposes, app code commits.
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from collections.abc import Mapping
@@ -18,18 +19,23 @@ from typing import TYPE_CHECKING, Literal, cast
 
 
 if TYPE_CHECKING:
-    from src.ai.assistant.models import AssistantConversationHistoryItem
     from src.memory.models import UserProfileSlot
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.ai.assistant.models import AssistantConversation, AssistantConversationHistoryItem
+from src.ai.client import LLMClient
 from src.ai.prompts import MAINTENANCE_SYSTEM_PROMPT
+from src.config.settings import get_settings
+from src.database.session import async_session_maker
 from src.jobs import QUEUE_MEMORY, defer_job, memory_queueing_lock
 from src.memory.models import UserMemoryWatermark
 from src.memory.services.profile_service import SlotEvidence, clear_slot, get_active_slots, record_skip_event, set_slot
 from src.memory.services.profile_slots import PROFILE_SLOTS, is_known_slot
+from src.memory.services.teaching_events import record_course_feedback
+from src.user.models import User
 
 
 logger = logging.getLogger(__name__)
@@ -102,8 +108,6 @@ async def process_user_memory(user_id: uuid.UUID) -> int:
     All canonical commits, evidence events, and the watermark advance happen in
     one transaction, so retries after a crash are exactly-once.
     """
-    from src.database.session import async_session_maker
-
     async with async_session_maker() as session:
         if not await _user_is_active(session, user_id):
             return 0
@@ -131,8 +135,6 @@ async def advance_watermark_past_history(session: AsyncSession, *, user_id: uuid
     can never re-extract pre-forget history. Monotonic via GREATEST; serialized
     against running jobs by the watermark row lock.
     """
-    from sqlalchemy import text
-
     await session.execute(
         text(
             """
@@ -161,14 +163,10 @@ async def advance_watermark_past_history(session: AsyncSession, *, user_id: uuid
 
 async def _user_is_active(session: AsyncSession, user_id: uuid.UUID) -> bool:
     """Queued work can outlive the account that created it; recheck before writing."""
-    from src.user.models import User
-
     return bool(await session.scalar(select(User.is_active).where(User.id == user_id)))
 
 
 async def _lock_watermark(session: AsyncSession, user_id: uuid.UUID) -> UserMemoryWatermark:
-    from sqlalchemy import text
-
     # Race-free get-or-create: a concurrent forget may be inserting the same
     # row; DO NOTHING + re-select FOR UPDATE blocks instead of erroring.
     await session.execute(
@@ -192,8 +190,6 @@ async def _load_unprocessed_items(
     job's LLM work bounded and biases toward fresh evidence; anything older
     that the bound skips is rebuild-job territory, not hot-path work.
     """
-    from src.ai.assistant.models import AssistantConversation, AssistantConversationHistoryItem
-
     stmt = (
         select(
             AssistantConversationHistoryItem,
@@ -267,24 +263,22 @@ def _message_text(message: Mapping[str, object]) -> str:
 async def _record_course_preference(
     session: AsyncSession, *, user_id: uuid.UUID, turn: UserTurn, action: SlotAction
 ) -> None:
-    """Route a course-scoped stated preference into pedagogical evidence.
+    """Route a course-scoped stated preference into the authored evidence stream.
 
-    The teaching event is high-signal, so the consolidation pass runs
-    immediately and the next lesson generation in that course already knows.
+    A stated preference is the same kind of evidence as a regenerate critique
+    (the learner speaking, course-scoped), so it lands as a feedback event:
+    consolidation runs immediately and facet extraction distills it like any
+    critique.
     """
     if turn.course_id is None:
         logger.info("memory.maintenance.course_note_without_course_context")
         return
 
-    from src.memory.services.teaching_events import record_teaching_event
-
-    await record_teaching_event(
+    await record_course_feedback(
         session,
         user_id=user_id,
         course_id=turn.course_id,
-        event_type="preference_stated",
-        outcome="stated",
-        details={"preference": action.value.strip(), "quote": action.evidence_text},
+        critique_text=action.evidence_text.strip() or action.value.strip(),
     )
     logger.info(
         "memory.maintenance.course_preference_recorded",
@@ -299,9 +293,6 @@ async def _propose_actions(
     current_profile: list[UserProfileSlot],
 ) -> MaintenanceDecision:
     """Thin wrapper over the shared LLM runtime; the model only proposes."""
-    from src.ai.client import LLMClient
-    from src.config.settings import get_settings
-
     settings = get_settings()
     model = settings.MEMORY_LLM_MODEL.strip() or None
 
@@ -332,8 +323,6 @@ async def _propose_actions(
 
 
 def _to_json(payload: dict[str, object]) -> str:
-    import json
-
     return json.dumps(payload, ensure_ascii=False, default=str)
 
 

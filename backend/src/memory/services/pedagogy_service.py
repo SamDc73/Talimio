@@ -9,11 +9,16 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.memory.models import CourseTeachingProfile
+
+
+TeachingSource = Literal["explicit", "inferred"]
+_SOURCES: tuple[TeachingSource, TeachingSource] = ("explicit", "inferred")
 
 
 TEACHING_PROFILE_FIELDS = (
@@ -31,7 +36,7 @@ class MergedTeachingValue:
     """One merged field value with the source it came from."""
 
     value: str
-    source: str  # 'explicit' | 'inferred'
+    source: TeachingSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,7 +103,7 @@ async def get_merged_teaching_profile(session: AsyncSession, course_id: uuid.UUI
 
     merged_fields: dict[str, MergedTeachingValue] = {}
     for name in TEACHING_PROFILE_FIELDS:
-        for source in ("explicit", "inferred"):
+        for source in _SOURCES:
             row = by_source.get(source)
             value = getattr(row, name, None) if row is not None else None
             if value:
@@ -106,41 +111,9 @@ async def get_merged_teaching_profile(session: AsyncSession, course_id: uuid.UUI
                 break
 
     avoid: list[str] = []
-    for source in ("explicit", "inferred"):
+    for source in _SOURCES:
         row = by_source.get(source)
         if row is not None:
             avoid.extend(item for item in row.avoid_list if item not in avoid)
 
     return MergedTeachingProfile(fields=merged_fields, avoid_list=avoid)
-
-
-async def build_pedagogy_context(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> str:
-    """Planner-facing pedagogical context: teaching profile plus the StudentCard.
-
-    The card is injected as-is (it already is the prompt block); the skeleton
-    card with no claims is skipped. Mastery/review numbers stay in the adaptive
-    signals and never appear here.
-    """
-    from src.memory.models import StudentCard
-    from src.memory.services.student_card import DEFAULT_CARD_TEXT
-
-    parts: list[str] = []
-
-    profile_block = (await get_merged_teaching_profile(session, course_id)).render_block()
-    if profile_block:
-        parts.append(
-            "Course teaching preferences (explicit = learner-stated, inferred = derived from critiques):\n"
-            + profile_block
-        )
-
-    card = await session.scalar(
-        select(StudentCard).where(StudentCard.user_id == user_id, StudentCard.course_id == course_id)
-    )
-    if card is not None and card.deleted_at is None and card.card_text.strip() != DEFAULT_CARD_TEXT:
-        parts.append(
-            "Student card (evidence-backed teaching memory for this learner; claims marked "
-            "[hypothesis] or [tentative] are working theories to test, never hard facts; "
-            "what the learner says they like and what measurably works are tracked separately):\n" + card.card_text
-        )
-
-    return "\n\n".join(parts)

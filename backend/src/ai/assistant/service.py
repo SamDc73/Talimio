@@ -614,8 +614,6 @@ def _build_completion_metadata(
         "assistant_lesson_id": str(context_meta.get("lesson_id", "")),
         "assistant_probe_context": _build_probe_context(request),
     }
-    if request.context_type == "course" and request.context_id is not None:
-        metadata["assistant_course_id"] = str(request.context_id)
     if probe_submitted:
         metadata["probe_submitted"] = True
     if prefetched_learning_tools:
@@ -1147,11 +1145,13 @@ async def assistant_chat(
             probe_submitted=probe_submitted,
             prefetched_learning_tools=prefetched_learning_tools,
         )
+        course_id = normalized_request.context_id if normalized_request.context_type == "course" else None
         stream = cast(
             "AsyncGenerator[object]",
             await llm_client.get_completion(
                 messages=messages,
                 user_id=user_id,
+                course_id=course_id,
                 model=normalized_request.model,
                 stream=True,
                 metadata=metadata,

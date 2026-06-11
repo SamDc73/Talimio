@@ -20,14 +20,12 @@ from src.ai.client import LLMClient
 from src.ai.models import GeneratedLesson
 from src.ai.rag.exceptions import RagUnavailableError, RagValidationError
 from src.ai.tools.figures import build_figure_finder_function_tool
-from src.ai.tools.memory import build_learner_memory_search_tool
 from src.ai.tools.wikipedia import build_wikipedia_resolver_function_tool
 from src.courses.models import (
     Concept,
     Course,
     CourseConcept,
     Lesson,
-    LessonFeedbackEvent,
     LessonVersion,
     LessonVersionWindow,
     ProbeEvent,
@@ -45,7 +43,7 @@ from src.courses.services.inline_question_materializer import InlineQuestionMate
 from src.courses.services.lesson_version_service import LessonVersionService
 from src.courses.services.lesson_window_service import LessonWindowService
 from src.exceptions import ConflictError, NotFoundError, UpstreamUnavailableError, ValidationError
-from src.memory import record_teaching_event
+from src.memory import record_course_feedback, record_teaching_event
 
 
 logger = logging.getLogger(__name__)
@@ -888,7 +886,6 @@ class LessonService:
             function_tools=[
                 build_wikipedia_resolver_function_tool(),
                 build_figure_finder_function_tool(verify=llm_client.verify_figure_for_concept),
-                build_learner_memory_search_tool(user_id=self.user_id, course_id=course_id),
             ],
             course_id=course_id,
         )
@@ -1233,14 +1230,14 @@ class LessonService:
                 course=course,
                 version=selected_version,
             )
-            feedback_event = LessonFeedbackEvent(
+            await record_course_feedback(
+                self.session,
+                user_id=course.user_id,
                 course_id=course.id,
                 lesson_id=lesson.id,
                 lesson_version_id=current_version.id,
                 critique_text=trimmed_critique,
             )
-            self.session.add(feedback_event)
-            await self.session.flush()
             await record_teaching_event(
                 self.session,
                 user_id=course.user_id,
