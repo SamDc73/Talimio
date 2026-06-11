@@ -39,6 +39,7 @@ from src.courses.schemas import (
     LessonWindowResponse,
 )
 from src.courses.services.concept_scheduler_service import AdaptivePassRecommendation, LectorSchedulerService
+from src.courses.services.generation_jobs import LessonGenerationMode, defer_lesson_version_generation
 from src.courses.services.inline_question_materializer import InlineQuestionMaterializer
 from src.courses.services.lesson_version_service import LessonVersionService
 from src.courses.services.lesson_window_service import LessonWindowService
@@ -662,7 +663,6 @@ class LessonService:
         self,
         *,
         lesson: Lesson,
-        course: Course,
         current_version: LessonVersion,
         available_versions: list[LessonVersion],
         recommendation: AdaptivePassRecommendation,
@@ -680,40 +680,29 @@ class LessonService:
                 lesson=lesson,
                 version=existing_next_pass,
             )
+            if selected_version.generation_status == "generating":
+                return selected_version, []
             selected_windows = await lesson_window_service.get_or_build_windows(lesson_version=selected_version)
             return selected_version, selected_windows
 
-        generation_recommendation = recommendation
         source_reason = recommendation.reason
         if force and recommendation.action != "deepen_with_next_major_pass":
-            generation_recommendation = AdaptivePassRecommendation(
-                action="deepen_with_next_major_pass",
-                recommended_major_version=next_major_version,
-                reason="The learner explicitly asked to start the next pass early.",
-            )
-            source_reason = generation_recommendation.reason
+            source_reason = "The learner explicitly asked to start the next pass early."
 
-        lesson_context = await self._prepare_adaptive_pass_context(
+        pending_version = await lesson_version_service.create_pending_next_pass_version(
             lesson=lesson,
-            course=course,
-            current_version=current_version,
-            recommendation=generation_recommendation,
-        )
-        generated = await self._generate_lesson_body(lesson_context=lesson_context, course_id=course.id)
-        selected_version = await lesson_version_service.create_adaptive_pass_version(
-            lesson=lesson,
-            content=generated.content,
             source_version=current_version,
             source_reason=source_reason,
         )
-        await self._materialize_and_persist_inline_questions(
-            generated=generated,
-            lesson=lesson,
-            course=course,
-            version=selected_version,
+        await defer_lesson_version_generation(
+            self.session,
+            version_id=pending_version.id,
+            user_id=self.user_id,
+            generation_mode="adaptive_revisit_pass",
+            source_version_id=current_version.id,
+            force=force,
         )
-        selected_windows = await lesson_window_service.rebuild_windows(lesson_version=selected_version)
-        return selected_version, selected_windows
+        return pending_version, []
 
     async def _build_generation_context_sections(
         self,
@@ -845,38 +834,6 @@ class LessonService:
             outline_window=outline_window,
         )
         return "\n\n".join([*context_sections, rag_context]).strip()
-
-    async def _prepare_regeneration_context(
-        self,
-        *,
-        lesson: Lesson,
-        course: Course,
-        current_version: LessonVersion,
-        critique_text: str,
-    ) -> str:
-        return await self._prepare_lesson_context(
-            lesson=lesson,
-            course=course,
-            generation_mode="regeneration",
-            current_version=current_version,
-            immediate_regenerate_request=critique_text,
-        )
-
-    async def _prepare_adaptive_pass_context(
-        self,
-        *,
-        lesson: Lesson,
-        course: Course,
-        current_version: LessonVersion,
-        recommendation: AdaptivePassRecommendation,
-    ) -> str:
-        return await self._prepare_lesson_context(
-            lesson=lesson,
-            course=course,
-            generation_mode="adaptive_revisit_pass",
-            current_version=current_version,
-            adaptive_recommendation=recommendation,
-        )
 
     async def _generate_lesson_body(self, *, lesson_context: str, course_id: uuid.UUID | None = None) -> GeneratedLesson:
         llm_client = LLMClient(agent_id=AGENT_ID_LESSON_WRITER)
@@ -1010,12 +967,13 @@ class LessonService:
         next_pass: LessonNextPassResponse | None,
         windows: Sequence[LessonVersionWindow],
     ) -> LessonDetailResponse:
+        is_generating = selected_version.generation_status == "generating"
         return LessonDetailResponse(
             id=lesson.id,
             course_id=course.id,
             title=lesson.title,
             description=lesson.description,
-            content=selected_version.content,
+            content=None if is_generating else selected_version.content,
             concept_id=lesson.concept_id,
             version_id=selected_version.id,
             current_version_id=lesson.current_version_id,
@@ -1025,9 +983,11 @@ class LessonService:
             version_label=f"{selected_version.major_version}.{selected_version.minor_version}",
             pass_label=self._build_pass_label(major_version=selected_version.major_version),
             source_reason=self._build_source_reason(version=selected_version),
+            generation_status=selected_version.generation_status,
+            generation_error=selected_version.generation_error,
             available_versions=self._build_version_summaries(lesson=lesson, versions=available_versions),
             next_pass=next_pass,
-            windows=self._build_window_payload(windows),
+            windows=[] if is_generating else self._build_window_payload(windows),
             adaptive_enabled=course.adaptive_enabled,
             created_at=lesson.created_at,
             updated_at=lesson.updated_at,
@@ -1056,17 +1016,15 @@ class LessonService:
         ------
             NotFoundError: If the lesson is missing or not owned by the current user
         """
+        del force_refresh  # reads never block on generation; the worker fills content out-of-request
         lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
-
-        if lesson.content == "" or (force_refresh and lesson.current_version_id is None):
-            lesson = await self._ensure_lesson_content(lesson, course, force_refresh=force_refresh)
 
         lesson_version_service = LessonVersionService(self.session)
         lesson_window_service = LessonWindowService(self.session)
-        current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
-        if not (current_version.content or "").strip():
-            lesson = await self._ensure_lesson_content(lesson, course, force_refresh=True)
-            current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+        current_version = await self._ensure_initial_generation_enqueued(
+            lesson=lesson,
+            lesson_version_service=lesson_version_service,
+        )
 
         selected_version = current_version
         available_versions = await lesson_version_service.list_versions(lesson=lesson)
@@ -1081,7 +1039,9 @@ class LessonService:
             selected_version=selected_version,
             available_versions=available_versions,
         )
-        selected_windows = await lesson_window_service.get_or_build_windows(lesson_version=selected_version)
+        selected_windows: list[LessonVersionWindow] = []
+        if selected_version.generation_status != "generating":
+            selected_windows = await lesson_window_service.get_or_build_windows(lesson_version=selected_version)
 
         return await self._build_lesson_detail_response(
             lesson=lesson,
@@ -1091,6 +1051,38 @@ class LessonService:
             next_pass=next_pass,
             windows=selected_windows,
         )
+
+    async def _ensure_initial_generation_enqueued(
+        self,
+        *,
+        lesson: Lesson,
+        lesson_version_service: LessonVersionService,
+    ) -> LessonVersion:
+        """Return the lesson's current version, enqueuing first-pass generation when content is missing.
+
+        Reads never call the LLM. When a lesson has no usable content yet, this
+        creates (or reuses) a 1.0 version, marks it ``generating``, and defers a
+        generation job. The dedupe lock makes repeated reads enqueue at most one
+        pending job. A version that already holds content (legacy or freshly
+        generated) is returned untouched.
+        """
+        current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+        if current_version.generation_status == "ready" and (current_version.content or "").strip():
+            return current_version
+        if current_version.generation_status == "failed":
+            return current_version
+
+        # Empty content (a fresh lesson or a legacy auto-created empty row): generate it.
+        if current_version.generation_status != "generating":
+            current_version.generation_status = "generating"
+            await self.session.flush()
+        await defer_lesson_version_generation(
+            self.session,
+            version_id=current_version.id,
+            user_id=self.user_id,
+            generation_mode="first_pass",
+        )
+        return current_version
 
     async def start_next_pass(
         self,
@@ -1105,15 +1097,15 @@ class LessonService:
             detail = "This lesson does not support adaptive passes."
             raise ConflictError(detail, feature_area="courses")
 
-        if lesson.content == "":
-            lesson = await self._ensure_lesson_content(lesson, course, force_refresh=True)
-
         lesson_version_service = LessonVersionService(self.session)
         lesson_window_service = LessonWindowService(self.session)
-        current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
-        if not (current_version.content or "").strip():
-            lesson = await self._ensure_lesson_content(lesson, course, force_refresh=True)
-            current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+        current_version = await self._ensure_initial_generation_enqueued(
+            lesson=lesson,
+            lesson_version_service=lesson_version_service,
+        )
+        if current_version.generation_status == "generating" or not (current_version.content or "").strip():
+            detail = "This lesson is still being generated. Try the next pass once it is ready."
+            raise ConflictError(detail, feature_area="courses")
 
         recommendation = await self._recommend_next_pass(
             lesson=lesson,
@@ -1132,7 +1124,6 @@ class LessonService:
         try:
             selected_version, selected_windows = await self._select_or_create_next_pass_version(
                 lesson=lesson,
-                course=course,
                 current_version=current_version,
                 available_versions=available_versions,
                 recommendation=recommendation,
@@ -1183,12 +1174,13 @@ class LessonService:
         lesson_id: uuid.UUID,
     ) -> LessonVersionHistoryResponse:
         """Return stable version history for one lesson."""
-        lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
-        if lesson.content == "":
-            lesson = await self._ensure_lesson_content(lesson, course)
+        lesson, _course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
 
         lesson_version_service = LessonVersionService(self.session)
-        await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
+        await self._ensure_initial_generation_enqueued(
+            lesson=lesson,
+            lesson_version_service=lesson_version_service,
+        )
         versions = await lesson_version_service.list_versions(lesson=lesson)
         return LessonVersionHistoryResponse(versions=self._build_version_summaries(lesson=lesson, versions=versions))
 
@@ -1199,7 +1191,7 @@ class LessonService:
         lesson_id: uuid.UUID,
         critique_text: str,
     ) -> LessonDetailResponse:
-        """Regenerate an existing lesson body using the normal writer path plus learner critique."""
+        """Enqueue a regenerated lesson body using learner critique; the worker fills the new version."""
         lesson, course = await self._load_owned_lesson_and_course(course_id=course_id, lesson_id=lesson_id)
 
         trimmed_critique = critique_text.strip()
@@ -1207,59 +1199,36 @@ class LessonService:
             detail = "Regeneration request must not be empty"
             raise ValidationError(detail, feature_area="courses")
 
-        try:
-            lesson_version_service = LessonVersionService(self.session)
-            lesson_window_service = LessonWindowService(self.session)
-            current_version = await lesson_version_service.sync_current_version_from_lesson(lesson=lesson)
-            available_versions = await lesson_version_service.list_versions(lesson=lesson)
-            lesson_context = await self._prepare_regeneration_context(
-                lesson=lesson,
-                course=course,
-                current_version=current_version,
-                critique_text=trimmed_critique,
-            )
-            generated = await self._generate_lesson_body(lesson_context=lesson_context, course_id=course.id)
-            selected_version = await lesson_version_service.create_regenerated_version(
-                lesson=lesson,
-                content=generated.content,
-                critique_text=trimmed_critique,
-            )
-            await self._materialize_and_persist_inline_questions(
-                generated=generated,
-                lesson=lesson,
-                course=course,
-                version=selected_version,
-            )
-            await record_course_feedback(
-                self.session,
-                user_id=course.user_id,
-                course_id=course.id,
-                lesson_id=lesson.id,
-                lesson_version_id=current_version.id,
-                critique_text=trimmed_critique,
-            )
-            await record_teaching_event(
-                self.session,
-                user_id=course.user_id,
-                course_id=course.id,
-                event_type="lesson_regenerated",
-                lesson_id=lesson.id,
-                lesson_version_id=selected_version.id,
-                concept_id=lesson.concept_id,
-                strategy_label="regeneration",
-                outcome="regenerated",
-                details={
-                    "critique_chars": len(trimmed_critique),
-                },
-            )
-            selected_windows = await lesson_window_service.rebuild_windows(lesson_version=selected_version)
-            await self.session.refresh(lesson)
-        except ValueError as exc:
-            detail = f"Invalid lesson content: {exc}"
-            raise ValidationError(detail, feature_area="courses") from exc
-        except RuntimeError as exc:
-            message = "Unable to generate lesson content. Please try again."
-            raise UpstreamUnavailableError(message, feature_area="courses") from exc
+        lesson_version_service = LessonVersionService(self.session)
+        current_version = await self._ensure_initial_generation_enqueued(
+            lesson=lesson,
+            lesson_version_service=lesson_version_service,
+        )
+        if current_version.generation_status == "generating" or not (current_version.content or "").strip():
+            detail = "This lesson is still being generated. Try again once it is ready."
+            raise ConflictError(detail, feature_area="courses")
+
+        selected_version = await lesson_version_service.create_pending_regenerated_version(
+            lesson=lesson,
+            critique_text=trimmed_critique,
+        )
+        # The learner's critique is canonical evidence; record it now, not in the job.
+        await record_course_feedback(
+            self.session,
+            user_id=course.user_id,
+            course_id=course.id,
+            lesson_id=lesson.id,
+            lesson_version_id=current_version.id,
+            critique_text=trimmed_critique,
+        )
+        await defer_lesson_version_generation(
+            self.session,
+            version_id=selected_version.id,
+            user_id=self.user_id,
+            generation_mode="regeneration",
+            source_version_id=current_version.id,
+            critique_text=trimmed_critique,
+        )
 
         available_versions = await lesson_version_service.list_versions(lesson=lesson)
         return await self._build_lesson_detail_response(
@@ -1267,59 +1236,175 @@ class LessonService:
             course=course,
             selected_version=selected_version,
             available_versions=available_versions,
-            next_pass=await self._build_next_pass_response(
-                lesson=lesson,
-                course=course,
-                current_version=selected_version,
-                selected_version=selected_version,
-                available_versions=available_versions,
-            ),
-            windows=selected_windows,
+            next_pass=None,
+            windows=[],
         )
 
-    async def _ensure_lesson_content(self, lesson: Lesson, course: Course, force_refresh: bool = False) -> Lesson:
-        """Generate content for a lesson on demand."""
-        _ = force_refresh
-        if lesson.content != "":
-            return lesson
+    async def run_lesson_version_generation_job(
+        self,
+        *,
+        version_id: uuid.UUID,
+        generation_mode: LessonGenerationMode,
+        source_version_id: uuid.UUID | None,
+        critique_text: str | None,
+        force: bool,
+    ) -> None:
+        """Job body: fill one pending lesson version with generated content.
+
+        Runs in a dedicated worker session. Owns its own commit/rollback so a
+        bad LLM response retries (RetryStrategy) instead of failing the user's
+        request. On the final failure the version is flagged so reads stop
+        polling and surface the error.
+        """
+        version = await self.session.get(LessonVersion, version_id)
+        if version is None:
+            logger.warning("lesson_generation.version_missing", extra={"lesson_version_id": str(version_id)})
+            return
+        if version.generation_status == "ready":
+            return  # already filled by a prior attempt; nothing to do
+
+        lesson, course = await self._load_owned_lesson_and_course_for_version(version)
+
+        # A retry of a previously-failed attempt: re-arm the polling state so
+        # reads keep waiting instead of surfacing the transient failure.
+        if version.generation_status == "failed":
+            version.generation_status = "generating"
+            version.generation_error = None
+            await self.session.commit()
 
         try:
-            logger.info(
-                "Generating lesson content",
-                extra={
-                    "user_id": str(self.user_id),
-                    "lesson_id": str(lesson.id),
-                    "lesson_title": lesson.title,
-                },
-            )
-            lesson_context = await self._prepare_lesson_context(
+            await self._generate_into_version(
                 lesson=lesson,
                 course=course,
-                generation_mode="first_pass",
+                version=version,
+                generation_mode=generation_mode,
+                source_version_id=source_version_id,
+                critique_text=critique_text,
+                force=force,
             )
-            generated = await self._generate_lesson_body(lesson_context=lesson_context, course_id=course.id)
-            lesson_version_service = LessonVersionService(self.session)
-            new_version = await lesson_version_service.create_initial_version(lesson=lesson, content=generated.content)
-            await self._materialize_and_persist_inline_questions(
-                generated=generated,
-                lesson=lesson,
-                course=course,
-                version=new_version,
-            )
-            await self.session.refresh(lesson)
-            logger.info(
-                "Lesson content generated and saved",
-                extra={
-                    "user_id": str(self.user_id),
-                    "lesson_id": str(lesson.id),
-                    "content_length": len(lesson.content) if lesson.content else 0,
-                },
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            await self._mark_version_failed(version_id)
+            raise
+
+    async def _load_owned_lesson_and_course_for_version(self, version: LessonVersion) -> tuple[Lesson, Course]:
+        lesson = await self.session.get(Lesson, version.lesson_id)
+        if lesson is None:
+            message = "Lesson not found for version"
+            raise NotFoundError(message=message, feature_area="courses")
+        course = await self.session.get(Course, lesson.course_id)
+        if course is None or course.user_id != self.user_id:
+            raise NotFoundError(message="Lesson not found or access denied", feature_area="courses")
+        return lesson, course
+
+    async def _generate_into_version(
+        self,
+        *,
+        lesson: Lesson,
+        course: Course,
+        version: LessonVersion,
+        generation_mode: LessonGenerationMode,
+        source_version_id: uuid.UUID | None,
+        critique_text: str | None,
+        force: bool,
+    ) -> None:
+        lesson_version_service = LessonVersionService(self.session)
+        lesson_window_service = LessonWindowService(self.session)
+
+        source_version: LessonVersion | None = None
+        if source_version_id is not None:
+            source_version = await self.session.get(LessonVersion, source_version_id)
+
+        recommendation: AdaptivePassRecommendation | None = None
+        if generation_mode == "adaptive_revisit_pass" and source_version is not None:
+            recommendation = self._build_revisit_recommendation(
+                source_version=source_version,
+                source_reason=self._build_source_reason(version=version) or "Adaptive revisit pass.",
+                force=force,
             )
 
-        except ValueError as exc:
-            detail = f"Invalid lesson content: {exc}"
-            raise ValidationError(detail, feature_area="courses") from exc
-        except RuntimeError as exc:
-            message = "Unable to generate lesson content. Please try again."
-            raise UpstreamUnavailableError(message, feature_area="courses") from exc
-        return lesson
+        lesson_context = await self._prepare_lesson_context(
+            lesson=lesson,
+            course=course,
+            generation_mode=generation_mode,
+            current_version=source_version,
+            immediate_regenerate_request=critique_text if generation_mode == "regeneration" else None,
+            adaptive_recommendation=recommendation,
+        )
+        generated = await self._generate_lesson_body(lesson_context=lesson_context, course_id=course.id)
+
+        await lesson_version_service.fill_and_promote_version(
+            lesson=lesson,
+            version=version,
+            content=generated.content,
+        )
+        await self._materialize_and_persist_inline_questions(
+            generated=generated,
+            lesson=lesson,
+            course=course,
+            version=version,
+        )
+        await lesson_window_service.rebuild_windows(lesson_version=version)
+        await self._record_generation_event(
+            lesson=lesson,
+            course=course,
+            version=version,
+            generation_mode=generation_mode,
+            critique_text=critique_text,
+        )
+
+    def _build_revisit_recommendation(
+        self,
+        *,
+        source_version: LessonVersion,
+        source_reason: str,
+        force: bool,
+    ) -> AdaptivePassRecommendation:
+        del force
+        return AdaptivePassRecommendation(
+            action="deepen_with_next_major_pass",
+            recommended_major_version=source_version.major_version + 1,
+            reason=source_reason,
+        )
+
+    async def _record_generation_event(
+        self,
+        *,
+        lesson: Lesson,
+        course: Course,
+        version: LessonVersion,
+        generation_mode: LessonGenerationMode,
+        critique_text: str | None,
+    ) -> None:
+        # next-pass records ``lesson_version_shown`` at request time; first-pass
+        # reads record nothing. Only regeneration owns a generation-time event.
+        if generation_mode != "regeneration":
+            return
+        await record_teaching_event(
+            self.session,
+            user_id=course.user_id,
+            course_id=course.id,
+            event_type="lesson_regenerated",
+            lesson_id=lesson.id,
+            lesson_version_id=version.id,
+            concept_id=lesson.concept_id,
+            strategy_label="regeneration",
+            outcome="regenerated",
+            details={"critique_chars": len(critique_text or "")},
+        )
+
+    async def _mark_version_failed(self, version_id: uuid.UUID) -> None:
+        """Flag a pending version as failed in a fresh transaction after a rollback."""
+        try:
+            version = await self.session.get(LessonVersion, version_id)
+            if version is None:
+                return
+            lesson_version_service = LessonVersionService(self.session)
+            await lesson_version_service.mark_version_failed(
+                version=version,
+                error="Lesson generation failed. Please try again.",
+            )
+            await self.session.commit()
+        except SQLAlchemyError:
+            logger.exception("lesson_generation.mark_failed_error", extra={"lesson_version_id": str(version_id)})

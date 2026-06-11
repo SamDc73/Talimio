@@ -15,7 +15,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import TypedDict, cast
 
-from fastapi import BackgroundTasks, status
+from fastapi import status
 from pydantic import JsonValue
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -241,7 +241,6 @@ class CoursesFacade:  # noqa: PLR0904
         self,
         course_data: Mapping[str, object],
         user_id: uuid.UUID,
-        background_tasks: BackgroundTasks | None = None,
         book_ids: list[uuid.UUID] | None = None,
         image_data_urls: list[str] | None = None,
     ) -> CourseResponse:
@@ -250,7 +249,6 @@ class CoursesFacade:  # noqa: PLR0904
             created_course = await self._content_service.create_course(
                 course_data,
                 user_id,
-                background_tasks=background_tasks,
                 book_ids=book_ids,
                 image_data_urls=image_data_urls,
             )
@@ -268,7 +266,6 @@ class CoursesFacade:  # noqa: PLR0904
         topic: str,
         preferences: dict[str, JsonValue],
         user_id: uuid.UUID,
-        background_tasks: BackgroundTasks | None = None,
     ) -> CourseResponse:
         """Generate an AI-powered course and return the created course response."""
         data: dict[str, JsonValue] = {**(preferences or {})}
@@ -277,7 +274,6 @@ class CoursesFacade:  # noqa: PLR0904
             course = await self._content_service.create_course(
                 data,
                 user_id,
-                background_tasks=background_tasks,
             )
             query_service = CourseQueryService(self._session)
             return await query_service.get_course(course.id, user_id)

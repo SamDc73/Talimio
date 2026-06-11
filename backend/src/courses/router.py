@@ -12,7 +12,7 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from src.ai.service import AIService, get_ai_service
 from src.auth import CurrentAuth
@@ -121,11 +121,12 @@ async def generate_self_assessment_questions(
 async def create_course(
     request: CourseCreateRequest,
     auth: CurrentAuth,
-    background_tasks: BackgroundTasks,
     facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
 ) -> CourseResponse:
     """Create a new course using AI generation.
 
+    Returns 202 immediately with the draft course in a ``generating`` state;
+    a durable worker builds the outline and lesson content out-of-request.
     Books arrive as references (bookIds); images arrive inline as base64
     data URLs that feed the LLM prompt and are never persisted.
     """
@@ -136,7 +137,6 @@ async def create_course(
     return await facade.create_course(
         {"prompt": prompt_text, "adaptive_enabled": request.adaptive_enabled},
         auth.user_id,
-        background_tasks=background_tasks,
         book_ids=list(dict.fromkeys(request.book_ids)),
         image_data_urls=request.image_data_urls,
     )
