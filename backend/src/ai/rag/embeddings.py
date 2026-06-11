@@ -154,8 +154,6 @@ class VectorRAG:
     ) -> None:
         """Store document chunks with their embeddings in pgvector."""
         try:
-            await self._ensure_dimensions(session)
-
             chunk_payloads: list[tuple[int, str, dict[str, JsonValue]]] = []
             total_chunks = len(chunks)
             for index, raw_chunk in enumerate(chunks):
@@ -189,35 +187,41 @@ class VectorRAG:
                 self.batch_size,
             )
 
+            embedded_payloads: list[tuple[int, str, dict[str, JsonValue], list[float]]] = []
             for batch in batched(chunk_payloads, self.batch_size, strict=False):
                 texts = [payload[1] for payload in batch]
                 embeddings = await self._embed_texts(texts)
+                embedded_payloads.extend(
+                    (*payload, embedding) for payload, embedding in zip(batch, embeddings, strict=True)
+                )
 
-                for (chunk_index, chunk_text, chunk_metadata), embedding in zip(batch, embeddings, strict=True):
-                    embedding_str = self._format_vector(embedding)
-                    await session.execute(
-                        text(
-                            """
-                            INSERT INTO rag_document_chunks
-                            (doc_id, doc_type, chunk_index, content, metadata, embedding, created_at)
-                            VALUES (:doc_id, :doc_type, :chunk_index, :content, CAST(:metadata AS jsonb),
-                                    CAST(:embedding AS vector), NOW())
-                            ON CONFLICT (doc_id, chunk_index)
-                            DO UPDATE SET
-                                content = EXCLUDED.content,
-                                metadata = EXCLUDED.metadata,
-                                embedding = EXCLUDED.embedding
-                            """
-                        ),
-                        {
-                            "doc_id": str(doc_id),
-                            "doc_type": doc_type,
-                            "chunk_index": chunk_index,
-                            "content": chunk_text,
-                            "metadata": json.dumps(chunk_metadata),
-                            "embedding": embedding_str,
-                        },
-                    )
+            await self._ensure_dimensions(session)
+
+            for chunk_index, chunk_text, chunk_metadata, embedding in embedded_payloads:
+                embedding_str = self._format_vector(embedding)
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO rag_document_chunks
+                        (doc_id, doc_type, chunk_index, content, metadata, embedding, created_at)
+                        VALUES (:doc_id, :doc_type, :chunk_index, :content, CAST(:metadata AS jsonb),
+                                CAST(:embedding AS vector), NOW())
+                        ON CONFLICT (doc_id, chunk_index)
+                        DO UPDATE SET
+                            content = EXCLUDED.content,
+                            metadata = EXCLUDED.metadata,
+                            embedding = EXCLUDED.embedding
+                        """
+                    ),
+                    {
+                        "doc_id": str(doc_id),
+                        "doc_type": doc_type,
+                        "chunk_index": chunk_index,
+                        "content": chunk_text,
+                        "metadata": json.dumps(chunk_metadata),
+                        "embedding": embedding_str,
+                    },
+                )
 
             await session.flush()
             logger.info(
@@ -243,8 +247,8 @@ class VectorRAG:
     ) -> list[SearchResult]:
         """Perform hybrid dense and lexical search scoped to optional identifiers."""
         try:
-            await self._ensure_dimensions(session)
             query_embedding = await self.generate_embedding(query)
+            await self._ensure_dimensions(session)
             embedding_str = self._format_vector(query_embedding)
             candidate_limit = limit * _HYBRID_CANDIDATE_MULTIPLIER
 

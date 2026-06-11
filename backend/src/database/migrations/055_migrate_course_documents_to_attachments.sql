@@ -9,7 +9,78 @@
 --
 -- Image rows were already removed by 037. Direct rows in formats books cannot
 -- represent (txt/md/fb2/mobi/svg/xps — the books CHECK allows pdf/epub only)
--- have no destination; their rows and chunks are dropped with the table.
+-- have no destination; abort instead of dropping them silently.
+
+-- Preflight unmappable data before mutating anything. The migration is allowed
+-- to delete only verified book-pointer chunk copies; everything else must map
+-- into a library book plus a course_attachments row.
+DO $$
+DECLARE
+    unsupported_direct_rows BIGINT;
+    unmapped_direct_chunks BIGINT;
+    pointer_chunks_without_attachment_source BIGINT;
+    pointer_chunks_without_matching_book_chunk BIGINT;
+BEGIN
+    SELECT COUNT(*) INTO unsupported_direct_rows
+    FROM course_documents cd
+    WHERE cd.book_id IS NULL
+      AND cd.document_type NOT IN ('pdf', 'epub');
+
+    SELECT COUNT(*) INTO unmapped_direct_chunks
+    FROM rag_document_chunks ch
+    WHERE ch.doc_type = 'course'
+      AND ch.metadata->>'source_book_id' IS NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM course_documents cd
+          WHERE cd.book_id IS NULL
+            AND cd.document_type IN ('pdf', 'epub')
+            AND ch.metadata->>'course_id' = cd.course_id::text
+            AND ch.metadata->>'document_id' = cd.id::text
+      );
+
+    SELECT COUNT(*) INTO pointer_chunks_without_attachment_source
+    FROM rag_document_chunks ch
+    WHERE ch.doc_type = 'course'
+      AND ch.metadata->>'source_book_id' IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM course_documents cd
+          WHERE cd.book_id IS NOT NULL
+            AND ch.metadata->>'course_id' = cd.course_id::text
+            AND ch.metadata->>'source_book_id' = cd.book_id::text
+      );
+
+    SELECT COUNT(*) INTO pointer_chunks_without_matching_book_chunk
+    FROM rag_document_chunks ch
+    WHERE ch.doc_type = 'course'
+      AND ch.metadata->>'source_book_id' IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM rag_document_chunks source_chunk
+          WHERE source_chunk.doc_type = 'book'
+            AND source_chunk.doc_id::text = ch.metadata->>'source_book_id'
+            AND source_chunk.chunk_index = ch.chunk_index
+            AND source_chunk.content = ch.content
+      );
+
+    IF unsupported_direct_rows <> 0 THEN
+        RAISE EXCEPTION 'migration 055: % unsupported direct course_documents rows cannot become books',
+            unsupported_direct_rows;
+    END IF;
+    IF unmapped_direct_chunks <> 0 THEN
+        RAISE EXCEPTION 'migration 055: % direct course chunks do not map to a PDF/EPUB course document',
+            unmapped_direct_chunks;
+    END IF;
+    IF pointer_chunks_without_attachment_source <> 0 THEN
+        RAISE EXCEPTION 'migration 055: % book-pointer chunks have no course_documents attachment source',
+            pointer_chunks_without_attachment_source;
+    END IF;
+    IF pointer_chunks_without_matching_book_chunk <> 0 THEN
+        RAISE EXCEPTION 'migration 055: % book-pointer chunks are not proven duplicate book chunks',
+            pointer_chunks_without_matching_book_chunk;
+    END IF;
+END $$;
 
 -- Snapshot the inputs so the final verification can assert exact deltas.
 CREATE TEMP TABLE _mig055_before ON COMMIT DROP AS
@@ -37,7 +108,7 @@ SELECT
     cd.id AS document_id,
     cd.course_id,
     c.user_id,
-    gen_random_uuid() AS new_book_id,
+    app_uuid7() AS new_book_id,
     cd.title,
     cd.document_type,
     cd.file_path,
@@ -84,8 +155,8 @@ WHERE ch.doc_type = 'course'
   AND ch.metadata->>'course_id' = d.course_id::text
   AND ch.metadata->>'document_id' = d.document_id::text;
 
--- 4) Drop the remaining doc_type='course' chunks: book-pointer copies
--- (duplicates of the book's own chunks) and unmappable leftovers.
+-- 4) Drop the remaining doc_type='course' chunks: preflight verified these
+-- are book-pointer copies that duplicate the book's own chunks.
 DELETE FROM rag_document_chunks WHERE doc_type = 'course';
 
 -- 5) Verify exact deltas before dropping anything; abort the whole
