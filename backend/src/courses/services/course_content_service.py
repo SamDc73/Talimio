@@ -229,6 +229,10 @@ class CourseContentService:
                             "lesson_count": lesson_count,
                         },
                     )
+                    try:
+                        await session.rollback()
+                    except SQLAlchemyError:
+                        logger.exception("courses.generation.rollback_error", extra={"course_id": str(course_id)})
                     await self._mark_generation_failed(course_id)
                     if raise_errors:
                         raise

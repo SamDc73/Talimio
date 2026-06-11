@@ -4,6 +4,7 @@ import logging
 from collections.abc import Iterable
 from pathlib import Path
 
+import sqlparse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -165,7 +166,12 @@ async def _execute_migration_sql(*, conn: AsyncConnection, sql_content: str) -> 
     if driver_connection is None:
         msg = "Raw database driver connection is unavailable"
         raise RuntimeError(msg)
-    await driver_connection.execute(sql_content)
+    for statement in _split_sql_statements(sql_content):
+        await driver_connection.execute(statement)
+
+
+def _split_sql_statements(sql_content: str) -> list[str]:
+    return [statement for statement in sqlparse.split(sql_content) if statement.strip()]
 
 
 async def _record_applied_migration(conn: AsyncConnection, *, filename: str) -> None:
