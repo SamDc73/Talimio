@@ -7,16 +7,13 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue, field_validator, model_validator
+from pydantic import ConfigDict, Field, JsonValue, field_validator, model_validator
 
-from src.config.schema_casing import to_camel
+from src.config.schema_casing import CamelModel
 from src.courses.models import CourseGenerationStatus
 
 
-_CAMEL_CONFIG = {"alias_generator": to_camel, "populate_by_name": True}
-
-
-class LessonSummary(BaseModel):
+class LessonSummary(CamelModel):
     """Lightweight lesson representation for course outlines."""
 
     id: uuid.UUID = Field(description="Lesson ID")
@@ -25,10 +22,10 @@ class LessonSummary(BaseModel):
     order: int = Field(description="Lesson order within its module")
     concept_id: uuid.UUID | None = Field(None, description="Mapped concept ID for adaptive lessons")
 
-    model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
+    model_config = ConfigDict(from_attributes=True)
 
 
-class LessonVersionSummary(BaseModel):
+class LessonVersionSummary(CamelModel):
     """Compact version metadata for lesson history UI."""
 
     id: uuid.UUID = Field(description="Lesson version ID")
@@ -42,10 +39,8 @@ class LessonVersionSummary(BaseModel):
     is_current: bool = Field(description="Whether this is the current active version")
     created_at: datetime = Field(description="Version creation timestamp")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class LessonWindowResponse(BaseModel):
+class LessonWindowResponse(CamelModel):
     """Window payload for segmented lesson delivery."""
 
     id: uuid.UUID = Field(description="Lesson window ID")
@@ -54,10 +49,8 @@ class LessonWindowResponse(BaseModel):
     content: str = Field(description="Window content")
     estimated_minutes: int = Field(description="Estimated reading time in minutes")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class LessonNextPassResponse(BaseModel):
+class LessonNextPassResponse(CamelModel):
     """Lightweight metadata for the next major lesson pass."""
 
     major_version: int = Field(description="Next major version number")
@@ -67,10 +60,8 @@ class LessonNextPassResponse(BaseModel):
     )
     reason: str = Field(description="Short explanation for the next-pass recommendation state")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class LessonDetailResponse(BaseModel):
+class LessonDetailResponse(CamelModel):
     """Schema for detailed lesson responses (content endpoint)."""
 
     id: uuid.UUID = Field(description="Lesson ID")
@@ -105,30 +96,27 @@ class LessonDetailResponse(BaseModel):
     created_at: datetime = Field(description="Lesson creation timestamp")
     updated_at: datetime = Field(description="Lesson last update timestamp")
 
-    model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
+    model_config = ConfigDict(from_attributes=True)
 
 
-class LessonVersionHistoryResponse(BaseModel):
+class LessonVersionHistoryResponse(CamelModel):
     """Response payload for lesson version history."""
 
     versions: list[LessonVersionSummary] = Field(default_factory=list, description="Available lesson versions")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class LessonRegenerateRequest(BaseModel):
+class LessonRegenerateRequest(CamelModel):
     """Request payload for explicit lesson regeneration."""
 
     critique_text: str = Field(
-        validation_alias=AliasChoices("critiqueText", "critique_text", "critique", "feedback"),
         min_length=1,
         description="What the learner wants changed in the lesson",
     )
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class LessonNextPassRequest(BaseModel):
+class LessonNextPassRequest(CamelModel):
     """Request payload for starting the next major lesson pass."""
 
     force: bool = Field(
@@ -136,10 +124,10 @@ class LessonNextPassRequest(BaseModel):
         description="Whether to allow an early override even when the next pass is usually recommended later",
     )
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class CourseBase(BaseModel):
+class CourseBase(CamelModel):
     """Base schema for courses."""
 
     title: str = Field(description="Course title", max_length=200)
@@ -149,48 +137,46 @@ class CourseBase(BaseModel):
     setup_commands: list[str] = Field(default_factory=list, description="Commands to run once per course sandbox")
     adaptive_enabled: bool = Field(default=False, description="Whether adaptive concept scheduling is enabled")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CourseCreate(BaseModel):
+class CourseCreate(CamelModel):
     """Schema for creating a new course."""
 
     prompt: str = Field(min_length=1, description="AI prompt for course generation")
     adaptive_enabled: bool = Field(default=False, description="Enable adaptive concept scheduling")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class SelfAssessmentRequest(BaseModel):
+class SelfAssessmentRequest(CamelModel):
     """Request payload for generating self-assessment questions."""
 
     topic: str = Field(min_length=1, description="Course topic for personalization")
     level: str | None = Field(None, description="Optional learner experience level or confidence band")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class SelfAssessmentQuestionPayload(BaseModel):
+class SelfAssessmentQuestionPayload(CamelModel):
     """Single-select question suitable for MultipleChoice component."""
 
     type: Literal["single_select"] = Field(description="Question presentation type")
     question: str = Field(min_length=1, description="Learner-facing question text")
     options: list[str] = Field(min_length=3, max_length=5, description="Candidate answers")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class SelfAssessmentResponse(BaseModel):
+class SelfAssessmentResponse(CamelModel):
     """Response containing generated self-assessment questions."""
 
     questions: list[SelfAssessmentQuestionPayload] = Field(
         default_factory=list, description="Generated self-assessment questions"
     )
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class CourseUpdate(BaseModel):
+class CourseUpdate(CamelModel):
     """Schema for updating a course."""
 
     title: str | None = Field(None, description="Course title", max_length=200)
@@ -199,15 +185,13 @@ class CourseUpdate(BaseModel):
     archived: bool | None = Field(None, description="Whether the course is archived")
     adaptive_enabled: bool | None = Field(None, description="Enable or disable adaptive scheduling")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
-
 
 _IMAGE_DATA_URL_PREFIX = re.compile(r"^data:image/(png|jpe?g);base64,")
 # Roughly 6MB of binary payload once base64 overhead is stripped.
 _MAX_IMAGE_DATA_URL_CHARS = 8_000_000
 
 
-class CourseCreateRequest(BaseModel):
+class CourseCreateRequest(CamelModel):
     """JSON body for course creation: books by reference, images inline."""
 
     prompt: str = Field(min_length=1, max_length=20_000, description="Course generation prompt")
@@ -219,7 +203,7 @@ class CourseCreateRequest(BaseModel):
         description="Inline base64 image data URLs prepended to the LLM prompt; never persisted",
     )
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
     @field_validator("image_data_urls")
     @classmethod
@@ -234,7 +218,7 @@ class CourseCreateRequest(BaseModel):
         return values
 
 
-class CourseAttachmentRead(BaseModel):
+class CourseAttachmentRead(CamelModel):
     """One book attached to a course, with display fields denormalized."""
 
     id: uuid.UUID = Field(description="Attachment ID")
@@ -245,18 +229,16 @@ class CourseAttachmentRead(BaseModel):
     archived: bool = Field(description="Whether the book is archived")
     created_at: datetime = Field(description="Attachment creation timestamp")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CourseAttachmentBulkCreate(BaseModel):
+class CourseAttachmentBulkCreate(CamelModel):
     """Bulk attach request; duplicates are skipped silently."""
 
     book_ids: list[uuid.UUID] = Field(min_length=1, max_length=50, description="Books to attach")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class ModuleResponse(BaseModel):
+class ModuleResponse(CamelModel):
     """Schema for synthesized module responses."""
 
     id: uuid.UUID = Field(description="Module ID")
@@ -264,7 +246,7 @@ class ModuleResponse(BaseModel):
     description: str | None = Field(None, description="Module description")
     lessons: list[LessonSummary] = Field(default_factory=list, description="Module lessons")
 
-    model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CourseResponse(CourseBase):
@@ -279,10 +261,10 @@ class CourseResponse(CourseBase):
     updated_at: datetime = Field(description="Course last update timestamp")
     modules: list[ModuleResponse] = Field(default_factory=list, description="Course modules")
 
-    model_config = ConfigDict(from_attributes=True, **_CAMEL_CONFIG)
+    model_config = ConfigDict(from_attributes=True)
 
 
-class CourseListResponse(BaseModel):
+class CourseListResponse(CamelModel):
     """Schema for course list responses with pagination."""
 
     courses: list[CourseResponse] = Field(description="List of courses")
@@ -290,10 +272,8 @@ class CourseListResponse(BaseModel):
     page: int = Field(description="Current page number")
     per_page: int = Field(description="Number of courses per page")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ConceptSummary(BaseModel):
+class ConceptSummary(CamelModel):
     """Summary of a concept for adaptive frontier responses."""
 
     id: uuid.UUID = Field(description="Concept ID")
@@ -312,10 +292,8 @@ class ConceptSummary(BaseModel):
     prerequisites: list[uuid.UUID] = Field(default_factory=list, description="List of prerequisite concept IDs")
     order: int | None = Field(None, description="Ordering hint within course graph")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class FrontierResponse(BaseModel):
+class FrontierResponse(CamelModel):
     """Response payload for adaptive concept frontier."""
 
     frontier: list[ConceptSummary] = Field(default_factory=list, description="Unlocked concepts ready for learning")
@@ -324,10 +302,8 @@ class FrontierResponse(BaseModel):
     due_count: int = Field(0, description="Number of concepts currently due")
     avg_mastery: float = Field(0.0, description="Average mastery across course concepts")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ReviewRequest(BaseModel):
+class ReviewRequest(CamelModel):
     """Single concept review submission."""
 
     concept_id: uuid.UUID = Field(description="Concept being reviewed")
@@ -374,28 +350,24 @@ class ReviewRequest(BaseModel):
         description="Optional upper bound for the drill target band",
     )
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ReviewBatchRequest(BaseModel):
+class ReviewBatchRequest(CamelModel):
     """Batch review payload."""
 
     reviews: list[ReviewRequest] = Field(min_length=1, description="List of concept reviews")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ConceptReviewRequest(BaseModel):
+class ConceptReviewRequest(CamelModel):
     """Single subjective concept review payload."""
 
     concept_id: uuid.UUID = Field(description="Concept being reviewed")
     rating: Annotated[int, Field(ge=1, le=4)]
     review_duration_ms: Annotated[int, Field(ge=0)]
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class ReviewOutcome(BaseModel):
+class ReviewOutcome(CamelModel):
     """Per-concept outcome returned after submitting reviews."""
 
     concept_id: uuid.UUID = Field(description="Reviewed concept ID")
@@ -403,26 +375,20 @@ class ReviewOutcome(BaseModel):
     mastery: float | None = Field(None, description="Updated mastery score")
     exposures: int = Field(0, description="Total exposures after update")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ReviewBatchResponse(BaseModel):
+class ReviewBatchResponse(CamelModel):
     """Response for review submissions."""
 
     outcomes: list[ReviewOutcome] = Field(default_factory=list, description="Per-concept scheduling outcomes")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class NextReviewResponse(BaseModel):
+class NextReviewResponse(CamelModel):
     """Response for concept next-review lookup."""
 
     concept_id: uuid.UUID = Field(description="Concept ID")
     next_review_at: datetime | None = Field(None, description="Next review timestamp")
     current_mastery: float | None = Field(None, description="Current mastery score")
     total_exposures: int = Field(0, description="Total exposures for the concept")
-
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
 GradeKind = Literal["latex_expression", "jxg_state", "practice_answer"]
@@ -442,7 +408,7 @@ AttemptStatus = Literal["correct", "incorrect", "unsupported"]
 AttemptAnswerKind = Literal["text", "latex", "jxg_state", "choice", "skip"]
 
 
-class JXGBoardState(BaseModel):
+class JXGBoardState(CamelModel):
     """Normalized board state used for deterministic JSXGraph grading."""
 
     points: dict[str, tuple[float, float]] = Field(
@@ -464,10 +430,10 @@ class JXGBoardState(BaseModel):
         ),
     )
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GradeExpectedPayload(BaseModel):
+class GradeExpectedPayload(CamelModel):
     """Expected answer payload for grading."""
 
     expected_latex: str | None = Field(None, min_length=1, description="Expected answer in LaTeX")
@@ -492,10 +458,10 @@ class GradeExpectedPayload(BaseModel):
     )
     criteria: str | None = Field(None, description="Optional grading criteria or simplification note")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GradeAnswerPayload(BaseModel):
+class GradeAnswerPayload(CamelModel):
     """Learner answer payload for grading."""
 
     answer_text: str | None = Field(None, min_length=1, description="Learner answer text")
@@ -508,10 +474,10 @@ class GradeAnswerPayload(BaseModel):
     )
     choice_index: int | None = Field(None, ge=0, description="0-based index of the selected choice for MCQ grading")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GradeContextPayload(BaseModel):
+class GradeContextPayload(CamelModel):
     """Context payload for grading to enable adaptive wiring."""
 
     course_id: uuid.UUID = Field(description="Course ID for the practice interaction")
@@ -524,10 +490,10 @@ class GradeContextPayload(BaseModel):
         description="Number of hints revealed before submission",
     )
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GradeRequest(BaseModel):
+class GradeRequest(CamelModel):
     """
     Request payload for grading a learner response.
 
@@ -540,7 +506,7 @@ class GradeRequest(BaseModel):
     answer: GradeAnswerPayload = Field(description="Learner-provided answer payload")
     context: GradeContextPayload = Field(description="Context for adaptive learning signals")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def validate_payload_for_kind(self) -> GradeRequest:
@@ -588,25 +554,23 @@ class GradeRequest(BaseModel):
             raise ValueError(message)
 
 
-class VerifierInfo(BaseModel):
+class VerifierInfo(CamelModel):
     """Verifier metadata attached to grading responses."""
 
     name: str = Field(description="Verifier name")
     method: str | None = Field(None, description="Verification method used to determine correctness")
     notes: str | None = Field(None, description="Optional notes about the verification process")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class GradeErrorHighlight(BaseModel):
+class GradeErrorHighlight(CamelModel):
     """Optional highlight for focused feedback in grading responses."""
 
     latex: str = Field(min_length=1, description="LaTeX fragment to emphasize")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GradeResponse(BaseModel):
+class GradeResponse(CamelModel):
     """Response payload for grading requests."""
 
     is_correct: bool = Field(description="Deterministic correctness flag from verifier")
@@ -623,10 +587,8 @@ class GradeResponse(BaseModel):
         description="Optional structured metadata with verifier deltas (for example deltaX, deltaY, off-by info)",
     )
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class PracticeDrillItem(BaseModel):
+class PracticeDrillItem(CamelModel):
     """Single generated practice drill item."""
 
     concept_id: uuid.UUID = Field(description="Concept this drill belongs to")
@@ -651,10 +613,10 @@ class PracticeDrillItem(BaseModel):
     target_high: float = Field(ge=0.0, le=1.0, description="Upper bound of the target probability band")
     core_model: str = Field(min_length=1, description="Core model used to generate and rank the drill")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class QuestionSetRequest(BaseModel):
+class QuestionSetRequest(CamelModel):
     """Request server-owned learner-visible practice questions."""
 
     concept_id: uuid.UUID = Field(description="Concept to generate questions for")
@@ -662,10 +624,10 @@ class QuestionSetRequest(BaseModel):
     practice_context: QuestionSetPracticeContext = Field(description="Practice surface that will collect answers")
     lesson_id: uuid.UUID | None = Field(None, description="Optional lesson surface for inline questions")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class QuestionSetItem(BaseModel):
+class QuestionSetItem(CamelModel):
     """Learner-visible server-owned question."""
 
     question_id: uuid.UUID = Field(description="Server-owned question ID used for answer submission")
@@ -679,18 +641,18 @@ class QuestionSetItem(BaseModel):
     choices: list[str] = Field(default_factory=list, description="Learner-visible choices for choice-based questions")
     hints: list[str] = Field(default_factory=list, description="Learner-visible hints")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class QuestionSetResponse(BaseModel):
+class QuestionSetResponse(CamelModel):
     """Server-owned question set response."""
 
     questions: list[QuestionSetItem] = Field(default_factory=list, description="Generated learner-visible questions")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class AttemptAnswerPayload(BaseModel):
+class AttemptAnswerPayload(CamelModel):
     """Learner answer payload for a server-owned attempt."""
 
     kind: AttemptAnswerKind = Field(description="Learner answer shape")
@@ -699,7 +661,7 @@ class AttemptAnswerPayload(BaseModel):
     answer_state: JXGBoardState | None = Field(None, description="JSXGraph learner board state")
     choice_index: int | None = Field(None, ge=0, description="0-based index of the selected choice")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def validate_answer_for_kind(self) -> AttemptAnswerPayload:
@@ -719,7 +681,7 @@ class AttemptAnswerPayload(BaseModel):
         return self
 
 
-class AttemptRequest(BaseModel):
+class AttemptRequest(CamelModel):
     """Submit one learner answer for one server-owned question."""
 
     attempt_id: uuid.UUID = Field(description="Client-generated idempotency key")
@@ -728,10 +690,10 @@ class AttemptRequest(BaseModel):
     hints_used: Annotated[int, Field(ge=0)] = 0
     duration_ms: Annotated[int, Field(ge=0)] = 0
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class AttemptResponse(BaseModel):
+class AttemptResponse(CamelModel):
     """Learner-visible result for one answer submission."""
 
     attempt_id: uuid.UUID = Field(description="Client-generated idempotency key")
@@ -742,19 +704,17 @@ class AttemptResponse(BaseModel):
     exposures: int = Field(ge=0, description="Total concept exposures after this attempt")
     next_review_at: datetime | None = Field(None, description="Scheduled next review timestamp")
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class ExecutionFilePayload(BaseModel):
+class ExecutionFilePayload(CamelModel):
     """Single workspace file included during execution."""
 
     path: str = Field(min_length=1, description="Relative path of the file inside the workspace root")
     content: str = Field(description="Full file contents written to the sandbox before execution")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CodeExecuteRequest(BaseModel):
+class CodeExecuteRequest(CamelModel):
     """Request to execute a code snippet via E2B."""
 
     code: str = Field(min_length=1, description="Source code to execute")
@@ -766,20 +726,16 @@ class CodeExecuteRequest(BaseModel):
     entry_file: str | None = Field(None, description="Entry file path to run when workspace files are provided")
     workspace_id: str | None = Field(None, description="Logical workspace identifier for grouping files")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CodeExecuteResponse(BaseModel):
+class CodeExecuteResponse(CamelModel):
     """Normalized execution response payload."""
 
     stdout: str | None = None
     stderr: str | None = None
     status: str | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class RuntimeProcessStartRequest(BaseModel):
+class RuntimeProcessStartRequest(CamelModel):
     """Start a long-lived runtime process in a scoped sandbox session."""
 
     command: str = Field(min_length=1)
@@ -789,20 +745,16 @@ class RuntimeProcessStartRequest(BaseModel):
     env: dict[str, str] | None = None
     user: str | None = Field(default="user")
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class RuntimeProcessReadRequest(BaseModel):
+class RuntimeProcessReadRequest(CamelModel):
     """Read process output for a scoped runtime process."""
 
     process_id: int = Field(ge=1)
     course_id: uuid.UUID | None = None
     workspace_id: str | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class RuntimeProcessInputRequest(BaseModel):
+class RuntimeProcessInputRequest(CamelModel):
     """Send stdin data to a scoped runtime process."""
 
     process_id: int = Field(ge=1)
@@ -810,10 +762,8 @@ class RuntimeProcessInputRequest(BaseModel):
     course_id: uuid.UUID | None = None
     workspace_id: str | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class RuntimeProcessStopRequest(BaseModel):
+class RuntimeProcessStopRequest(CamelModel):
     """Stop a scoped runtime process."""
 
     process_id: int = Field(ge=1)
@@ -821,10 +771,8 @@ class RuntimeProcessStopRequest(BaseModel):
     workspace_id: str | None = None
     wait_timeout_seconds: float | None = Field(default=None, ge=0)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class RuntimeListRequest(BaseModel):
+class RuntimeListRequest(CamelModel):
     """List runtime filesystem entries for a scoped sandbox session."""
 
     path: str = Field(default=".")
@@ -832,12 +780,8 @@ class RuntimeListRequest(BaseModel):
     course_id: uuid.UUID | None = None
     workspace_id: str | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class RuntimeToolResponse(BaseModel):
+class RuntimeToolResponse(CamelModel):
     """Generic runtime tool response payload."""
 
     data: Mapping[str, object]
-
-    model_config = ConfigDict(**_CAMEL_CONFIG)

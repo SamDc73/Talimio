@@ -1,9 +1,9 @@
 """Pydantic schemas for auth API requests and responses."""
 
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator
 
-from src.config.schema_casing import build_camel_config
+from src.config.schema_casing import CamelModel
 from src.config.settings import get_settings
 from src.user.models import User
 
@@ -12,18 +12,13 @@ _MIN_PASSWORD_LENGTH = get_settings().AUTH_PASSWORD_MIN_LENGTH
 _MAX_PASSWORD_LENGTH = 128
 
 
-_AUTH_SCHEMA_CONFIG = build_camel_config()
-
-
-class SignupRequest(BaseModel):
+class SignupRequest(CamelModel):
     """Signup request model."""
 
     full_name: str = Field(min_length=1, max_length=160)
     email: EmailStr
     password: str = Field(min_length=_MIN_PASSWORD_LENGTH, max_length=_MAX_PASSWORD_LENGTH)
     username: str | None = None
-
-    model_config = _AUTH_SCHEMA_CONFIG
 
     @field_validator("full_name")
     @classmethod
@@ -36,25 +31,21 @@ class SignupRequest(BaseModel):
         return normalized_full_name
 
 
-class SignupResponse(BaseModel):
+class SignupResponse(CamelModel):
     """Signup response model - can handle both immediate auth and email confirmation."""
 
     user: UserResponse | None = None
     message: str | None = None
     email_confirmation_required: bool = False
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class UserResponse(BaseModel):
+class UserResponse(CamelModel):
     """User response model."""
 
     id: str
     email: str
     full_name: str | None = None
     username: str | None = None
-
-    model_config = _AUTH_SCHEMA_CONFIG
 
     @classmethod
     def from_model(cls, user: User) -> UserResponse:
@@ -67,82 +58,64 @@ class UserResponse(BaseModel):
         )
 
 
-class LoginResponse(BaseModel):
+class LoginResponse(CamelModel):
     """Login response model."""
 
     user: UserResponse
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class LogoutResponse(BaseModel):
+class LogoutResponse(CamelModel):
     """Logout response model."""
 
     message: str
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class MessageResponse(BaseModel):
+class MessageResponse(CamelModel):
     """Generic message response."""
 
     message: str
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class PasswordResetRequest(BaseModel):
+class PasswordResetRequest(CamelModel):
     """Password reset request model."""
 
     email: EmailStr
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class NewPasswordRequest(BaseModel):
+class NewPasswordRequest(CamelModel):
     """Apply password reset using a reset token."""
 
     token: str
     new_password: str = Field(min_length=_MIN_PASSWORD_LENGTH, max_length=_MAX_PASSWORD_LENGTH)
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class ChangePasswordRequest(BaseModel):
+class ChangePasswordRequest(CamelModel):
     """Apply an authenticated password change."""
 
     current_password: str = Field(min_length=1, max_length=_MAX_PASSWORD_LENGTH)
     new_password: str = Field(min_length=_MIN_PASSWORD_LENGTH, max_length=_MAX_PASSWORD_LENGTH)
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class ResendVerificationRequest(BaseModel):
+class ResendVerificationRequest(CamelModel):
     """Request model for email verification resend."""
 
     email: EmailStr
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class ResendVerificationResponse(BaseModel):
+class ResendVerificationResponse(CamelModel):
     """Response model for email verification resend."""
 
     message: str
     cooldown_seconds: int | None = None
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class VerifyEmailRequest(BaseModel):
+class VerifyEmailRequest(CamelModel):
     """Apply email verification token."""
 
     token: str
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class PasswordPolicyResponse(BaseModel):
+class PasswordPolicyResponse(CamelModel):
     """Password policy configuration exposed for frontend validation parity."""
 
     min_length: int
@@ -152,14 +125,10 @@ class PasswordPolicyResponse(BaseModel):
     require_symbol: bool
     disallow_whitespace: bool
 
-    model_config = _AUTH_SCHEMA_CONFIG
 
-
-class AuthOptionsResponse(BaseModel):
+class AuthOptionsResponse(CamelModel):
     """Public auth configuration for the frontend."""
 
     provider: str
     google_oauth_available: bool
     password_policy: PasswordPolicyResponse
-
-    model_config = _AUTH_SCHEMA_CONFIG
