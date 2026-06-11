@@ -291,6 +291,7 @@ class RAGService:
         except StaleDataError:
             # Book row was deleted between load and flush; treat as benign and exit quietly
             logger.info("Book %s was deleted during processing; aborting embedding", book_id)
+            await session.rollback()
             return
         except (StorageError, *_RAG_RUNTIME_ERROR_TYPES):
             logger.exception("Failed to process book %s", book_id)

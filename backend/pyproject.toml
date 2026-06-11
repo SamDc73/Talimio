@@ -53,6 +53,7 @@ dependencies = [
     "bs4>=0.0.2",
     "markdownify>=1.2.2",
     "procrastinate>=3.8.1",
+    "sqlparse>=0.5.3",
 ]
 
 [dependency-groups]
