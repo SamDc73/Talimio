@@ -138,23 +138,11 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 								</pre>
 							</div>
 						)}
-						{(result?.time != null || result?.memory != null || result?.status) && (
+						{result?.status && (
 							<div className="flex items-center gap-4 text-[0.65rem] text-muted-foreground font-mono pt-2 border-t border-border/50">
-								{result?.status && (
-									<span>
-										Status: <span className="text-foreground font-medium">{result.status}</span>
-									</span>
-								)}
-								{result?.time != null && (
-									<span>
-										Time: <span className="text-foreground font-medium">{result.time}s</span>
-									</span>
-								)}
-								{result?.memory != null && (
-									<span>
-										Memory: <span className="text-foreground font-medium">{result.memory} KB</span>
-									</span>
-								)}
+								<span>
+									Status: <span className="text-foreground font-medium">{result.status}</span>
+								</span>
 							</div>
 						)}
 					</div>

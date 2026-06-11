@@ -413,8 +413,6 @@ async def execute_code(
         stdout=result.stdout,
         stderr=result.stderr,
         status=result.status,
-        time=result.time,
-        memory=result.memory,
     )
 
     # Minimal analytics log
@@ -425,8 +423,6 @@ async def execute_code(
             "lesson_id": str(request.lesson_id) if request.lesson_id else None,
             "language": request.language,
             "status": response.status,
-            "time": response.time,
-            "memory": response.memory,
         },
     )
 

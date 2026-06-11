@@ -105,8 +105,6 @@ class ExecutionResult:
     stdout: str | None
     stderr: str | None
     status: str | None
-    time: float | None
-    memory: float | None
 
 
 @dataclass(slots=True)
@@ -840,8 +838,6 @@ class CodeExecutionService:
             stdout=stdout,
             stderr=stderr,
             status=status,
-            time=None,
-            memory=None,
         )
 
     def _extract_primary_text(self, exec_result: Any) -> str | None:
@@ -1049,8 +1045,6 @@ class CodeExecutionService:
             stdout=result.stdout or None,
             stderr=result.stderr or None,
             status="success" if result.exit_code == 0 else "error",
-            time=None,
-            memory=None,
         )
 
     async def _plan_and_execute_with_ai(
@@ -1306,8 +1300,6 @@ class CodeExecutionService:
             stdout=stdout or None,
             stderr=stderr or None,
             status=status,
-            time=None,
-            memory=None,
         )
 
     def _default_workspace_run(
