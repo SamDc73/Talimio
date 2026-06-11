@@ -26,6 +26,11 @@ def normalize_content_type(content_type: ContentType) -> ContentType:
 ContentItemStatus = Literal["active", "archived"]
 ContentStatusFilter = Literal["active", "archived", "all"]
 
+# Canonical generation/processing lifecycle shared across content types.
+# Mapped from course.generation_status and book/video rag_status so the client
+# can tell a failed or still-building item apart from a ready one.
+ContentProcessingStatus = Literal["ready", "processing", "failed"]
+
 
 class ProgressData(BaseModel):
     """Standardized progress data structure."""
@@ -70,6 +75,7 @@ class ContentItemBase(BaseModel):
     # Common optional fields
     tags: list[str] = Field(default_factory=list)
     status: ContentItemStatus = "active"
+    processing_status: ContentProcessingStatus = "ready"
     estimated_time: int | None = None  # in minutes
 
     # Type-specific fields at root level

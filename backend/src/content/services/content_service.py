@@ -190,6 +190,7 @@ class ContentService:
                         else_=page_subquery.c.count3,
                     ).label("count3"),
                     page_subquery.c.archived,
+                    page_subquery.c.processing_status,
                     page_subquery.c.toc_progress,
                     page_subquery.c.table_of_contents,
                 )
