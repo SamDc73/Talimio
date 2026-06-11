@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +17,9 @@ from src.ai import AGENT_ID_ASSISTANT
 from src.ai.client import LLMClient
 from src.ai.errors import AIRuntimeError
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
-from src.exceptions import DomainError
+from src.books.models import Book
+from src.courses.models import Course
+from src.exceptions import DomainError, NotFoundError, ValidationError
 from src.learning_capabilities.facade import LearningCapabilitiesFacade
 from src.learning_capabilities.schemas import (
     BuildContextBundleCapabilityInput,
@@ -25,6 +28,7 @@ from src.learning_capabilities.schemas import (
     ConceptMatch,
     FocusedConceptState,
 )
+from src.videos.models import Video
 
 from . import conversations_service
 from .schemas import ChatRequest, LanguageModelMessage
@@ -1112,6 +1116,58 @@ async def _persist_latest_user_and_load_server_history(
         }
     )
     return request_with_server_history, raw_user_message_id
+
+
+_CONTEXT_MODELS: dict[str, type[Book | Video | Course]] = {
+    "book": Book,
+    "video": Video,
+    "course": Course,
+}
+
+
+async def validate_chat_request(
+    request: ChatRequest,
+    *,
+    user_id: uuid.UUID,
+    session: AsyncSession,
+) -> None:
+    """Validate a chat request before streaming so client errors map to real HTTP 4xx.
+
+    Runs before the StreamingResponse so missing/oversized messages and unknown
+    thread/context resources surface as the standard error envelope, not a generic
+    200 SSE "having trouble" event reserved for mid-stream model failures.
+    """
+    try:
+        _normalize_chat_request(request)
+    except ValueError as error:
+        raise ValidationError(str(error), feature_area="assistant") from error
+
+    # thread_id is guaranteed present after a successful normalize.
+    thread_id = cast("uuid.UUID", request.thread_id)
+    await conversations_service.get_assistant_conversation(
+        session=session,
+        user_id=user_id,
+        conversation_id=thread_id,
+    )
+
+    await _assert_chat_context_exists(request, user_id=user_id, session=session)
+
+
+async def _assert_chat_context_exists(
+    request: ChatRequest,
+    *,
+    user_id: uuid.UUID,
+    session: AsyncSession,
+) -> None:
+    if request.context_type is None or request.context_id is None:
+        return
+
+    model = _CONTEXT_MODELS[request.context_type]
+    exists = await session.scalar(
+        select(model.id).where(model.id == request.context_id, model.user_id == user_id)
+    )
+    if exists is None:
+        raise NotFoundError(request.context_type, str(request.context_id), feature_area="assistant")
 
 
 async def assistant_chat(
