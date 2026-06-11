@@ -499,7 +499,10 @@ export function LessonViewer({
 										Back
 									</Button>
 									{canShowVersionMenu && (
-										<DropdownMenu>
+										/* modal={false}: "Start next pass" can open the early-pass ConfirmationDialog;
+										   a modal menu closing while a modal dialog opens leaves body pointer-events
+										   stuck (radix-ui/primitives#2122) */
+										<DropdownMenu modal={false}>
 											<DropdownMenuTrigger asChild>
 												<Button
 													variant="ghost"

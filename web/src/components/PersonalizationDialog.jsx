@@ -678,20 +678,18 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-[520px] gap-5">
+				{renderHeader()}
 				{isLoading ? (
 					<div className="flex items-center justify-center py-24">
 						<Loader2 className="size-6  animate-spin text-muted-foreground" />
 					</div>
 				) : (
-					<>
-						{renderHeader()}
-						<div className="max-h-[55vh] overflow-y-auto -mx-6 px-6">
-							{view === VIEW.MAIN && renderMainView()}
-							{view === VIEW.MEMORIES && renderMemoriesView()}
-							{view === VIEW.MCP && renderMcpView()}
-							{view === VIEW.MCP_ADD && renderMcpAddView()}
-						</div>
-					</>
+					<div className="max-h-[55vh] overflow-y-auto -mx-6 px-6">
+						{view === VIEW.MAIN && renderMainView()}
+						{view === VIEW.MEMORIES && renderMemoriesView()}
+						{view === VIEW.MCP && renderMcpView()}
+						{view === VIEW.MCP_ADD && renderMcpAddView()}
+					</div>
 				)}
 			</DialogContent>
 		</Dialog>
