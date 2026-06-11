@@ -49,7 +49,7 @@ export function useVideoProgressSaving({
 		const handleBeforeUnload = () => {
 			if (currentTime > 0 && video && videoId) {
 				const data = JSON.stringify({
-					progress_percentage: duration > 0 ? Math.round((currentTime / duration) * 100) : 0,
+					progressPercentage: duration > 0 ? Math.round((currentTime / duration) * 100) : 0,
 					metadata: {
 						...progressMetadata,
 						content_type: "video",

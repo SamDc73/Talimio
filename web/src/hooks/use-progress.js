@@ -44,7 +44,7 @@ export function useSingleProgress(contentId) {
 		isSuccess: query.isSuccess,
 		refetch: query.refetch,
 		// Custom data properties
-		data: progressData?.progress_percentage ?? 0,
+		data: progressData?.progressPercentage ?? 0,
 		fullData: progressData,
 		metadata: progressData?.metadata ?? EMPTY_METADATA,
 	}
@@ -59,7 +59,7 @@ export function useUpdateProgress() {
 	return useMutation({
 		mutationFn: ({ contentId, progress, metadata }) =>
 			api.put(`/progress/${contentId}`, {
-				progress_percentage: progress,
+				progressPercentage: progress,
 				metadata,
 			}),
 		onMutate: async ({ contentId, progress, metadata }) => {
@@ -76,13 +76,13 @@ export function useUpdateProgress() {
 				if (old && typeof old === "object") {
 					return {
 						...old,
-						progress_percentage: progress,
+						progressPercentage: progress,
 						metadata: metadata || {},
 					}
 				}
 
 				return {
-					progress_percentage: progress,
+					progressPercentage: progress,
 					metadata: metadata || {},
 				}
 			})
