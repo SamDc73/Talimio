@@ -1,9 +1,6 @@
 """Assistant API router - simple chat endpoint."""
 
-import json
-import logging
 import uuid
-from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
@@ -29,7 +26,6 @@ from .schemas import (
 
 
 router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
-logger = logging.getLogger(__name__)
 
 
 class AssistantModelResponse(BaseModel):
@@ -45,38 +41,21 @@ class AssistantModelsResponse(BaseModel):
     models: list[AssistantModelResponse]
 
 
-def _sse_event(payload: dict[str, object] | str) -> str:
-    encoded = payload if isinstance(payload, str) else json.dumps(payload)
-    return f"data: {encoded}\n\n"
-
-
-async def _safe_assistant_chat_stream(request: ChatRequest, auth: CurrentAuth) -> AsyncGenerator[str]:
-    try:
-        async for chunk in assistant_service.assistant_chat(request, user_id=auth.user_id, session=auth.session):
-            yield chunk
-    except Exception:
-        logger.exception("assistant.chat.stream_unhandled_error")
-        yield _sse_event(
-            {"type": "error", "errorText": "Sorry, I'm having trouble responding right now. Please try again."}
-        )
-        yield _sse_event(
-            {
-                "type": "finish",
-                "finishReason": "error",
-                "usage": {"promptTokens": 0, "completionTokens": 0},
-            }
-        )
-        yield _sse_event("[DONE]")
-
-
 @router.post("/chat")
 async def assistant_chat(
     request: ChatRequest,
     auth: CurrentAuth,
 ) -> StreamingResponse:
-    """Stream chat responses from the AI assistant."""
+    """Stream chat responses from the AI assistant.
+
+    Request validation runs before the stream opens so client errors (empty or
+    oversized messages, missing threadId, unknown thread/context) return the
+    standard HTTP error envelope. The mid-stream catch in `assistant_chat` stays
+    reserved for genuine model/provider failures.
+    """
+    await assistant_service.validate_chat_request(request, user_id=auth.user_id, session=auth.session)
     return StreamingResponse(
-        _safe_assistant_chat_stream(request, auth),
+        assistant_service.assistant_chat(request, user_id=auth.user_id, session=auth.session),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
