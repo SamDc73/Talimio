@@ -84,6 +84,11 @@ class Course(Base):
         back_populates="course",
         cascade="all, delete-orphan",
     )
+    attachments: Mapped[list[CourseAttachment]] = relationship(
+        "CourseAttachment",
+        back_populates="course",
+        passive_deletes=True,
+    )
     concept_assignments: Mapped[list[CourseConcept]] = relationship(
         "CourseConcept",
         back_populates="course",
@@ -275,6 +280,45 @@ class CourseDocument(Base):
     status: Mapped[CourseDocumentStatus] = mapped_column(String(20), default="pending")
 
     course: Mapped[Course] = relationship("Course", back_populates="documents")
+
+
+class CourseAttachment(Base):
+    """Link row attaching one book to one course.
+
+    Books own their chunks; this row only points at them. Delete propagation
+    relies on the SQL-level FK CASCADE (passive_deletes on the relationship),
+    so dropping a course or a book never touches the other side.
+    """
+
+    __tablename__ = "course_attachments"
+    __table_args__ = (
+        UniqueConstraint("course_id", "book_id", name="course_attachments_course_id_book_id_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("app_uuid7()"),
+    )
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    book_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("books.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+    )
+
+    course: Mapped[Course] = relationship("Course", back_populates="attachments")
 
 
 class Concept(Base):
@@ -624,6 +668,7 @@ __all__ = [
     "ConceptPrerequisite",
     "ConceptSimilarity",
     "Course",
+    "CourseAttachment",
     "CourseConcept",
     "CourseDocument",
     "LearningAttempt",

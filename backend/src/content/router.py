@@ -76,8 +76,13 @@ async def delete_content(
     content_type: ContentType,
     content_id: uuid.UUID,
     auth: CurrentAuth,
+    force: Annotated[bool, Query(description="Delete a book even when it is attached to courses")] = False,
 ) -> None:
-    """Delete a content item by type and ID."""
+    """Delete a content item by type and ID.
+
+    Deleting a book that has course attachments returns 409 with code
+    BOOK_HAS_ATTACHMENTS unless force=true is set.
+    """
     content_service = ContentService(session=auth.session)
     normalized_content_type = normalize_content_type(content_type)
 
@@ -85,4 +90,5 @@ async def delete_content(
         content_type=normalized_content_type,
         content_id=content_id,
         user_id=auth.user_id,
+        force=force,
     )

@@ -196,6 +196,28 @@ class CourseUpdate(BaseModel):
     model_config = ConfigDict(**_CAMEL_CONFIG)
 
 
+class CourseAttachmentRead(BaseModel):
+    """One book attached to a course, with display fields denormalized."""
+
+    id: uuid.UUID = Field(description="Attachment ID")
+    kind: Literal["book"] = Field("book", description="Attachment kind")
+    book_id: uuid.UUID = Field(description="Attached book ID")
+    title: str = Field(description="Book title")
+    rag_status: str = Field(description="Book embedding status")
+    archived: bool = Field(description="Whether the book is archived")
+    created_at: datetime = Field(description="Attachment creation timestamp")
+
+    model_config = ConfigDict(**_CAMEL_CONFIG)
+
+
+class CourseAttachmentBulkCreate(BaseModel):
+    """Bulk attach request; duplicates are skipped silently."""
+
+    book_ids: list[uuid.UUID] = Field(min_length=1, max_length=50, description="Books to attach")
+
+    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+
+
 class ModuleResponse(BaseModel):
     """Schema for synthesized module responses."""
 
