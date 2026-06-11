@@ -1,6 +1,7 @@
 """Durable Postgres-backed background jobs (procrastinate)."""
 
 from src.jobs.app import (
+    QUEUE_AUTH,
     QUEUE_GENERATION,
     QUEUE_MAINTENANCE,
     QUEUE_MEMORY,
@@ -15,6 +16,7 @@ from src.jobs.defer import defer_job
 
 
 __all__ = [
+    "QUEUE_AUTH",
     "QUEUE_GENERATION",
     "QUEUE_MAINTENANCE",
     "QUEUE_MEMORY",
