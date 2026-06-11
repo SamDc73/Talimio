@@ -3,7 +3,6 @@
  */
 
 import { api } from "@/lib/apiClient"
-import logger from "@/lib/logger"
 
 /**
  * Get user personalization settings for current authenticated user
@@ -52,37 +51,21 @@ export async function updateCustomInstructions(instructions) {
 }
 
 /**
- * Get user memories from the AI system for current authenticated user
- * @param {number} limit - Maximum number of memories to fetch
+ * List the current user's profile-slot memories.
+ * Each item is { id, slot, value, source, updatedAt, lastEvidenceAt?, evidenceText?, sourceMessageId? }.
+ * @param {number} limit - Maximum number of memories to fetch (default 100)
  */
-export async function getUserMemories(limit = 50) {
+export async function getUserMemories(limit = 100) {
 	// Use current user endpoint
 	const response = await api.get(`/user/memories?limit=${limit}`)
-	return response.memories || []
+	return response.memories
 }
 
 /**
- * Clear all user memories (deletes one by one - MVP approach) for current authenticated user
+ * Clear all user memories for current authenticated user
  */
-export async function clearUserMemory() {
-	const memories = await getUserMemories(1000)
-	if (!Array.isArray(memories) || memories.length === 0) {
-		return { status: "success", message: "No memories to delete" }
-	}
-
-	// Delete sequentially to avoid overwhelming the server and to simplify error handling
-	let deleted = 0
-	for (const m of memories) {
-		if (!m?.id) continue
-		try {
-			await api.delete(`/user/memories/${m.id}`)
-			deleted += 1
-		} catch (error) {
-			logger.error("Failed to delete memory", error, { memoryId: m.id })
-		}
-	}
-
-	return { status: "success", message: "Cleared user memories", deleted }
+export async function clearUserMemories() {
+	return api.delete("/user/memories")
 }
 
 /**

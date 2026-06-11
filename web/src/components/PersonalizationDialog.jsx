@@ -5,7 +5,7 @@
 import { ArrowLeft, ChevronRight, Loader2, Plus, Server, Sparkles, Trash2, X, Zap } from "lucide-react"
 import { useCallback, useEffect, useId, useRef, useState } from "react"
 import {
-	clearUserMemory,
+	clearUserMemories,
 	createMcpServer,
 	deleteMcpServer,
 	deleteMemory,
@@ -72,9 +72,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		if (firstLoad) setIsLoading(true)
 		try {
 			const settings = await getUserSettings()
-			setInstructions(settings.custom_instructions || "")
-			setOriginalInstructions(settings.custom_instructions || "")
-			setMemoryCount(settings.memory_count || 0)
+			setInstructions(settings.customInstructions || "")
+			setOriginalInstructions(settings.customInstructions || "")
+			setMemoryCount(settings.memoryCount || 0)
 			hasLoadedRef.current = true
 		} catch (error) {
 			logger.error("Failed to load personalization settings", error)
@@ -216,7 +216,7 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		if (!window.confirm("Clear all memories? This cannot be undone.")) return
 		setIsClearing(true)
 		try {
-			await clearUserMemory()
+			await clearUserMemories()
 			setMemoryCount(0)
 			setMemories([])
 		} catch (error) {
@@ -424,9 +424,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 		} else {
 			memoriesContent = (
 				<div className="space-y-2">
-					{memories.map((memory, index) => (
+					{memories.map((memory) => (
 						<div
-							key={memory.id || index}
+							key={memory.id}
 							className={cn(
 								"group relative p-4 rounded-xl transition-all duration-200",
 								"bg-muted/30 hover:bg-muted/50",
@@ -445,9 +445,9 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 							>
 								<X className="size-3.5 " />
 							</button>
-							<p className="text-sm/relaxed text-foreground pr-10 ">{memory.content}</p>
-							{formatTimestamp(memory.timestamp) && (
-								<p className="text-xs text-muted-foreground/70 mt-2">{formatTimestamp(memory.timestamp)}</p>
+							<p className="text-sm/relaxed text-foreground pr-10 ">{`${memory.slot}: ${memory.value}`}</p>
+							{formatTimestamp(memory.updatedAt) && (
+								<p className="text-xs text-muted-foreground/70 mt-2">{formatTimestamp(memory.updatedAt)}</p>
 							)}
 						</div>
 					))}
