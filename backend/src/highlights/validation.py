@@ -8,13 +8,15 @@ to ensure data integrity across different content types (PDF, video, EPUB).
 import json
 import logging
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, ValidationInfo, field_validator
+from pydantic import ConfigDict, Field, JsonValue, ValidationError, ValidationInfo, field_validator
+
+from src.config.schema_casing import CamelModel
 
 
 logger = logging.getLogger(__name__)
 
 
-class PDFHighlightData(BaseModel):
+class PDFHighlightData(CamelModel):
     """Validation schema for PDF highlight data."""
 
     # Required fields for PDF highlights
@@ -77,7 +79,7 @@ class PDFHighlightData(BaseModel):
         return position
 
 
-class VideoHighlightData(BaseModel):
+class VideoHighlightData(CamelModel):
     """Validation schema for video highlight data."""
 
     # Required fields for video highlights
@@ -104,7 +106,7 @@ class VideoHighlightData(BaseModel):
         return v
 
 
-class EPUBHighlightData(BaseModel):
+class EPUBHighlightData(CamelModel):
     """Validation schema for EPUB highlight data."""
 
     # Required fields for EPUB highlights
@@ -132,7 +134,7 @@ class EPUBHighlightData(BaseModel):
         return v
 
 
-class GenericHighlightData(BaseModel):
+class GenericHighlightData(CamelModel):
     """Fallback validation schema for generic highlight data."""
 
     # Minimal required fields
@@ -166,8 +168,13 @@ def detect_highlight_type(data: dict[str, JsonValue]) -> str:
         if "rects" in position and "pageNumber" in position:
             return "pdf"
 
-    # Video highlights have start_time and end_time
-    if "start_time" in data and "end_time" in data:
+    # Video highlights have start/end times. Accept both spellings on input -
+    # the models validate either (validate_by_name) - so snake input still
+    # normalizes into the camelCase dump instead of falling through to a raw
+    # generic blob that would store snake keys verbatim.
+    has_start = "startTime" in data or "start_time" in data
+    has_end = "endTime" in data or "end_time" in data
+    if has_start and has_end:
         return "video"
 
     # EPUB highlights have CFI (Canonical Fragment Identifier)
@@ -213,7 +220,7 @@ def validate_highlight_data(data: dict[str, JsonValue], _content_type: str | Non
         validated_data = schema_class.model_validate(data)
 
         # Return as dictionary with type annotation
-        result: dict[str, object] = validated_data.model_dump()
+        result: dict[str, object] = validated_data.model_dump(by_alias=True)
         result["_validation_type"] = detected_type
 
         logger.debug("Successfully validated %s highlight data", detected_type)
@@ -227,7 +234,7 @@ def validate_highlight_data(data: dict[str, JsonValue], _content_type: str | Non
             logger.info("Attempting fallback to generic validation")
             try:
                 validated_data = GenericHighlightData.model_validate(data)
-                result: dict[str, object] = validated_data.model_dump()
+                result: dict[str, object] = validated_data.model_dump(by_alias=True)
                 result["_validation_type"] = "generic"
                 return result
             except ValidationError as fallback_error:
@@ -272,7 +279,7 @@ def validate_json_highlight_data(json_data: str | dict[str, JsonValue], _content
     return validate_highlight_data({key: value for key, value in data.items() if isinstance(key, str)}, _content_type)
 
 
-def get_validation_schema_for_type(highlight_type: str) -> type[BaseModel]:
+def get_validation_schema_for_type(highlight_type: str) -> type[CamelModel]:
     """
     Get the validation schema class for a specific highlight type.
 
@@ -314,11 +321,11 @@ def get_validation_examples() -> dict[str, dict[str, JsonValue]]:
         },
         "video": {
             "text": "This is text from the video transcript.",
-            "start_time": 120.5,
-            "end_time": 125.8,
+            "startTime": 120.5,
+            "endTime": 125.8,
             "color": "#FF6B6B",
             "note": "Key point discussed in the video",
-            "transcript_index": 45,
+            "transcriptIndex": 45,
             "speaker": "Dr. Smith",
         },
         "epub": {
@@ -327,7 +334,7 @@ def get_validation_examples() -> dict[str, dict[str, JsonValue]]:
             "color": "#4ECDC4",
             "note": "Interesting passage",
             "chapter": "Chapter 1: Introduction",
-            "spine_index": 2,
+            "spineIndex": 2,
         },
         "generic": {"text": "Generic selected text.", "color": "#95A5A6", "note": "General highlight"},
     }
