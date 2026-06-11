@@ -27,12 +27,11 @@ from src.auth.dependencies import (
 )
 from src.auth.emails import (
     generate_email_verification_token,
-    generate_password_reset_token,
-    send_reset_email,
     send_verification_email,
     verify_email_verification_token,
     verify_password_reset_token,
 )
+from src.auth.jobs import defer_password_reset_email
 from src.auth.models import OAuthAccount
 from src.auth.oauth import (
     consume_google_oauth_state,
@@ -74,6 +73,7 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 _GENERIC_SIGNUP_MESSAGE = "Signup request received. If eligible, you can sign in with your credentials."
+_GENERIC_SIGNUP_RESPONSE = SignupResponse(message=_GENERIC_SIGNUP_MESSAGE, email_confirmation_required=True)
 
 _VERIFICATION_RESEND_COOLDOWN_SECONDS = 60
 _VERIFICATION_RESEND_MAX_ATTEMPTS = 3
@@ -301,72 +301,69 @@ async def get_auth_options(response: Response) -> AuthOptionsResponse:
 
 
 @router.post("/signup")
-async def signup(request: Request, response: Response, session: DbSession, data: SignupRequest) -> SignupResponse:
-    """Create a new user account."""
+async def signup(session: DbSession, data: SignupRequest) -> SignupResponse:
+    """Register a new user account.
+
+    Returns the SAME neutral response whether or not the email is already
+    registered, so the response cannot be diffed to enumerate accounts. Real
+    account creation (and any verification email) happens here for new emails;
+    already-registered emails are silently ignored. The user signs in afterward
+    via ``/login`` — signup never returns a session, since a ``Set-Cookie`` on
+    only the new-email path would itself leak existence.
+
+    Password-policy errors are validated before the existence check so they are
+    returned identically regardless of whether the email is registered.
+    """
     settings = get_settings()
+    if settings.AUTH_PROVIDER != "local":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Signup is only available with local authentication",
+        )
+
     normalized_email = local_crud.normalize_email(str(data.email))
+    _validate_password_or_raise(data.password)
 
-    if settings.AUTH_PROVIDER == "local":
-        existing = await local_crud.get_user_by_email(session, normalized_email)
-        if existing:
-            return SignupResponse(
-                message=_GENERIC_SIGNUP_MESSAGE,
-                email_confirmation_required=True,
-            )
+    existing = await local_crud.get_user_by_email(session, normalized_email)
+    if existing:
+        return _GENERIC_SIGNUP_RESPONSE
 
-        _validate_password_or_raise(data.password)
-
-        username = await _resolve_signup_username(session, full_name=data.full_name, username=data.username)
-        try:
-            user = await local_crud.create_user(
-                session,
-                email=normalized_email,
-                password=data.password,
-                username=username,
-                full_name=data.full_name,
-                is_verified=not settings.AUTH_REQUIRE_EMAIL_VERIFICATION,
-            )
-            if settings.AUTH_REQUIRE_EMAIL_VERIFICATION:
-                verification_token = generate_email_verification_token(normalized_email)
-                try:
-                    await send_verification_email(email=normalized_email, token=verification_token)
-                except (httpx.HTTPError, ValueError) as error:
-                    await session.rollback()
-                    logger.warning(
-                        "Signup verification email failed; user creation rolled back",
-                        extra={"auth_provider": settings.AUTH_PROVIDER},
-                        exc_info=True,
-                    )
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail="Unable to send verification email right now. Please try again.",
-                    ) from error
-
-            await session.commit()
-        except IntegrityError:
-            await session.rollback()
-            return SignupResponse(
-                message=_GENERIC_SIGNUP_MESSAGE,
-                email_confirmation_required=True,
-            )
-
-        logger.info("auth.signup.succeeded", extra={"user_id": str(user.id), "email_confirmation_required": settings.AUTH_REQUIRE_EMAIL_VERIFICATION})
-
+    username = await _resolve_signup_username(session, full_name=data.full_name, username=data.username)
+    try:
+        user = await local_crud.create_user(
+            session,
+            email=normalized_email,
+            password=data.password,
+            username=username,
+            full_name=data.full_name,
+            is_verified=not settings.AUTH_REQUIRE_EMAIL_VERIFICATION,
+        )
         if settings.AUTH_REQUIRE_EMAIL_VERIFICATION:
-            return SignupResponse(
-                message="Please check your email to verify your account.",
-                email_confirmation_required=True,
-            )
+            verification_token = generate_email_verification_token(normalized_email)
+            try:
+                await send_verification_email(email=normalized_email, token=verification_token)
+            except (httpx.HTTPError, ValueError) as error:
+                await session.rollback()
+                logger.warning(
+                    "Signup verification email failed; user creation rolled back",
+                    extra={"auth_provider": settings.AUTH_PROVIDER},
+                    exc_info=True,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Unable to send verification email right now. Please try again.",
+                ) from error
 
-        await _issue_local_auth_cookie(request, response, session, user)
-        logger.info("auth.session.issued", extra={"user_id": str(user.id), "operation": "signup"})
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        return _GENERIC_SIGNUP_RESPONSE
 
-        return SignupResponse(user=UserResponse.from_model(user), email_confirmation_required=False)
-
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Signup is only available with local authentication",
+    logger.info(
+        "auth.signup.succeeded",
+        extra={"user_id": str(user.id), "email_confirmation_required": settings.AUTH_REQUIRE_EMAIL_VERIFICATION},
     )
+    return _GENERIC_SIGNUP_RESPONSE
 
 
 @router.post(
@@ -520,20 +517,18 @@ async def get_current_user(_request: Request, _auth: CurrentAuth) -> UserRespons
     dependencies=[Depends(_require_local_provider)],
 )
 async def forgot_password(session: DbSession, data: PasswordResetRequest) -> MessageResponse:
-    """Send password reset instructions (local mode only)."""
+    """Send password reset instructions (local mode only).
+
+    The account lookup, token minting, and outbound Resend call all run in a
+    background job, so the request does identical work (one defer + commit)
+    whether or not the email is registered. This closes the timing oracle that
+    let the no-account path return faster than the known-account path. The job
+    silently no-ops for unknown or inactive accounts.
+    """
     normalized_email = local_crud.normalize_email(str(data.email))
 
-    user = await local_crud.get_user_by_email(session, normalized_email)
-    if user and user.is_active:
-        token = generate_password_reset_token(normalized_email)
-        try:
-            await send_reset_email(email=normalized_email, token=token)
-        except (httpx.HTTPError, ValueError):
-            logger.warning(
-                "Failed to send password reset email",
-                extra={"auth_provider": get_settings().AUTH_PROVIDER},
-                exc_info=True,
-            )
+    await defer_password_reset_email(session, email=normalized_email)
+    await session.commit()
 
     return MessageResponse(message="If the email exists, password reset instructions have been sent")
 
