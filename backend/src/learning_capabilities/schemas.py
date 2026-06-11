@@ -4,12 +4,10 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import ConfigDict, Field, JsonValue
 
-from src.config.schema_casing import to_camel
+from src.config.schema_casing import CamelModel
 
-
-_CAMEL_CONFIG = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 CapabilityKind = Literal["read", "write", "generation"]
 ContextType = Literal["book", "video", "course"]
@@ -49,7 +47,7 @@ def _default_tutor_moves() -> list[TutorMove]:
     ]
 
 
-class CapabilityDescriptor(BaseModel):
+class CapabilityDescriptor(CamelModel):
     """Runtime metadata describing one capability."""
 
     name: str = Field(min_length=1)
@@ -58,20 +56,20 @@ class CapabilityDescriptor(BaseModel):
     public_api_eligible: bool = True
     description: str = Field(min_length=1)
 
-    model_config = ConfigDict(frozen=True, **_CAMEL_CONFIG)
+    model_config = ConfigDict(frozen=True)
 
 
-class ToolUiLink(BaseModel):
+class ToolUiLink(CamelModel):
     """Clickable navigation affordance for the chat UI."""
 
     type: Literal["link"] = "link"
     label: str = Field(min_length=1)
     href: str = Field(min_length=1)
 
-    model_config = ConfigDict(frozen=True, **_CAMEL_CONFIG)
+    model_config = ConfigDict(frozen=True)
 
 
-class ToolUiConfirmation(BaseModel):
+class ToolUiConfirmation(CamelModel):
     """Confirmation affordance for mutating tools."""
 
     type: Literal["confirmation"] = "confirmation"
@@ -81,10 +79,10 @@ class ToolUiConfirmation(BaseModel):
     confirm_label: str = Field(default="Confirm", min_length=1)
     cancel_label: str = Field(default="Cancel", min_length=1)
 
-    model_config = ConfigDict(frozen=True, **_CAMEL_CONFIG)
+    model_config = ConfigDict(frozen=True)
 
 
-class CourseMatch(BaseModel):
+class CourseMatch(CamelModel):
     """Compact course match payload for assistant routing/context."""
 
     id: uuid.UUID
@@ -94,10 +92,8 @@ class CourseMatch(BaseModel):
     archived: bool = False
     completion_percentage: float = 0.0
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CourseState(BaseModel):
+class CourseState(CamelModel):
     """Compact learner-facing course state packet."""
 
     course_id: uuid.UUID
@@ -110,10 +106,8 @@ class CourseState(BaseModel):
     completed_lessons: list[uuid.UUID] = Field(default_factory=list)
     current_lesson_id: uuid.UUID | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CourseCatalogEntry(BaseModel):
+class CourseCatalogEntry(CamelModel):
     """Compact home-surface course catalog entry."""
 
     course_id: uuid.UUID
@@ -121,10 +115,8 @@ class CourseCatalogEntry(BaseModel):
     adaptive_enabled: bool = False
     archived: bool = False
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class AdaptiveCatalogEntry(BaseModel):
+class AdaptiveCatalogEntry(CamelModel):
     """Compact adaptive summary entry for the home surface."""
 
     course_id: uuid.UUID
@@ -136,10 +128,8 @@ class AdaptiveCatalogEntry(BaseModel):
     due_count: int = 0
     avg_mastery: float = 0.0
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CourseOutlineLessonState(BaseModel):
+class CourseOutlineLessonState(CamelModel):
     """Minimal per-lesson routing state for one course outline."""
 
     lesson_id: uuid.UUID
@@ -152,19 +142,15 @@ class CourseOutlineLessonState(BaseModel):
     completed: bool = False
     is_current: bool = False
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CourseOutlineState(BaseModel):
+class CourseOutlineState(CamelModel):
     """Compact course outline packet for assistant routing."""
 
     course_id: uuid.UUID
     lessons: list[CourseOutlineLessonState] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class LessonState(BaseModel):
+class LessonState(CamelModel):
     """Compact lesson state packet."""
 
     course_id: uuid.UUID
@@ -177,10 +163,8 @@ class LessonState(BaseModel):
     module_order: int | None = None
     order: int = 0
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class FrontierConceptState(BaseModel):
+class FrontierConceptState(CamelModel):
     """Concept row in compact frontier payloads."""
 
     concept_id: uuid.UUID
@@ -190,10 +174,8 @@ class FrontierConceptState(BaseModel):
     exposures: int = 0
     next_review_at: datetime | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CourseFrontierState(BaseModel):
+class CourseFrontierState(CamelModel):
     """Compact course frontier state packet."""
 
     due_count: int = 0
@@ -202,10 +184,8 @@ class CourseFrontierState(BaseModel):
     due_for_review: list[FrontierConceptState] = Field(default_factory=list)
     coming_soon: list[FrontierConceptState] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class LearnerProfileSignals(BaseModel):
+class LearnerProfileSignals(CamelModel):
     """Raw per-concept learner profile signals."""
 
     success_rate: float | None = None
@@ -213,10 +193,8 @@ class LearnerProfileSignals(BaseModel):
     learning_speed: float | None = None
     semantic_sensitivity: float | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ConceptRelationSignal(BaseModel):
+class ConceptRelationSignal(CamelModel):
     """Compact related-concept signal for confusors and prerequisite gaps."""
 
     concept_id: uuid.UUID
@@ -224,10 +202,8 @@ class ConceptRelationSignal(BaseModel):
     similarity: float | None = None
     mastery: float | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class FocusedConceptState(BaseModel):
+class FocusedConceptState(CamelModel):
     """Concept state for the current lesson focus."""
 
     concept_id: uuid.UUID
@@ -242,8 +218,6 @@ class FocusedConceptState(BaseModel):
     confusors: list[ConceptRelationSignal] = Field(default_factory=list)
     prerequisite_gaps: list[ConceptRelationSignal] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
-
 
 class ConceptMatch(FocusedConceptState):
     """Course-scoped concept match with raw ranking signals."""
@@ -255,16 +229,14 @@ class ConceptMatch(FocusedConceptState):
     score_gap_to_next: float | None = None
 
 
-class ConceptFocus(BaseModel):
+class ConceptFocus(CamelModel):
     """Adaptive-course concept focus for assistant routing."""
 
     current_lesson_concept: FocusedConceptState | None = None
     semantic_candidates: list[ConceptMatch] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class LessonFocus(BaseModel):
+class LessonFocus(CamelModel):
     """Standard-course lesson focus without adaptive learner state."""
 
     lesson_id: uuid.UUID
@@ -273,10 +245,8 @@ class LessonFocus(BaseModel):
     has_content: bool = False
     window_preview: str | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CourseSourceExcerpt(BaseModel):
+class CourseSourceExcerpt(CamelModel):
     """Compact course-source excerpt for assistant grounding."""
 
     course_id: uuid.UUID
@@ -289,19 +259,15 @@ class CourseSourceExcerpt(BaseModel):
     chunk_index: int | None = None
     total_chunks: int | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class SourceFocus(BaseModel):
+class SourceFocus(CamelModel):
     """Tiny auto-source focus for course-grounded chat."""
 
     course_id: uuid.UUID
     items: list[CourseSourceExcerpt] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ActiveProbeSuggestion(BaseModel):
+class ActiveProbeSuggestion(CamelModel):
     """Compact signal that a chat probe may be useful now."""
 
     course_id: uuid.UUID
@@ -312,10 +278,8 @@ class ActiveProbeSuggestion(BaseModel):
     learner_shared_reasoning: bool = False
     repeated_recent_misses: bool = False
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class LessonWindowState(BaseModel):
+class LessonWindowState(CamelModel):
     """Window-level lesson content for assistant grounding."""
 
     window_id: uuid.UUID
@@ -326,10 +290,8 @@ class LessonWindowState(BaseModel):
     content: str
     estimated_minutes: int
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class RecentProbeSignal(BaseModel):
+class RecentProbeSignal(CamelModel):
     """Recent probe outcome for tutor debugging context."""
 
     probe_id: uuid.UUID
@@ -338,10 +300,8 @@ class RecentProbeSignal(BaseModel):
     occurred_at: datetime
     tags: list[str] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class TutorEvidenceSignals(BaseModel):
+class TutorEvidenceSignals(CamelModel):
     """Deterministic evidence-quality signals for cautious tutoring."""
 
     recent_probe_count: int = 0
@@ -352,10 +312,8 @@ class TutorEvidenceSignals(BaseModel):
     has_sparse_evidence: bool = True
     has_stale_evidence: bool = False
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class TutorCandidateCause(BaseModel):
+class TutorCandidateCause(CamelModel):
     """Possible tutoring cause, not a diagnosis."""
 
     rank: int
@@ -363,10 +321,8 @@ class TutorCandidateCause(BaseModel):
     concept_id: uuid.UUID
     source: TutorCauseSource
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class TutorDeterministicSignals(BaseModel):
+class TutorDeterministicSignals(CamelModel):
     """Simple booleans and counts the prompt can reason over."""
 
     has_prerequisite_gap: bool = False
@@ -378,20 +334,18 @@ class TutorDeterministicSignals(BaseModel):
     recent_correct_count: int = 0
     mastery_evidence_count: int = 0
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class SearchLessonsCapabilityInput(BaseModel):
+class SearchLessonsCapabilityInput(CamelModel):
     """Input payload for lesson search capability."""
 
     query: str = Field(min_length=1)
     course_id: uuid.UUID | None = None
     limit: int = Field(default=8, ge=1, le=20)
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class SearchConceptsCapabilityInput(BaseModel):
+class SearchConceptsCapabilityInput(CamelModel):
     """Input payload for adaptive course concept search."""
 
     query: str = Field(min_length=1)
@@ -399,10 +353,10 @@ class SearchConceptsCapabilityInput(BaseModel):
     limit: int = Field(default=5, ge=1, le=20)
     include_state: bool = True
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class SearchCourseSourcesCapabilityInput(BaseModel):
+class SearchCourseSourcesCapabilityInput(CamelModel):
     """Input payload for course-source search capability."""
 
     course_id: uuid.UUID
@@ -410,10 +364,10 @@ class SearchCourseSourcesCapabilityInput(BaseModel):
     limit: int = Field(default=5, ge=1, le=20)
     source_types: list[CourseSourceType] = Field(default_factory=_default_course_source_types)
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GetLessonWindowsCapabilityInput(BaseModel):
+class GetLessonWindowsCapabilityInput(CamelModel):
     """Input payload for lesson-window lookup capability."""
 
     course_id: uuid.UUID
@@ -421,10 +375,10 @@ class GetLessonWindowsCapabilityInput(BaseModel):
     window_index: int | None = Field(default=None, ge=0)
     limit: int = Field(default=3, ge=1, le=10)
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GetConceptTutorContextCapabilityInput(BaseModel):
+class GetConceptTutorContextCapabilityInput(CamelModel):
     """Input payload for adaptive concept tutor context."""
 
     course_id: uuid.UUID
@@ -432,10 +386,10 @@ class GetConceptTutorContextCapabilityInput(BaseModel):
     include_recent_probes: bool = True
     include_lesson_summary: bool = True
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GenerateConceptProbeCapabilityInput(BaseModel):
+class GenerateConceptProbeCapabilityInput(CamelModel):
     """Input payload for chat concept probe generation."""
 
     course_id: uuid.UUID
@@ -446,10 +400,10 @@ class GenerateConceptProbeCapabilityInput(BaseModel):
     thread_id: uuid.UUID | None = None
     lesson_id: uuid.UUID | None = None
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class LessonMatch(BaseModel):
+class LessonMatch(CamelModel):
     """Compact lesson search match row."""
 
     course_id: uuid.UUID
@@ -460,18 +414,14 @@ class LessonMatch(BaseModel):
     module_name: str | None = None
     order: int = 0
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class SearchLessonsCapabilityOutput(BaseModel):
+class SearchLessonsCapabilityOutput(CamelModel):
     """Output payload for lesson search capability."""
 
     items: list[LessonMatch] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class SearchConceptsCapabilityOutput(BaseModel):
+class SearchConceptsCapabilityOutput(CamelModel):
     """Output payload for adaptive course concept search."""
 
     course_id: uuid.UUID
@@ -479,19 +429,15 @@ class SearchConceptsCapabilityOutput(BaseModel):
     items: list[ConceptMatch] = Field(default_factory=list)
     reason: str | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class SearchCourseSourcesCapabilityOutput(BaseModel):
+class SearchCourseSourcesCapabilityOutput(CamelModel):
     """Output payload for course-source search capability."""
 
     course_id: uuid.UUID
     items: list[CourseSourceExcerpt] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class GetLessonWindowsCapabilityOutput(BaseModel):
+class GetLessonWindowsCapabilityOutput(CamelModel):
     """Output payload for lesson-window lookup capability."""
 
     course_id: uuid.UUID
@@ -499,10 +445,8 @@ class GetLessonWindowsCapabilityOutput(BaseModel):
     version_id: uuid.UUID | None = None
     items: list[LessonWindowState] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class GetConceptTutorContextCapabilityOutput(BaseModel):
+class GetConceptTutorContextCapabilityOutput(CamelModel):
     """Output payload for adaptive concept tutor context."""
 
     course_id: uuid.UUID
@@ -530,10 +474,8 @@ class GetConceptTutorContextCapabilityOutput(BaseModel):
     allowed_tutor_moves: list[TutorMove] = Field(default_factory=_default_tutor_moves)
     reason: str | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ChatConceptProbe(BaseModel):
+class ChatConceptProbe(CamelModel):
     """Learner-visible active chat probe."""
 
     active_probe_id: uuid.UUID
@@ -547,10 +489,8 @@ class ChatConceptProbe(BaseModel):
     concept_id: uuid.UUID
     lesson_id: uuid.UUID
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ActiveChatProbe(BaseModel):
+class ActiveChatProbe(CamelModel):
     """Assistant-visible active probe awaiting a learner answer."""
 
     active_probe_id: uuid.UUID
@@ -564,10 +504,8 @@ class ActiveChatProbe(BaseModel):
     choices: list[str] = Field(default_factory=list)
     hints: list[str] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class GenerateConceptProbeCapabilityOutput(BaseModel):
+class GenerateConceptProbeCapabilityOutput(CamelModel):
     """Output payload for chat concept probe generation."""
 
     course_id: uuid.UUID
@@ -577,10 +515,8 @@ class GenerateConceptProbeCapabilityOutput(BaseModel):
     probe: ChatConceptProbe | None = None
     reason: str | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class SubmitConceptProbeResultCapabilityInput(BaseModel):
+class SubmitConceptProbeResultCapabilityInput(CamelModel):
     """Input payload for submitting a chat-generated probe answer."""
 
     course_id: uuid.UUID
@@ -590,10 +526,10 @@ class SubmitConceptProbeResultCapabilityInput(BaseModel):
     thread_id: uuid.UUID | None = None
     lesson_id: uuid.UUID | None = None
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class SubmitConceptProbeResultCapabilityOutput(BaseModel):
+class SubmitConceptProbeResultCapabilityOutput(CamelModel):
     """Output payload after grading and recording a chat probe answer."""
 
     course_id: uuid.UUID
@@ -610,93 +546,81 @@ class SubmitConceptProbeResultCapabilityOutput(BaseModel):
     tags: list[str] = Field(default_factory=list)
     reason: str | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ListRelevantCoursesCapabilityInput(BaseModel):
+class ListRelevantCoursesCapabilityInput(CamelModel):
     """Input payload for relevant-course matching."""
 
     query: str = Field(min_length=1)
     limit: int = Field(default=6, ge=1, le=20)
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class ListRelevantCoursesCapabilityOutput(BaseModel):
+class ListRelevantCoursesCapabilityOutput(CamelModel):
     """Output payload for relevant-course matching."""
 
     items: list[CourseMatch] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class GetCourseStateCapabilityInput(BaseModel):
+class GetCourseStateCapabilityInput(CamelModel):
     """Input payload for course state lookup."""
 
     course_id: uuid.UUID
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GetCourseStateCapabilityOutput(BaseModel):
+class GetCourseStateCapabilityOutput(CamelModel):
     """Output payload for course state lookup."""
 
     state: CourseState
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class GetCourseOutlineStateCapabilityInput(BaseModel):
+class GetCourseOutlineStateCapabilityInput(CamelModel):
     """Input payload for course outline lookup."""
 
     course_id: uuid.UUID
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GetCourseOutlineStateCapabilityOutput(BaseModel):
+class GetCourseOutlineStateCapabilityOutput(CamelModel):
     """Output payload for course outline lookup."""
 
     state: CourseOutlineState
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class GetLessonStateCapabilityInput(BaseModel):
+class GetLessonStateCapabilityInput(CamelModel):
     """Input payload for lesson state lookup."""
 
     course_id: uuid.UUID
     lesson_id: uuid.UUID
     generate: bool = False
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GetLessonStateCapabilityOutput(BaseModel):
+class GetLessonStateCapabilityOutput(CamelModel):
     """Output payload for lesson state lookup."""
 
     state: LessonState
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class GetCourseFrontierCapabilityInput(BaseModel):
+class GetCourseFrontierCapabilityInput(CamelModel):
     """Input payload for course frontier lookup."""
 
     course_id: uuid.UUID
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class GetCourseFrontierCapabilityOutput(BaseModel):
+class GetCourseFrontierCapabilityOutput(CamelModel):
     """Output payload for course frontier lookup."""
 
     state: CourseFrontierState
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class BuildContextBundleCapabilityInput(BaseModel):
+class BuildContextBundleCapabilityInput(CamelModel):
     """Input payload for capability-backed context packet assembly."""
 
     context_type: ContextType | None = None
@@ -705,10 +629,10 @@ class BuildContextBundleCapabilityInput(BaseModel):
     latest_user_text: str = ""
     selected_quote: str | None = None
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class BuildContextBundleCapabilityOutput(BaseModel):
+class BuildContextBundleCapabilityOutput(CamelModel):
     """Output payload for capability-backed context packets."""
 
     app_surface: ContextType | None = None
@@ -731,20 +655,16 @@ class BuildContextBundleCapabilityOutput(BaseModel):
     frontier_state: CourseFrontierState | None = None
     generated_at: datetime
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ActionStatusMixin(BaseModel):
+class ActionStatusMixin(CamelModel):
     """Shared status fields for mutating capability outputs."""
 
     status: Literal["completed", "confirmation_required"]
     message: str = Field(min_length=1)
     tool_ui: list[ToolUiLink | ToolUiConfirmation] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class BookMatch(BaseModel):
+class BookMatch(CamelModel):
     """Compact book result for AI-facing book discovery.
 
     Carries archived and ragStatus flags; never filtered by them.
@@ -758,45 +678,39 @@ class BookMatch(BaseModel):
     excerpt: str | None = None
     similarity: float | None = None
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class SearchBooksCapabilityInput(BaseModel):
+class SearchBooksCapabilityInput(CamelModel):
     """Input payload for user-wide book search. No archived filter exists."""
 
     query: str = Field(min_length=1)
     limit: int = Field(default=8, ge=1, le=20)
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class SearchBooksCapabilityOutput(BaseModel):
+class SearchBooksCapabilityOutput(CamelModel):
     """Output payload for user-wide book search."""
 
     items: list[BookMatch] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ListBooksCapabilityInput(BaseModel):
+class ListBooksCapabilityInput(CamelModel):
     """Input payload for listing every book the user owns."""
 
     page: int = Field(default=1, ge=1)
     limit: int = Field(default=20, ge=1, le=50)
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class ListBooksCapabilityOutput(BaseModel):
+class ListBooksCapabilityOutput(CamelModel):
     """Output payload for the book listing capability."""
 
     items: list[BookMatch] = Field(default_factory=list)
     total: int = 0
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class CourseAttachmentItem(BaseModel):
+class CourseAttachmentItem(CamelModel):
     """One course attachment with denormalized book fields."""
 
     id: uuid.UUID
@@ -807,34 +721,30 @@ class CourseAttachmentItem(BaseModel):
     archived: bool
     created_at: datetime
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class ListCourseAttachmentsCapabilityInput(BaseModel):
+class ListCourseAttachmentsCapabilityInput(CamelModel):
     """Input payload for listing one course's attachments."""
 
     course_id: uuid.UUID
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class ListCourseAttachmentsCapabilityOutput(BaseModel):
+class ListCourseAttachmentsCapabilityOutput(CamelModel):
     """Output payload for listing one course's attachments."""
 
     course_id: uuid.UUID
     items: list[CourseAttachmentItem] = Field(default_factory=list)
 
-    model_config = ConfigDict(**_CAMEL_CONFIG)
 
-
-class AttachBookToCourseCapabilityInput(BaseModel):
+class AttachBookToCourseCapabilityInput(CamelModel):
     """Input payload for attaching books to a course."""
 
     course_id: uuid.UUID
     book_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
     confirmed: bool = False
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
 class AttachBookToCourseCapabilityOutput(ActionStatusMixin):
@@ -844,14 +754,14 @@ class AttachBookToCourseCapabilityOutput(ActionStatusMixin):
     attachments: list[CourseAttachmentItem] = Field(default_factory=list)
 
 
-class DetachBookFromCourseCapabilityInput(BaseModel):
+class DetachBookFromCourseCapabilityInput(CamelModel):
     """Input payload for detaching one book from a course."""
 
     course_id: uuid.UUID
     book_id: uuid.UUID
     confirmed: bool = False
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
 class DetachBookFromCourseCapabilityOutput(ActionStatusMixin):
@@ -861,7 +771,7 @@ class DetachBookFromCourseCapabilityOutput(ActionStatusMixin):
     book_id: uuid.UUID | None = None
 
 
-class CreateCourseCapabilityInput(BaseModel):
+class CreateCourseCapabilityInput(CamelModel):
     """Input payload for course creation capability."""
 
     prompt: str = Field(min_length=1)
@@ -869,7 +779,7 @@ class CreateCourseCapabilityInput(BaseModel):
     book_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
     confirmed: bool = False
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
 class CreateCourseCapabilityOutput(ActionStatusMixin):
@@ -879,7 +789,7 @@ class CreateCourseCapabilityOutput(ActionStatusMixin):
     title: str | None = None
 
 
-class AppendCourseLessonCapabilityInput(BaseModel):
+class AppendCourseLessonCapabilityInput(CamelModel):
     """Input payload for course lesson append capability."""
 
     course_id: uuid.UUID
@@ -889,7 +799,7 @@ class AppendCourseLessonCapabilityInput(BaseModel):
     generate_content: bool = True
     confirmed: bool = False
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
 class AppendCourseLessonCapabilityOutput(ActionStatusMixin):
@@ -901,7 +811,7 @@ class AppendCourseLessonCapabilityOutput(ActionStatusMixin):
     content_generated: bool = False
 
 
-class ExtendLessonWithContextCapabilityInput(BaseModel):
+class ExtendLessonWithContextCapabilityInput(CamelModel):
     """Input payload for lesson extension capability."""
 
     course_id: uuid.UUID
@@ -909,10 +819,10 @@ class ExtendLessonWithContextCapabilityInput(BaseModel):
     context: str = Field(min_length=1)
     confirmed: bool = False
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
-class RegenerateLessonWithContextCapabilityInput(BaseModel):
+class RegenerateLessonWithContextCapabilityInput(CamelModel):
     """Input payload for lesson regeneration capability."""
 
     course_id: uuid.UUID
@@ -920,7 +830,7 @@ class RegenerateLessonWithContextCapabilityInput(BaseModel):
     context: str = Field(min_length=1)
     confirmed: bool = False
 
-    model_config = ConfigDict(extra="forbid", **_CAMEL_CONFIG)
+    model_config = ConfigDict(extra="forbid")
 
 
 class LessonMutationCapabilityOutput(ActionStatusMixin):
