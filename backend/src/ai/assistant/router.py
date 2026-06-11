@@ -5,9 +5,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, Response, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 
 from src.auth import CurrentAuth
+from src.config.schema_casing import CamelModel
 from src.config.settings import get_settings
 
 from . import conversations_service, service as assistant_service
@@ -28,14 +28,14 @@ from .schemas import (
 router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 
 
-class AssistantModelResponse(BaseModel):
+class AssistantModelResponse(CamelModel):
     """One selectable assistant model."""
 
     id: str
-    is_default: bool = Field(alias="isDefault")
+    is_default: bool
 
 
-class AssistantModelsResponse(BaseModel):
+class AssistantModelsResponse(CamelModel):
     """Available assistant model list."""
 
     models: list[AssistantModelResponse]
@@ -259,7 +259,7 @@ async def get_models() -> AssistantModelsResponse:
     for i, model_id in enumerate(ordered):
         if model_id in seen:
             continue
-        models.append(AssistantModelResponse(id=model_id, isDefault=i == 0))
+        models.append(AssistantModelResponse(id=model_id, is_default=i == 0))
         seen.add(model_id)
 
     return AssistantModelsResponse(models=models)
