@@ -114,60 +114,82 @@ class LessonVersionService:
         )
         return list(versions)
 
-    async def create_initial_version(self, *, lesson: Lesson, content: str) -> LessonVersion:
-        """Create the first canonical version for a lesson whose content is being generated."""
-        current_version = await self.session.scalar(
+    async def get_or_create_pending_initial_version(self, *, lesson: Lesson) -> LessonVersion:
+        """Return the lesson's existing version, or create an empty 1.0 placeholder to be filled by a job.
+
+        The placeholder carries ``generation_status='generating'`` and empty content;
+        the generation job fills its content and flips the status to ``ready``.
+        """
+        latest_version = await self.session.scalar(
             select(LessonVersion)
             .where(LessonVersion.lesson_id == lesson.id)
             .order_by(LessonVersion.major_version.desc(), LessonVersion.minor_version.desc(), LessonVersion.created_at.desc())
             .limit(1)
         )
-        if current_version is not None:
-            if not (current_version.content or "").strip():
-                current_version.content = content
-                current_version.generation_metadata = {
-                    **(current_version.generation_metadata or {}),
-                    "source": "initial_generation",
-                    "source_reason": "First pass for this concept.",
-                }
-                await self.session.flush()
+        if latest_version is not None:
+            return latest_version
 
-            lesson.content = current_version.content
-            lesson.updated_at = datetime.now(UTC)
-            await self.session.flush()
-            return await self.select_current_version(lesson=lesson, version=current_version)
-
-        new_version = LessonVersion(
+        pending_version = LessonVersion(
             lesson_id=lesson.id,
             major_version=1,
             minor_version=0,
             version_kind="first_pass",
-            content=content,
+            content="",
+            generation_status="generating",
             generation_metadata={
                 "source": "initial_generation",
                 "source_reason": "First pass for this concept.",
             },
         )
-        self.session.add(new_version)
+        self.session.add(pending_version)
         await self.session.flush()
+        lesson.current_version_id = pending_version.id
+        lesson.updated_at = datetime.now(UTC)
+        await self.session.flush()
+        return pending_version
 
-        return await self.select_current_version(lesson=lesson, version=new_version)
-
-    async def create_regenerated_version(
+    async def create_pending_next_pass_version(
         self,
         *,
         lesson: Lesson,
-        content: str,
+        source_version: LessonVersion,
+        source_reason: str,
+    ) -> LessonVersion:
+        """Create an empty next major pass row for a job to fill, without promoting it yet."""
+        latest_version = await self.ensure_current_version(lesson=lesson)
+        next_major = max(latest_version.major_version, source_version.major_version) + 1
+        pending_version = LessonVersion(
+            lesson_id=lesson.id,
+            major_version=next_major,
+            minor_version=0,
+            version_kind="revisit_pass",
+            content="",
+            generation_status="generating",
+            generation_metadata={
+                "source": "adaptive_revisit",
+                "source_version_id": str(source_version.id),
+                "source_reason": source_reason,
+            },
+        )
+        self.session.add(pending_version)
+        await self.session.flush()
+        return pending_version
+
+    async def create_pending_regenerated_version(
+        self,
+        *,
+        lesson: Lesson,
         critique_text: str,
     ) -> LessonVersion:
-        """Create a new minor version and promote it as the current lesson revision."""
+        """Create an empty minor regeneration row for a job to fill, without promoting it yet."""
         current_version = await self.ensure_current_version(lesson=lesson)
-        new_version = LessonVersion(
+        pending_version = LessonVersion(
             lesson_id=lesson.id,
             major_version=current_version.major_version,
             minor_version=current_version.minor_version + 1,
             version_kind="regeneration",
-            content=content,
+            content="",
+            generation_status="generating",
             generation_metadata={
                 "source": "regenerate",
                 "critique_text": critique_text,
@@ -175,35 +197,20 @@ class LessonVersionService:
                 "source_reason": critique_text[:160],
             },
         )
-        self.session.add(new_version)
+        self.session.add(pending_version)
         await self.session.flush()
+        return pending_version
 
-        return await self.select_current_version(lesson=lesson, version=new_version)
-
-    async def create_adaptive_pass_version(
-        self,
-        *,
-        lesson: Lesson,
-        content: str,
-        source_version: LessonVersion,
-        source_reason: str,
-    ) -> LessonVersion:
-        """Create the next major lesson pass for an adaptive revisit."""
-        latest_version = await self.ensure_current_version(lesson=lesson)
-        next_major = max(latest_version.major_version, source_version.major_version) + 1
-        new_version = LessonVersion(
-            lesson_id=lesson.id,
-            major_version=next_major,
-            minor_version=0,
-            version_kind="revisit_pass",
-            content=content,
-            generation_metadata={
-                "source": "adaptive_revisit",
-                "source_version_id": str(source_version.id),
-                "source_reason": source_reason,
-            },
-        )
-        self.session.add(new_version)
+    async def fill_and_promote_version(self, *, lesson: Lesson, version: LessonVersion, content: str) -> LessonVersion:
+        """Write generated content into a pending version, mark it ready, and promote it as current."""
+        version.content = content
+        version.generation_status = "ready"
+        version.generation_error = None
         await self.session.flush()
+        return await self.select_current_version(lesson=lesson, version=version)
 
-        return await self.select_current_version(lesson=lesson, version=new_version)
+    async def mark_version_failed(self, *, version: LessonVersion, error: str) -> None:
+        """Flag a pending version as failed so reads stop polling and surface the error."""
+        version.generation_status = "failed"
+        version.generation_error = error[:2000]
+        await self.session.flush()
