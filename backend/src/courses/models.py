@@ -174,6 +174,13 @@ class LessonVersion(Base):
     minor_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     version_kind: Mapped[str] = mapped_column(String(50), nullable=False, default="first_pass")
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    generation_status: Mapped[CourseGenerationStatus] = mapped_column(
+        String(20),
+        nullable=False,
+        default="ready",
+        server_default=text("'ready'"),
+    )
+    generation_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     generation_metadata: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
