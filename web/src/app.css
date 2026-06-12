@@ -7,6 +7,8 @@
 
 @source inline("{gap-,w-,h-}{3xs,2xs,xs,sm,md,lg,xl,2xl,3xl,4xl}");
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
 	font-size: 1rem;
 	--lk-scalefactor: 1.618;
@@ -96,8 +98,13 @@
 	--color-popover: oklch(1 0 0);
 	--color-popover-foreground: oklch(0.17 0.05 249);
 	--color-overlay: oklch(0 0 0);
-	--color-code-surface: oklch(0.22 0.02 258);
-	--color-code-foreground: oklch(0.98 0.01 210);
+
+	/* Code chrome — Catppuccin Latte (light). Hue/chroma kept; hex in comments for upstream fidelity. */
+	--color-code-surface: oklch(0.9578 0.0058 264.53); /* latte base #eff1f5 */
+	--color-code-gutter: oklch(0.9335 0.0087 264.52); /* latte mantle #e6e9ef */
+	--color-code-border: oklch(0.8575 0.0145 268.48); /* latte surface0 #ccd0da */
+	--color-code-foreground: oklch(0.4355 0.043 279.33); /* latte text #4c4f69 */
+	--color-code-selection: oklch(0.8083 0.0174 271.2); /* latte surface1 #bcc0cc */
 
 	--color-primary: oklch(0.61 0.12 159); /* guiding jade */
 	--color-primary-foreground: oklch(0.98 0.01 210);
@@ -149,6 +156,12 @@
 
 	--color-paused: oklch(0.71 0.0348 256.79); /* slate */
 	--color-paused-text: oklch(0.4505 0.0371 256.83);
+
+	/* Elevation ladder — surface tiers (Tailwind v4 auto-generates bg-/text-/border-surface-*) */
+	--color-surface-0: oklch(1 0 0);
+	--color-surface-1: oklch(0.96 0.01 210);
+	--color-surface-2: oklch(0.94 0.01 215);
+	--color-surface-3: oklch(0.92 0.01 218);
 
 	/* Typography */
 	--font-sans: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -716,65 +729,97 @@ html.dark {
 	color-scheme: dark;
 }
 
-/* Dark mode overrides for Tailwind v4 color variables */
+/* Dark mode overrides — Palette B "Slate" (locked). ink = background = oklch(0.215 0.015 250) */
 .dark {
-	/* Core Colors - Dark mode OKLCH values */
-	--color-background: oklch(0.17 0.05 249);
-	--color-foreground: oklch(0.98 0.01 210);
+	/* Neutrals — Slate ladder */
+	--color-background: oklch(0.215 0.015 250);
+	--color-foreground: oklch(0.93 0.008 235);
 
-	--color-card: oklch(0.17 0.05 249);
-	--color-card-foreground: oklch(0.98 0.01 210);
+	--color-card: oklch(0.255 0.017 250);
+	--color-card-foreground: oklch(0.93 0.008 235);
 
-	--color-popover: oklch(0.17 0.05 249);
-	--color-popover-foreground: oklch(0.98 0.01 210);
+	--color-popover: oklch(0.28 0.018 250);
+	--color-popover-foreground: oklch(0.93 0.008 235);
 
-	--color-primary: oklch(0.74 0.09 159);
-	--color-primary-foreground: oklch(0.17 0.05 249);
+	--color-secondary: oklch(0.28 0.018 250);
+	--color-secondary-foreground: oklch(0.93 0.008 235);
 
-	--color-secondary: oklch(0.28 0.04 249);
-	--color-secondary-foreground: oklch(0.98 0.01 210);
+	--color-muted: oklch(0.28 0.018 250);
+	--color-muted-foreground: oklch(0.71 0.02 240);
 
-	--color-muted: oklch(0.28 0.04 249);
-	--color-muted-foreground: oklch(0.65 0.02 218);
+	--color-accent: oklch(0.28 0.018 250);
+	--color-accent-foreground: oklch(0.93 0.008 235);
 
-	--color-accent: oklch(0.28 0.04 249);
-	--color-accent-foreground: oklch(0.98 0.01 210);
+	--color-border: oklch(0.325 0.02 250);
+	--color-input: oklch(0.4 0.02 250);
 
-	--color-destructive: oklch(0.45 0.15 25);
-	/* --color-destructive-foreground unchanged from light */
+	/* Lifted accents — hue identical to light, L up / C down; on-colors = ink */
+	--color-primary: oklch(0.72 0.1 159);
+	--color-primary-foreground: oklch(0.215 0.015 250);
+	--color-ring: oklch(0.72 0.1 159);
 
-	--color-border: oklch(0.28 0.04 249);
-	--color-input: oklch(0.28 0.04 249);
-	--color-ring: oklch(0.74 0.09 159);
+	--color-course: oklch(0.72 0.1 159);
+	--color-course-text: oklch(0.215 0.015 250);
+	--color-course-accent: oklch(0.8 0.07 162);
 
-	/* Content Type Colors - Lighter versions for dark mode */
-	--color-course: oklch(0.74 0.09 159);
-	--color-course-text: oklch(0.17 0.05 249);
-	--color-course-accent: oklch(0.82 0.05 162);
+	--color-destructive: oklch(0.7 0.17 25);
+	--color-destructive-foreground: oklch(0.215 0.015 250);
 
-	--color-book: oklch(0.7835 0.1015 265);
-	--color-book-text: oklch(0.17 0.05 249);
-	--color-book-accent: oklch(0.8655 0.0611 265.54);
+	--color-book: oklch(0.74 0.12 263);
+	--color-book-text: oklch(0.215 0.015 250);
+	--color-book-accent: oklch(0.82 0.08 264);
 
-	--color-video: oklch(0.8307 0.0909 298.16);
-	--color-video-text: oklch(0.17 0.05 249);
-	--color-video-accent: oklch(0.9031 0.051 299.08);
+	--color-video: oklch(0.72 0.17 307);
+	--color-video-text: oklch(0.215 0.015 250);
+	--color-video-accent: oklch(0.8 0.13 307);
 
-	/* Status Colors - Dark mode versions */
-	--color-overdue: oklch(0.7224 0.1212 19.86);
-	--color-overdue-text: oklch(0.9137 0.033 17.08);
+	/* Status colors */
+	--color-overdue: oklch(0.72 0.14 40);
+	--color-overdue-text: oklch(0.86 0.06 38);
 
-	--color-due-today: oklch(0.8497 0.072 86.7);
-	--color-due-today-text: oklch(0.9656 0.0165 86.79);
+	--color-due-today: oklch(0.82 0.11 85);
+	--color-due-today-text: oklch(0.9 0.06 86);
 
-	--color-upcoming: oklch(0.7324 0.0976 261.33);
-	--color-upcoming-text: oklch(0.9199 0.0275 261.78);
+	--color-upcoming: oklch(0.74 0.1 262);
+	--color-upcoming-text: oklch(0.87 0.05 262);
 
-	--color-completed: oklch(0.79 0.11 145);
-	--color-completed-text: oklch(0.17 0.05 249);
+	--color-completed: oklch(0.76 0.12 147);
+	--color-completed-text: oklch(0.215 0.015 250);
 
 	/* --color-paused unchanged from light */
-	--color-paused-text: oklch(0.8791 0.0141 256.71);
+	--color-paused-text: oklch(0.86 0.015 257);
+
+	/* Code chrome — Catppuccin Frappé. Hex in comments for upstream fidelity. */
+	--color-code-surface: oklch(0.3291 0.0324 274.76); /* frappe base #303446 */
+	--color-code-gutter: oklch(0.2973 0.0294 276.21); /* frappe mantle #292c3c */
+	--color-code-border: oklch(0.3949 0.0342 275.9); /* frappe surface0 #414559 */
+	--color-code-foreground: oklch(0.8619 0.0526 273.35); /* frappe text #c6d0f5 */
+	--color-code-selection: oklch(0.4601 0.0367 272.97); /* frappe surface1 #51576d */
+
+	/* Elevation ladder — dark surface tiers */
+	--color-surface-0: oklch(0.215 0.015 250);
+	--color-surface-1: oklch(0.255 0.017 250);
+	--color-surface-2: oklch(0.28 0.018 250);
+	--color-surface-3: oklch(0.315 0.02 250);
+
+	/* Shadows not re-declared in dark: Tailwind v4 inlines shadow-utility values at build time, so dark elevation relies on the surface ladder + hairline borders. */
+}
+
+/* Dual-theme Shiki: light uses Shiki's inline Catppuccin Latte styles unchanged;
+   in dark we swap to the Frappé values Shiki emits as --shiki-dark* CSS variables. */
+.dark .shiki,
+.dark .shiki span {
+	/* biome-ignore lint/complexity/noImportantStyles: must override Shiki's inline color */
+	color: var(--shiki-dark) !important;
+	/* biome-ignore lint/complexity/noImportantStyles: must override Shiki's inline background-color */
+	background-color: var(--shiki-dark-bg) !important;
+}
+
+/* Editor spans carry --shiki-dark but no --shiki-dark-bg (the surface is owned by
+   the .shiki-editor wrapper token), so only swap the foreground color here. */
+.dark .shiki-editor span {
+	/* biome-ignore lint/complexity/noImportantStyles: must override Shiki's inline color */
+	color: var(--shiki-dark) !important;
 }
 
 /* Base styles for MDX lesson content (Preflight strips native table/buffer styling) */

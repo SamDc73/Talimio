@@ -89,6 +89,21 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 		}
 	}, [fontSize])
 
+	// Make the reading surface follow the app theme (light/dark).
+	// Reads the currently resolved CSS tokens from <html> (the `.dark` class lives there)
+	// and applies them to the EPUB iframe content via epub.js dynamic overrides so they
+	// can be re-applied whenever the theme toggles.
+	const applyThemeColors = useCallback(() => {
+		if (!renditionRef.current) return
+
+		const styles = getComputedStyle(document.documentElement)
+		const background = styles.getPropertyValue("--color-card").trim()
+		const color = styles.getPropertyValue("--color-foreground").trim()
+
+		renditionRef.current.themes.override("background", background)
+		renditionRef.current.themes.override("color", color)
+	}, [])
+
 	// Get TOC when book loads - memoized
 	const getRendition = useCallback(
 		(rendition) => {
@@ -96,6 +111,9 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 
 			// Apply initial font size
 			applyFontSize()
+
+			// Apply theme-aware reading surface colors (follows light/dark)
+			applyThemeColors()
 
 			// Disable keyboard navigation
 			if (rendition) {
@@ -196,7 +214,7 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 
 			setFirstRenderDone(true)
 		},
-		[applyFontSize, readingState]
+		[applyFontSize, applyThemeColors, readingState]
 	)
 
 	// Update font size when it changes
@@ -205,6 +223,26 @@ function EpubViewer({ url, bookId, onProgressUpdate }) {
 			applyFontSize()
 		}
 	}, [applyFontSize, firstRenderDone])
+
+	// Keep the reading surface in sync with the app theme (light/dark/system + OS changes).
+	// A MutationObserver on <html> watches the `.dark` class toggle and re-applies the
+	// resolved color tokens to the EPUB iframe content.
+	useEffect(() => {
+		if (!firstRenderDone) return
+
+		// Apply once the rendition is ready, then re-apply on every theme toggle.
+		applyThemeColors()
+
+		const observer = new MutationObserver(() => {
+			applyThemeColors()
+		})
+		observer.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ["class"],
+		})
+
+		return () => observer.disconnect()
+	}, [applyThemeColors, firstRenderDone])
 
 	// Bridge selections from EPUB iframe(s) to top-level tooltip
 	useEffect(() => {

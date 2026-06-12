@@ -5,6 +5,34 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Talimio</title>
+    <script>
+      (function () {
+        try {
+          var theme = "system";
+          var raw = localStorage.getItem("talimio-storage");
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            var stored =
+              parsed &&
+              parsed.state &&
+              parsed.state.preferences &&
+              parsed.state.preferences.theme;
+            if (stored === "light" || stored === "dark" || stored === "system") {
+              theme = stored;
+            }
+          }
+          var resolved = theme;
+          if (theme === "system") {
+            resolved = window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          }
+          var root = document.documentElement;
+          root.classList.add(resolved);
+          root.style.colorScheme = resolved;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

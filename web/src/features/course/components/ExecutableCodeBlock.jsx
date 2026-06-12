@@ -96,7 +96,7 @@ export default function ExecutableCodeBlock({ children, className, lessonId, cou
 				</div>
 			</div>
 			{/* Code editor - always editable */}
-			<div className={cn("bg-muted/25", className)} {...props}>
+			<div className={cn("bg-code-surface", className)} {...props}>
 				<ErrorBoundary>
 					<CodeBlockEditor value={code} language={language} onChange={handleCodeChange} />
 				</ErrorBoundary>

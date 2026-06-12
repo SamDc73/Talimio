@@ -66,7 +66,12 @@ export function CodeBlockView({ code, language, className }) {
 
 	if (html === null) {
 		return (
-			<pre className={cn("shiki overflow-x-auto p-4 text-sm font-mono", className)}>
+			<pre
+				className={cn(
+					"shiki overflow-x-auto p-4 text-sm font-mono bg-code-surface text-code-foreground rounded",
+					className
+				)}
+			>
 				<code>{code}</code>
 			</pre>
 		)
@@ -86,6 +91,7 @@ const EDITOR_STYLE = {
 	fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
 	fontSize: "0.9rem",
 	lineHeight: 1.6,
+	caretColor: "var(--color-code-foreground)",
 }
 
 // Editable highlighted code block. Used by ExecutableCodeBlock and
@@ -98,7 +104,7 @@ export function CodeBlockEditor({ value, language, onChange, className }) {
 			value={value}
 			onValueChange={onChange}
 			highlight={() => innerHtml}
-			className={cn("shiki-editor", className)}
+			className={cn("shiki-editor text-code-foreground", className)}
 			padding={16}
 			style={EDITOR_STYLE}
 		/>

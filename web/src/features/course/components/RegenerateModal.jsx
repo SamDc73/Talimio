@@ -7,7 +7,7 @@ const MIN_CRITIQUE_LENGTH = 10
 const REGENERATE_ICON_SHELL_CLASS_NAME =
 	"rounded-lg bg-(--color-course)/10 p-2.5 ring-1 ring-inset ring-(--color-course)/15"
 const REGENERATE_FIELDSET_CLASS_NAME =
-	"relative flex flex-col rounded-xl border border-border bg-background shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
+	"relative flex flex-col rounded-xl border border-input bg-background shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
 const REGENERATE_PRIMARY_ACTION_CLASS_NAME =
 	"min-w-[140px] bg-(--color-course) text-(--color-course-text) hover:bg-(--color-course)/90"
 
