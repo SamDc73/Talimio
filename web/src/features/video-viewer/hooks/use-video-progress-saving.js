@@ -52,7 +52,7 @@ export function useVideoProgressSaving({
 					progressPercentage: duration > 0 ? Math.round((currentTime / duration) * 100) : 0,
 					metadata: {
 						...progressMetadata,
-						content_type: "video",
+						contentType: "video",
 						position: Math.floor(currentTime),
 						duration,
 					},

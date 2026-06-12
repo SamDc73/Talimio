@@ -12,14 +12,14 @@ export function useBookProgress(bookId) {
 	const currentProgress = progressQuery.data ?? 0
 	const rawMetadata = progressQuery.metadata || {}
 
-	// Extract values with defaults (snake_case only)
-	const tocProgress = rawMetadata.toc_progress ?? {}
-	const currentPage = rawMetadata.current_page ?? 0
-	const totalPages = rawMetadata.total_pages ?? 0
+	// Extract values with defaults
+	const tocProgress = rawMetadata.tocProgress ?? {}
+	const currentPage = rawMetadata.currentPage ?? 0
+	const totalPages = rawMetadata.totalPages ?? 0
 	const tocChapterCount = Object.keys(tocProgress).length
 	const totalChaptersFromMetadata =
-		typeof rawMetadata.total_chapters === "number" ? rawMetadata.total_chapters : tocChapterCount
-	const zoomLevel = rawMetadata.zoom_level ?? 100
+		typeof rawMetadata.totalChapters === "number" ? rawMetadata.totalChapters : tocChapterCount
+	const zoomLevel = rawMetadata.zoomLevel ?? 100
 
 	// Helper to calculate progress from TOC (only counts leaf chapters)
 	const calculateProgressFromToc = (tocProgress, totalChapters) => {
@@ -55,19 +55,19 @@ export function useBookProgress(bookId) {
 			}
 
 			// Calculate new progress based on completed chapters
-			const totalChapters = totalChaptersOverride ?? rawMetadata.total_chapters ?? Object.keys(newTocProgress).length
+			const totalChapters = totalChaptersOverride ?? rawMetadata.totalChapters ?? Object.keys(newTocProgress).length
 			const newProgress = calculateProgressFromToc(newTocProgress, totalChapters)
 
 			await updateProgress.mutateAsync({
 				contentId: bookId,
 				progress: newProgress,
 				metadata: {
-					content_type: "book",
-					toc_progress: newTocProgress,
-					current_page: currentPage,
-					total_pages: totalPages,
-					zoom_level: zoomLevel,
-					total_chapters: totalChapters,
+					contentType: "book",
+					tocProgress: newTocProgress,
+					currentPage,
+					totalPages,
+					zoomLevel,
+					totalChapters,
 				},
 			})
 		},
@@ -80,19 +80,19 @@ export function useBookProgress(bookId) {
 			})
 
 			// Calculate new progress based on completed chapters
-			const totalChapters = totalChaptersOverride ?? rawMetadata.total_chapters ?? Object.keys(newTocProgress).length
+			const totalChapters = totalChaptersOverride ?? rawMetadata.totalChapters ?? Object.keys(newTocProgress).length
 			const newProgress = calculateProgressFromToc(newTocProgress, totalChapters)
 
 			await updateProgress.mutateAsync({
 				contentId: bookId,
 				progress: newProgress,
 				metadata: {
-					content_type: "book",
-					toc_progress: newTocProgress,
-					current_page: currentPage,
-					total_pages: totalPages,
-					zoom_level: zoomLevel,
-					total_chapters: totalChapters,
+					contentType: "book",
+					tocProgress: newTocProgress,
+					currentPage,
+					totalPages,
+					zoomLevel,
+					totalChapters,
 				},
 			})
 		},
@@ -101,12 +101,12 @@ export function useBookProgress(bookId) {
 				contentId: bookId,
 				progress,
 				metadata: {
-					content_type: "book",
-					toc_progress: tocProgress,
-					current_page: currentPage,
-					total_pages: totalPages,
-					zoom_level: zoomLevel,
-					total_chapters: totalChaptersFromMetadata,
+					contentType: "book",
+					tocProgress,
+					currentPage,
+					totalPages,
+					zoomLevel,
+					totalChapters: totalChaptersFromMetadata,
 					...metadata,
 				},
 			}),

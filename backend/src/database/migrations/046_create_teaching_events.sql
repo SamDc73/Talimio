@@ -3,7 +3,7 @@
 -- planner can compare outcomes across teaching choices without a column per knob.
 
 CREATE TABLE IF NOT EXISTS teaching_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT app_uuid7(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     lesson_id UUID,

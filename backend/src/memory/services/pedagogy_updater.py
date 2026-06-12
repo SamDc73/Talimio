@@ -1,12 +1,11 @@
 """Pedagogical updater pass (sleep-time StudentCard consolidation).
 
 Evidence writes nudge a cheap threshold trigger; a nightly sweep catches the
-rest. The worker locks the learner-course watermark, computes deterministic
-strategy aggregates in app code (the LLM never invents counts), extracts typed
-facets from new critiques in one structured call, then lets the consolidation
-model edit the StudentCard through text-editor tools. Facet writes, profile
-updates, card edits, and the watermark advance commit in one transaction, so
-retries after a crash are exactly-once.
+rest. The worker computes deterministic strategy aggregates in app code (the
+LLM never invents counts), extracts typed facets from new critiques in one
+structured call, then lets the consolidation model plan StudentCard edits through
+text-editor tools. Model calls run outside long-lived database locks; planned
+card edits are written atomically with facets, notes, and the watermark.
 """
 
 from __future__ import annotations
@@ -14,8 +13,10 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from operator import itemgetter
+from typing import TYPE_CHECKING, Literal, cast
 
 
 if TYPE_CHECKING:
@@ -27,11 +28,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.prompts import PEDAGOGY_UPDATER_SYSTEM_PROMPT
 from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
+from src.database.session import async_session_maker
 from src.jobs import QUEUE_PEDAGOGY, defer_job, pedagogy_queueing_lock
 from src.memory.models import PedagogicalNote, PedagogyWatermark, StudentCard, TeachingEvent
 from src.memory.services.notes_search import EMBEDDING_FAILURE_ERROR_TYPES
 from src.memory.services.pedagogy_service import TEACHING_PROFILE_FIELDS, upsert_course_teaching_profile
-from src.memory.services.student_card import card_replace, card_rethink, lock_card
+from src.memory.services.student_card import (
+    card_replace,
+    card_rethink,
+    get_or_create_card,
+    lock_card,
+    preview_card_replace,
+    preview_card_rethink,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -101,6 +110,12 @@ class FacetExtraction(BaseModel):
     profile_update: TeachingProfileUpdate
 
 
+@dataclass
+class _PlannedCardEdit:
+    tool: Literal["student_card_replace", "student_card_rethink"]
+    arguments: dict[str, str]
+
+
 _FACET_EXTRACTION_SYSTEM_PROMPT = """You extract typed pedagogical signals from raw lesson critiques on Talimio, a learning platform. You are a maintenance pass, not the assistant: never answer the learner, only classify their critiques.
 
 Emit one facets entry per critique, keyed by its event_index from the payload. Every signal field is a short reusable phrase, e.g. pace_signal "slower", modality_signal "more diagrams", example_style_signal "worked examples first", quiz_density_signal "fewer quizzes", tone_signal "less chatty", strategy_request_signal "step-by-step derivations". Use the empty string when the critique carries no such signal; never guess.
@@ -112,12 +127,14 @@ Also emit profile_update: durable course-level teaching preferences this batch c
 
 async def defer_pedagogy_update(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> int | None:
     """Enqueue the updater for a learner-course pair inside the caller's transaction."""
+    lock_key = pedagogy_queueing_lock(user_id, course_id)
     return await defer_job(
         session,
         task_name=PEDAGOGY_UPDATER_TASK_NAME,
         queue=QUEUE_PEDAGOGY,
         args={"user_id": str(user_id), "course_id": str(course_id)},
-        queueing_lock=pedagogy_queueing_lock(user_id, course_id),
+        queueing_lock=lock_key,
+        lock=lock_key,
     )
 
 
@@ -169,53 +186,95 @@ async def maybe_trigger_update(session: AsyncSession, *, user_id: uuid.UUID, cou
 
 async def process_pedagogy_update(user_id: uuid.UUID, course_id: uuid.UUID) -> int:
     """Run one consolidation pass; returns how many new evidence items were processed."""
-    from src.database.session import async_session_maker
     from src.memory.services.profile_maintenance import _user_is_active
 
     async with async_session_maker() as session:
         if not await _user_is_active(session, user_id):
             return 0
 
-        watermark = await _lock_watermark(session, user_id=user_id, course_id=course_id)
-        new_events = await _load_new_teaching_events(
-            session, user_id=user_id, course_id=course_id, after=watermark.last_processed_at
-        )
-        new_feedback = await _load_new_feedback_events(session, course_id=course_id, after=watermark.last_processed_at)
+        new_events, new_feedback = await _load_evidence_batch(session, user_id=user_id, course_id=course_id)
         if not new_events and not new_feedback:
             return 0
 
-        all_events = list(
-            await session.scalars(
-                select(TeachingEvent)
-                .where(TeachingEvent.user_id == user_id, TeachingEvent.course_id == course_id)
-                .order_by(TeachingEvent.created_at)
-            )
-        )
-        aggregates = compute_strategy_aggregates(all_events)
+        aggregates, card_text, card_revision = await _load_card_context(session, user_id=user_id, course_id=course_id)
+        await session.commit()
 
         pending_facets = [event for event in new_feedback if event.facets_extracted_at is None]
-        if pending_facets:
-            extraction = await _extract_facets(user_id=user_id, pending_events=pending_facets)
-            await _apply_facet_extraction(
-                session, course_id=course_id, pending_events=pending_facets, extraction=extraction
-            )
-            await _write_pedagogical_notes(
-                session, user_id=user_id, course_id=course_id, pending_events=pending_facets, extraction=extraction
-            )
+        extraction, notes = await _prepare_facet_outputs(
+            user_id=user_id,
+            course_id=course_id,
+            pending_facets=pending_facets,
+        )
 
-        card = await lock_card(session, user_id=user_id, course_id=course_id)
-        function_tools = _build_card_edit_tools(session, card)
+        function_tools, planned_card_edits = _build_card_edit_tools(
+            initial_card_text=card_text,
+            initial_revision=card_revision,
+        )
         payload = _build_card_session_payload(
-            card_text=card.card_text,
+            card_text=card_text,
             aggregates=aggregates,
             new_events=new_events,
             new_feedback=new_feedback,
+            pending_events=pending_facets,
+            extraction=extraction,
         )
         await _run_card_edit_session(user_id=user_id, payload=payload, function_tools=function_tools)
 
-        watermark.last_processed_at = max(item.created_at for item in [*new_events, *new_feedback])
+        batch_max_created_at = max(item.created_at for item in [*new_events, *new_feedback])
+        with session.no_autoflush:
+            watermark = await _lock_watermark(session, user_id=user_id, course_id=course_id)
+        if watermark.last_processed_at >= batch_max_created_at:
+            await session.rollback()
+            return 0
+
+        if planned_card_edits:
+            card = await lock_card(session, user_id=user_id, course_id=course_id)
+            await _apply_card_edits(session, card=card, planned_edits=planned_card_edits)
+        if extraction is not None:
+            await _apply_facet_extraction(
+                session, course_id=course_id, pending_events=pending_facets, extraction=extraction
+            )
+            await _write_pedagogical_notes(session, notes=notes)
+        watermark.last_processed_at = max(watermark.last_processed_at, batch_max_created_at)
         await session.commit()
         return len(new_events) + len(new_feedback)
+
+
+async def _load_evidence_batch(
+    session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID
+) -> tuple[list[TeachingEvent], list[LessonFeedbackEvent]]:
+    watermark = await _lock_watermark(session, user_id=user_id, course_id=course_id)
+    teaching_candidates = await _load_new_teaching_events(
+        session, user_id=user_id, course_id=course_id, after=watermark.last_processed_at
+    )
+    feedback_candidates = await _load_new_feedback_events(session, course_id=course_id, after=watermark.last_processed_at)
+    return _select_oldest_evidence_batch(teaching_candidates, feedback_candidates)
+
+
+async def _load_card_context(
+    session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID
+) -> tuple[dict[str, JsonValue], str, int]:
+    all_events = list(
+        await session.scalars(
+            select(TeachingEvent)
+            .where(TeachingEvent.user_id == user_id, TeachingEvent.course_id == course_id)
+            .order_by(TeachingEvent.created_at)
+        )
+    )
+    card = await get_or_create_card(session, user_id=user_id, course_id=course_id)
+    return compute_strategy_aggregates(all_events), card.card_text, card.revision
+
+
+async def _prepare_facet_outputs(
+    *, user_id: uuid.UUID, course_id: uuid.UUID, pending_facets: list[LessonFeedbackEvent]
+) -> tuple[FacetExtraction | None, list[PedagogicalNote]]:
+    if not pending_facets:
+        return None, []
+    extraction = await _extract_facets(user_id=user_id, pending_events=pending_facets)
+    notes = await _build_pedagogical_notes(
+        user_id=user_id, course_id=course_id, pending_events=pending_facets, extraction=extraction
+    )
+    return extraction, notes
 
 
 async def _lock_watermark(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> PedagogyWatermark:
@@ -270,6 +329,31 @@ async def _load_new_feedback_events(
         .limit(_EVIDENCE_BATCH_LIMIT)
     )
     return list(await session.scalars(stmt))
+
+
+def _select_oldest_evidence_batch(
+    teaching_events: Sequence[TeachingEvent],
+    feedback_events: Sequence[LessonFeedbackEvent],
+) -> tuple[list[TeachingEvent], list[LessonFeedbackEvent]]:
+    """Return one chronological batch across both evidence sources."""
+    combined: list[tuple[datetime, str, TeachingEvent | LessonFeedbackEvent]] = [
+        (event.created_at, "teaching", event) for event in teaching_events
+    ]
+    combined.extend((event.created_at, "feedback", event) for event in feedback_events)
+    combined.sort(key=itemgetter(0))
+
+    selected_events: list[TeachingEvent] = []
+    selected_feedback: list[LessonFeedbackEvent] = []
+    if len(combined) > _EVIDENCE_BATCH_LIMIT:
+        cutoff_created_at = combined[_EVIDENCE_BATCH_LIMIT - 1][0]
+        combined = [item for item in combined if item[0] <= cutoff_created_at]
+
+    for _created_at, source, event in combined:
+        if source == "teaching":
+            selected_events.append(cast("TeachingEvent", event))
+        else:
+            selected_feedback.append(cast("LessonFeedbackEvent", event))
+    return selected_events, selected_feedback
 
 
 def compute_strategy_aggregates(events: Sequence[TeachingEvent]) -> dict[str, JsonValue]:
@@ -346,16 +430,7 @@ async def _apply_facet_extraction(
     extraction: FacetExtraction,
 ) -> None:
     """Write non-empty facets onto the event rows; apply inferred profile updates."""
-    for facets in extraction.facets:
-        if not 0 <= facets.event_index < len(pending_events):
-            logger.info("pedagogy.updater.facet_index_out_of_range", extra={"event_index": facets.event_index})
-            continue
-        event = pending_events[facets.event_index]
-        for name in _FACET_SIGNAL_FIELDS:
-            value = getattr(facets, name).strip()
-            if value:
-                setattr(event, name, value)
-
+    _apply_facet_values(pending_events=pending_events, extraction=extraction)
     extracted_at = datetime.now(UTC)
     for event in pending_events:
         event.facets_extracted_at = extracted_at
@@ -370,26 +445,38 @@ async def _apply_facet_extraction(
         await upsert_course_teaching_profile(session, course_id=course_id, source="inferred", **profile_fields)
 
 
-async def _write_pedagogical_notes(
-    session: AsyncSession,
+def _apply_facet_values(*, pending_events: list[LessonFeedbackEvent], extraction: FacetExtraction) -> None:
+    """Apply extracted facet values to in-memory feedback event objects."""
+    for facets in extraction.facets:
+        if not 0 <= facets.event_index < len(pending_events):
+            logger.info("pedagogy.updater.facet_index_out_of_range", extra={"event_index": facets.event_index})
+            continue
+        event = pending_events[facets.event_index]
+        for name in _FACET_SIGNAL_FIELDS:
+            value = getattr(facets, name).strip()
+            if value:
+                setattr(event, name, value)
+
+
+async def _build_pedagogical_notes(
     *,
     user_id: uuid.UUID,
     course_id: uuid.UUID,
     pending_events: list[LessonFeedbackEvent],
     extraction: FacetExtraction,
-) -> None:
-    """Insert one retrieval note per critique the extraction found worth keeping.
+) -> list[PedagogicalNote]:
+    """Build one retrieval note per critique the extraction found worth keeping.
 
-    Notes commit in the same transaction as the rest of the pass. Embeddings are
-    computed inline but best-effort: a failed embedding stores the note with
-    embedding NULL (the lexical leg still finds it) and never fails the job.
+    Embeddings are computed before the write transaction. A failed embedding
+    stores the note with embedding NULL; the lexical leg still finds it.
     """
+    notes: list[PedagogicalNote] = []
     for facets in extraction.facets:
         note_text = facets.note.strip()
         if not note_text or not 0 <= facets.event_index < len(pending_events):
             continue
         event = pending_events[facets.event_index]
-        session.add(
+        notes.append(
             PedagogicalNote(
                 user_id=user_id,
                 course_id=course_id,
@@ -402,6 +489,14 @@ async def _write_pedagogical_notes(
                 embedding=await _embed_note_text(note_text),
             )
         )
+    return notes
+
+
+async def _write_pedagogical_notes(session: AsyncSession, *, notes: list[PedagogicalNote]) -> None:
+    """Insert prebuilt retrieval notes."""
+    if not notes:
+        return
+    session.add_all(notes)
     await session.flush()
 
 
@@ -466,39 +561,65 @@ STUDENT_CARD_FINISH_TOOL_SCHEMA: dict[str, object] = {
 }
 
 
-def _build_card_edit_tools(session: AsyncSession, card: StudentCard) -> list[FunctionToolDefinition]:
-    """Text-editor tools closing over the locked card.
+def _build_card_edit_tools(
+    *,
+    initial_card_text: str,
+    initial_revision: int,
+) -> tuple[list[FunctionToolDefinition], list[_PlannedCardEdit]]:
+    """Text-editor tools that validate against an in-memory draft.
 
     CardEditError propagates out of the executors; the tool runtime formats it
     as an 'Error: ...' tool result the model can correct against next round.
     """
+    draft_text = initial_card_text
+    draft_revision = initial_revision
+    planned_edits: list[_PlannedCardEdit] = []
 
-    async def execute_replace(arguments: Mapping[str, object]) -> str:
-        await card_replace(
-            session,
-            card,
-            old_str=str(arguments.get("old_str") or ""),
-            new_str=str(arguments.get("new_str") or ""),
+    async def execute_replace(arguments: Mapping[str, object]) -> str:  # noqa: RUF029 - ToolExecutor protocol
+        nonlocal draft_text, draft_revision
+        old_str = str(arguments.get("old_str") or "")
+        new_str = str(arguments.get("new_str") or "")
+        draft_text = preview_card_replace(draft_text, old_str=old_str, new_str=new_str)
+        draft_revision += 1
+        planned_edits.append(
+            _PlannedCardEdit(tool="student_card_replace", arguments={"old_str": old_str, "new_str": new_str})
         )
-        return f"ok, revision {card.revision}"
+        return f"ok, revision {draft_revision}"
 
-    async def execute_rethink(arguments: Mapping[str, object]) -> str:
-        await card_rethink(session, card, new_text=str(arguments.get("new_text") or ""))
-        return f"ok, revision {card.revision}"
+    async def execute_rethink(arguments: Mapping[str, object]) -> str:  # noqa: RUF029 - ToolExecutor protocol
+        nonlocal draft_text, draft_revision
+        new_text = str(arguments.get("new_text") or "")
+        draft_text = preview_card_rethink(new_text=new_text)
+        draft_revision += 1
+        planned_edits.append(_PlannedCardEdit(tool="student_card_rethink", arguments={"new_text": new_text}))
+        return f"ok, revision {draft_revision}"
 
     async def execute_finish(arguments: Mapping[str, object]) -> str:  # noqa: RUF029 - ToolExecutor protocol
         del arguments
         return "edits recorded"
 
     return [
-        FunctionToolDefinition(
-            schema=STUDENT_CARD_REPLACE_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_replace)
-        ),
+        FunctionToolDefinition(schema=STUDENT_CARD_REPLACE_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_replace)),
         FunctionToolDefinition(
             schema=STUDENT_CARD_RETHINK_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_rethink)
         ),
         FunctionToolDefinition(schema=STUDENT_CARD_FINISH_TOOL_SCHEMA, target=LocalToolTarget(execute=execute_finish)),
-    ]
+    ], planned_edits
+
+
+async def _apply_card_edits(
+    session: AsyncSession, *, card: StudentCard, planned_edits: Sequence[_PlannedCardEdit]
+) -> None:
+    for edit in planned_edits:
+        if edit.tool == "student_card_replace":
+            await card_replace(
+                session,
+                card,
+                old_str=edit.arguments["old_str"],
+                new_str=edit.arguments["new_str"],
+            )
+            continue
+        await card_rethink(session, card, new_text=edit.arguments["new_text"])
 
 
 def _build_card_session_payload(
@@ -507,7 +628,10 @@ def _build_card_session_payload(
     aggregates: dict[str, JsonValue],
     new_events: list[TeachingEvent],
     new_feedback: list[LessonFeedbackEvent],
+    pending_events: list[LessonFeedbackEvent],
+    extraction: FacetExtraction | None,
 ) -> dict[str, object]:
+    extracted_facets = _facet_payloads_by_event_id(pending_events=pending_events, extraction=extraction)
     return {
         "current_date": datetime.now(UTC).date().isoformat(),
         "student_card": card_text,
@@ -516,7 +640,10 @@ def _build_card_session_payload(
             {
                 "created_at": str(event.created_at),
                 "critique_text": event.critique_text,
-                "facets": {name: getattr(event, name) for name in _FACET_SIGNAL_FIELDS if getattr(event, name)},
+                "facets": {
+                    **{name: getattr(event, name) for name in _FACET_SIGNAL_FIELDS if getattr(event, name)},
+                    **extracted_facets.get(event.id, {}),
+                },
             }
             for event in new_feedback
         ],
@@ -533,6 +660,22 @@ def _build_card_session_payload(
             for event in new_events
         ],
     }
+
+
+def _facet_payloads_by_event_id(
+    *, pending_events: Sequence[LessonFeedbackEvent], extraction: FacetExtraction | None
+) -> dict[uuid.UUID, dict[str, str]]:
+    if extraction is None:
+        return {}
+
+    by_event_id: dict[uuid.UUID, dict[str, str]] = {}
+    for facets in extraction.facets:
+        if not 0 <= facets.event_index < len(pending_events):
+            continue
+        values = {name: getattr(facets, name).strip() for name in _FACET_SIGNAL_FIELDS if getattr(facets, name).strip()}
+        if values:
+            by_event_id[pending_events[facets.event_index].id] = values
+    return by_event_id
 
 
 async def _run_card_edit_session(

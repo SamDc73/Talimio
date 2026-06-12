@@ -235,7 +235,7 @@ class _LLMRequest:
     tool_choice: str | None
     user_id: uuid.UUID | None
     course_id: uuid.UUID | None
-    model: str
+    model: str | None
     num_retries: int | None
     max_completion_tokens: int | None
     stream: bool
@@ -378,7 +378,6 @@ class LLMClient:
         enable_memory: bool,
         enable_tools: bool,
     ) -> _LLMRequest:
-        settings = get_settings()
         return _LLMRequest(
             messages=[dict(message) for message in messages],
             response_model=response_model,
@@ -389,7 +388,7 @@ class LLMClient:
             tool_choice=tool_choice,
             user_id=self._normalize_user_id(user_id),
             course_id=course_id,
-            model=model or settings.primary_llm_model,
+            model=model,
             num_retries=num_retries,
             max_completion_tokens=max_completion_tokens,
             stream=stream,
@@ -522,7 +521,7 @@ class LLMClient:
 
         if not request.enable_tools:
             request.tool_plan = build_request_tool_plan(
-                model=request.model,
+                model=request.model or get_settings().primary_llm_model,
                 explicit_tool_schemas=[],
                 function_tools=[],
                 allowed_tools=set(),
@@ -591,7 +590,7 @@ class LLMClient:
             )
 
         return build_request_tool_plan(
-            model=request.model,
+            model=request.model or get_settings().primary_llm_model,
             explicit_tool_schemas=request.tools,
             function_tools=function_tools,
             allowed_tools=self._tool_filters[0],
@@ -1251,7 +1250,7 @@ class LLMClient:
         tools: list[JsonDict] | None,
         tool_choice: str | None,
         user_id: uuid.UUID | None,
-        model: str,
+        model: str | None,
         num_retries: int | None,
         tool_targets: dict[str, ToolTarget],
         mcp_config: MCPConfig | None,

@@ -357,18 +357,18 @@ class ContentService:
             await self._ensure_book_detached_or_forced(session, content_id, force=force)
 
         # Remove any stored files that rely on row attributes before deleting the row.
-        if content_type == ContentType.BOOK:
+        if canonical_content_type == ContentType.BOOK:
             await self._delete_book_file(cast("StoredBookRow", row))
 
         # Cross-module cleanup
         await self._delete_progress_for_content(session, content_id)
-        await self._delete_highlights(session, content_type, content_id)
-        await self._delete_tag_associations(session, content_type, content_id)
+        await self._delete_highlights(session, canonical_content_type, content_id)
+        await self._delete_tag_associations(session, canonical_content_type, content_id)
         await self._prune_orphan_tags(session)
 
         from src.ai.rag.service import RAGService
 
-        await RAGService.purge_for_content(session, content_type.value, content_id)
+        await RAGService.purge_for_content(session, canonical_content_type.value, content_id)
 
         # Delete the content row and let the request boundary commit.
         await session.delete(row)

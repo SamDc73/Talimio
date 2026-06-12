@@ -1,8 +1,8 @@
 """Procrastinate tasks for course outline and lesson content generation.
 
 These wrap the generation job bodies in ``src.courses.services.generation_jobs``.
-Each task runs the LLM in a short-lived dedicated session and retries on bad
-model output so a single malformed JSON response never surfaces to the user.
+Structured-output retries are owned by ``LLMClient.get_completion(...)`` so the
+worker layer does not add a second retry policy around model validation.
 """
 
 from __future__ import annotations
@@ -10,8 +10,6 @@ from __future__ import annotations
 import logging
 import uuid
 from typing import cast
-
-import procrastinate
 
 from src.jobs.app import QUEUE_GENERATION, job_app
 
@@ -22,7 +20,6 @@ logger = logging.getLogger(__name__)
 @job_app.task(
     name="generation.generate_course_outline",
     queue=QUEUE_GENERATION,
-    retry=procrastinate.RetryStrategy(max_attempts=3, exponential_wait=5),
 )
 async def generate_course_outline(
     course_id: str,
@@ -45,7 +42,6 @@ async def generate_course_outline(
 @job_app.task(
     name="generation.generate_lesson_version",
     queue=QUEUE_GENERATION,
-    retry=procrastinate.RetryStrategy(max_attempts=3, exponential_wait=5),
 )
 async def generate_lesson_version(
     version_id: str,

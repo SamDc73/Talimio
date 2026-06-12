@@ -1251,10 +1251,9 @@ class LessonService:
     ) -> None:
         """Job body: fill one pending lesson version with generated content.
 
-        Runs in a dedicated worker session. Owns its own commit/rollback so a
-        bad LLM response retries (RetryStrategy) instead of failing the user's
-        request. On the final failure the version is flagged so reads stop
-        polling and surface the error.
+        Runs in a dedicated worker session. Structured-output retry is owned by
+        ``LLMClient.get_completion(...)``; if generation still fails, the version
+        is flagged so reads stop polling and surface the error.
         """
         version = await self.session.get(LessonVersion, version_id)
         if version is None:
@@ -1332,6 +1331,8 @@ class LessonService:
             immediate_regenerate_request=critique_text if generation_mode == "regeneration" else None,
             adaptive_recommendation=recommendation,
         )
+        # Release the context-building transaction before waiting on the lesson LLM.
+        await self.session.commit()
         generated = await self._generate_lesson_body(lesson_context=lesson_context, course_id=course.id)
 
         await lesson_version_service.fill_and_promote_version(

@@ -4,7 +4,7 @@
 -- raw learner phrasing far better than distilled summaries.
 
 CREATE TABLE IF NOT EXISTS pedagogical_notes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT app_uuid7(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
     -- Distilled fact, ~1-2 sentences.

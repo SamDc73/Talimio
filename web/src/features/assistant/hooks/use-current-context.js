@@ -74,7 +74,7 @@ export function useCurrentContext() {
 
 	if (contextType === "video") {
 		const metadata = progressQuery.metadata || {}
-		contextMeta = { timestamp: metadata.position ?? metadata.last_position ?? 0 }
+		contextMeta = { timestamp: metadata.position ?? metadata.lastPosition ?? 0 }
 	} else if (contextType === "book") {
 		const currentPage = bookReadingState?.currentPage ?? 1
 		contextMeta = { page: Math.max(0, Number(currentPage) - 1) }

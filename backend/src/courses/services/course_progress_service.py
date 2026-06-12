@@ -358,27 +358,27 @@ class CourseProgressService(ProgressTracker):
             if not isinstance(current_stats, dict):
                 current_stats = {}
             current_stats = cast("dict[str, object]", current_stats)
-            rating_counts = current_stats.get("ratingCounts", {"1": 0, "2": 0, "3": 0, "4": 0})
+            rating_counts = current_stats.get("rating_counts", {"1": 0, "2": 0, "3": 0, "4": 0})
             if not isinstance(rating_counts, dict):
                 rating_counts = {"1": 0, "2": 0, "3": 0, "4": 0}
             rating_counts = cast("dict[str, object]", rating_counts)
-            incoming_rating_counts = concept_payload.get("ratingCounts", {})
+            incoming_rating_counts = concept_payload.get("rating_counts", {})
             if not isinstance(incoming_rating_counts, dict):
                 incoming_rating_counts = {}
             incoming_rating_counts = cast("dict[str, object]", incoming_rating_counts)
             for rating_key, count in incoming_rating_counts.items():
                 rating_counts[rating_key] = _int_value(rating_counts.get(rating_key, 0)) + _int_value(count)
-            current_stats["ratingCounts"] = rating_counts
+            current_stats["rating_counts"] = rating_counts
 
-            current_stats["totalDurationMs"] = _int_value(current_stats.get("totalDurationMs", 0)) + _int_value(
-                concept_payload.get("totalDurationMs", 0)
+            current_stats["total_duration_ms"] = _int_value(current_stats.get("total_duration_ms", 0)) + _int_value(
+                concept_payload.get("total_duration_ms", 0)
             )
 
             for key in (
-                "lastRating",
-                "lastDurationMs",
-                "lastReviewedAt",
-                "lastNextReviewAt",
+                "last_rating",
+                "last_duration_ms",
+                "last_reviewed_at",
+                "last_next_review_at",
                 "mastery",
                 "exposures",
             ):

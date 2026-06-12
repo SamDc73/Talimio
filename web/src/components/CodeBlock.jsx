@@ -68,7 +68,7 @@ export function CodeBlockView({ code, language, className }) {
 		return (
 			<pre
 				className={cn(
-					"shiki overflow-x-auto p-4 text-sm font-mono bg-code-surface text-code-foreground rounded",
+					"shiki overflow-x-auto p-4 text-sm font-mono bg-code-surface text-code-foreground rounded-sm",
 					className
 				)}
 			>

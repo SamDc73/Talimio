@@ -12,9 +12,9 @@ export function useVideoProgress(videoId) {
 	const currentProgress = progressQuery.data ?? 0
 	const rawMetadata = progressQuery.metadata || {}
 
-	// Extract values with defaults (snake_case only)
-	const completedChapters = (typeof rawMetadata.completed_chapters === "object" && rawMetadata.completed_chapters) || {}
-	const totalChapters = rawMetadata.total_chapters ?? 0
+	// Extract values with defaults
+	const completedChapters = (typeof rawMetadata.completedChapters === "object" && rawMetadata.completedChapters) || {}
+	const totalChapters = rawMetadata.totalChapters ?? 0
 
 	// Check if a specific chapter is completed
 	const isCompleted = (chapterId) => {
@@ -45,9 +45,9 @@ export function useVideoProgress(videoId) {
 			progress: newProgress,
 			metadata: {
 				...rawMetadata,
-				content_type: "video",
-				completed_chapters: newCompletedChapters,
-				total_chapters: actualTotalChapters,
+				contentType: "video",
+				completedChapters: newCompletedChapters,
+				totalChapters: actualTotalChapters,
 			},
 		})
 	}
@@ -72,9 +72,9 @@ export function useVideoProgress(videoId) {
 				progress,
 				metadata: {
 					...rawMetadata,
-					content_type: "video",
-					completed_chapters: completedChapters,
-					total_chapters: totalChapters,
+					contentType: "video",
+					completedChapters,
+					totalChapters,
 					...metadata,
 				},
 			}),
@@ -87,7 +87,7 @@ export function useVideoProgress(videoId) {
 export function useVideoProgressWithPosition(videoId) {
 	const updateProgress = useUpdateProgress()
 	const { progress, isLoading, error, rawMetadata } = useVideoProgress(videoId)
-	const savedPosition = rawMetadata.position ?? rawMetadata.last_position ?? 0
+	const savedPosition = rawMetadata.position ?? rawMetadata.lastPosition ?? 0
 
 	const updatePlaybackProgress = useCallback(
 		(position, duration) => {
@@ -98,7 +98,7 @@ export function useVideoProgressWithPosition(videoId) {
 				progress: progressPercentage,
 				metadata: {
 					...rawMetadata,
-					content_type: "video",
+					contentType: "video",
 					position,
 					duration,
 				},

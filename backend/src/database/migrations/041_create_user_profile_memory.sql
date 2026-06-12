@@ -4,7 +4,7 @@
 -- evidence_text may be redacted on explicit user-forget, keeping a structural tombstone.
 
 CREATE TABLE IF NOT EXISTS user_profile_slots (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT app_uuid7(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     slot TEXT NOT NULL,
     value TEXT NOT NULL,
@@ -22,7 +22,7 @@ CREATE INDEX IF NOT EXISTS user_profile_slots_user_id_idx
     ON user_profile_slots (user_id);
 
 CREATE TABLE IF NOT EXISTS user_profile_slot_events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT app_uuid7(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     slot TEXT NOT NULL,
     op TEXT NOT NULL CHECK (op IN ('set', 'clear', 'ignore', 'defer')),
