@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 COURSE_OUTLINE_TASK_NAME = "generation.generate_course_outline"
 LESSON_VERSION_TASK_NAME = "generation.generate_lesson_version"
+COURSE_OUTLINE_JOB_PRIORITY = 10
 
 LessonGenerationMode = Literal["first_pass", "regeneration", "adaptive_revisit_pass"]
 
@@ -51,6 +52,7 @@ async def defer_course_outline_generation(
             "book_ids": [str(book_id) for book_id in book_ids],
         },
         queueing_lock=course_outline_queueing_lock(course_id),
+        priority=COURSE_OUTLINE_JOB_PRIORITY,
     )
 
 

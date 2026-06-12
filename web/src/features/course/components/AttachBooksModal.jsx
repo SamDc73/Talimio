@@ -30,6 +30,7 @@ function buildBookListUrl(search) {
 function AttachBooksModal({ isOpen, onClose, attachedBookIds, onAttach, isAttaching = false }) {
 	const [search, setSearch] = useState("")
 	const [selectedIds, setSelectedIds] = useState([])
+	const [attachError, setAttachError] = useState(null)
 
 	const { data, isLoading } = useQuery({
 		queryKey: ["library-books", search],
@@ -41,6 +42,7 @@ function AttachBooksModal({ isOpen, onClose, attachedBookIds, onAttach, isAttach
 	const attachedSet = useMemo(() => new Set((attachedBookIds || []).map(String)), [attachedBookIds])
 
 	const toggleBook = (bookId) => {
+		setAttachError(null)
 		setSelectedIds((previous) =>
 			previous.includes(bookId) ? previous.filter((id) => id !== bookId) : [...previous, bookId]
 		)
@@ -48,14 +50,20 @@ function AttachBooksModal({ isOpen, onClose, attachedBookIds, onAttach, isAttach
 
 	const handleAttach = async () => {
 		if (selectedIds.length === 0) return
-		await onAttach(selectedIds)
-		setSelectedIds([])
-		onClose()
+		setAttachError(null)
+		try {
+			await onAttach(selectedIds)
+			setSelectedIds([])
+			onClose()
+		} catch (error) {
+			setAttachError(error?.message || "Unable to attach books")
+		}
 	}
 
 	const handleOpenChange = (open) => {
 		if (!open) {
 			setSelectedIds([])
+			setAttachError(null)
 			onClose()
 		}
 	}
@@ -114,7 +122,7 @@ function AttachBooksModal({ isOpen, onClose, attachedBookIds, onAttach, isAttach
 											<span className="shrink-0 text-xs text-muted-foreground">Attached</span>
 										) : (
 											<span
-												className={`flex size-5 shrink-0 items-center justify-center rounded border ${
+												className={`flex size-5 shrink-0 items-center justify-center rounded-sm border ${
 													selected ? "border-primary bg-primary text-primary-foreground" : "border-border"
 												}`}
 											>
@@ -127,6 +135,7 @@ function AttachBooksModal({ isOpen, onClose, attachedBookIds, onAttach, isAttach
 						})}
 					</ul>
 				</div>
+				{attachError && <p className="text-sm text-destructive">{attachError}</p>}
 
 				<DialogFooter className="gap-2">
 					<Button variant="outline" onClick={() => handleOpenChange(false)} className="flex-1">

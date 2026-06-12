@@ -311,8 +311,8 @@ async def signup(session: DbSession, data: SignupRequest) -> SignupResponse:
     via ``/login`` — signup never returns a session, since a ``Set-Cookie`` on
     only the new-email path would itself leak existence.
 
-    Password-policy errors are validated before the existence check so they are
-    returned identically regardless of whether the email is registered.
+    Password-policy and username errors are validated before the existence check
+    so they are returned identically regardless of whether the email is registered.
     """
     settings = get_settings()
     if settings.AUTH_PROVIDER != "local":
@@ -323,12 +323,12 @@ async def signup(session: DbSession, data: SignupRequest) -> SignupResponse:
 
     normalized_email = local_crud.normalize_email(str(data.email))
     _validate_password_or_raise(data.password)
+    username = await _resolve_signup_username(session, full_name=data.full_name, username=data.username)
 
     existing = await local_crud.get_user_by_email(session, normalized_email)
     if existing:
         return _GENERIC_SIGNUP_RESPONSE
 
-    username = await _resolve_signup_username(session, full_name=data.full_name, username=data.username)
     try:
         user = await local_crud.create_user(
             session,

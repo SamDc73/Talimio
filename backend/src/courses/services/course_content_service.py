@@ -291,6 +291,9 @@ class CourseContentService:
                 has_linked_books=True,
             )
 
+        # Release any read/RAG transaction before waiting on the course-planning LLM.
+        await session.commit()
+
         prompt_payload = self._build_prompt_payload(prompt_text, image_payload)
         adaptive_structure = await self._build_adaptive_structure(
             is_adaptive=is_adaptive,

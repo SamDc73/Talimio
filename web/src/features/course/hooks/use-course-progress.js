@@ -14,12 +14,12 @@ export function useCourseProgress(courseId) {
 	const rawMetadata = progressQuery.metadata || {}
 
 	// Extract values with defaults
-	let completedLessonsArray = rawMetadata.completed_lessons
+	let completedLessonsArray = rawMetadata.completedLessons
 	if (!Array.isArray(completedLessonsArray)) {
 		completedLessonsArray = []
 	}
-	const currentLessonId = rawMetadata.current_lesson_id
-	const totalLessons = rawMetadata.total_lessons ?? 0
+	const currentLessonId = rawMetadata.currentLessonId
+	const totalLessons = rawMetadata.totalLessons ?? 0
 
 	// Helper to calculate progress from completed lessons
 	const calculateProgressFromLessons = (completedLessons, totalLessons) => {
@@ -29,10 +29,10 @@ export function useCourseProgress(courseId) {
 
 	const baseMetadata = useMemo(
 		() => ({
-			content_type: "course",
-			completed_lessons: completedLessonsArray,
-			current_lesson_id: currentLessonId,
-			total_lessons: totalLessons,
+			contentType: "course",
+			completedLessons: completedLessonsArray,
+			currentLessonId,
+			totalLessons,
 		}),
 		[completedLessonsArray, currentLessonId, totalLessons]
 	)
@@ -76,9 +76,9 @@ export function useCourseProgress(courseId) {
 			contentId: courseId,
 			progress: newProgress,
 			metadata: buildMetadataPayload({
-				completed_lessons: newCompletedLessons,
-				current_lesson_id: lessonIdStr,
-				total_lessons: actualTotalLessons,
+				completedLessons: newCompletedLessons,
+				currentLessonId: lessonIdStr,
+				totalLessons: actualTotalLessons,
 			}),
 		})
 	}

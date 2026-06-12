@@ -6,31 +6,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Talimio</title>
     <script>
-      (function () {
+      "use strict";
+      (() => {
         try {
-          var theme = "system";
-          var raw = localStorage.getItem("talimio-storage");
+          let theme = "system";
+          const raw = localStorage.getItem("talimio-storage");
           if (raw) {
-            var parsed = JSON.parse(raw);
-            var stored =
-              parsed &&
-              parsed.state &&
-              parsed.state.preferences &&
-              parsed.state.preferences.theme;
+            const parsed = JSON.parse(raw);
+            const stored = parsed?.state?.preferences?.theme;
             if (stored === "light" || stored === "dark" || stored === "system") {
               theme = stored;
             }
           }
-          var resolved = theme;
+          let resolved = theme;
           if (theme === "system") {
             resolved = window.matchMedia("(prefers-color-scheme: dark)").matches
               ? "dark"
               : "light";
           }
-          var root = document.documentElement;
+          const root = document.documentElement;
           root.classList.add(resolved);
           root.style.colorScheme = resolved;
-        } catch (e) {}
+        } catch {
+          // Keep first paint resilient when persisted preferences are unreadable.
+        }
       })();
     </script>
   </head>

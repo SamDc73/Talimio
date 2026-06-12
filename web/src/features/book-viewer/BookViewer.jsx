@@ -68,7 +68,7 @@ function BookViewerContent() {
 		refetchOnWindowFocus: false,
 		retry: false,
 		// Metadata extraction runs once at upload. Briefly poll so the sidebar/TOC
-		// populate the moment it finishes, but stop once total_pages arrives or after
+		// populate the moment it finishes, but stop once totalPages arrives or after
 		// ~1 min so a book without extractable page count never polls forever.
 		refetchInterval: (query) => (query.state.data?.totalPages || query.state.dataUpdateCount >= 20 ? false : 3000),
 	})

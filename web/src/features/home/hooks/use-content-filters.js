@@ -50,7 +50,7 @@ export const useContentFilters = () => {
 				if (item.type === "book") {
 					return title.includes(query) || item.author?.toLowerCase().includes(query) || tags
 				}
-				if (item.type === "youtube") {
+				if (item.type === "video") {
 					const channelName = item.channelName || item.channel || ""
 					return title.includes(query) || channelName?.toLowerCase().includes(query) || tags
 				}

@@ -118,9 +118,11 @@ async def pedagogy_nightly_sweep(timestamp: int) -> None:
         pairs = await find_stale_pairs(session)
 
     for user_id, course_id in pairs:
+        lock_key = pedagogy_queueing_lock(user_id, course_id)
         with contextlib.suppress(procrastinate.exceptions.AlreadyEnqueued):
             await run_student_card_update.configure(
-                queueing_lock=pedagogy_queueing_lock(user_id, course_id)
+                queueing_lock=lock_key,
+                lock=lock_key,
             ).defer_async(user_id=str(user_id), course_id=str(course_id))
     logger.info("jobs.pedagogy_sweep.done", extra={"pair_count": len(pairs)})
 

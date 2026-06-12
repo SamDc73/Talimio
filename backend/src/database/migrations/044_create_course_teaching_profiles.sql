@@ -3,7 +3,7 @@
 -- critique-derived conclusions stay separate; merge happens at read time.
 
 CREATE TABLE IF NOT EXISTS course_teaching_profiles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT app_uuid7(),
     course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     source TEXT NOT NULL CHECK (source IN ('explicit', 'inferred')),
     pace_preference TEXT,

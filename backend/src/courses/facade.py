@@ -100,12 +100,12 @@ class _ReviewSnapshot(TypedDict):
 
 
 class _ReviewConceptStats(TypedDict):
-    ratingCounts: dict[str, int]
-    totalDurationMs: int
-    lastRating: int
-    lastDurationMs: int
-    lastReviewedAt: str
-    lastNextReviewAt: str | None
+    rating_counts: dict[str, int]
+    total_duration_ms: int
+    last_rating: int
+    last_duration_ms: int
+    last_reviewed_at: str
+    last_next_review_at: str | None
     mastery: float
     exposures: int
 
@@ -1169,26 +1169,26 @@ class CoursesFacade:  # noqa: PLR0904
         stats = concept_stats.setdefault(
             concept_key,
             {
-                "ratingCounts": {"1": 0, "2": 0, "3": 0, "4": 0},
-                "totalDurationMs": 0,
-                "lastRating": review_snapshot["rating"],
-                "lastDurationMs": review_snapshot["duration_ms"],
-                "lastReviewedAt": review_snapshot["reviewed_at"],
-                "lastNextReviewAt": review_snapshot["next_review_at"],
+                "rating_counts": {"1": 0, "2": 0, "3": 0, "4": 0},
+                "total_duration_ms": 0,
+                "last_rating": review_snapshot["rating"],
+                "last_duration_ms": review_snapshot["duration_ms"],
+                "last_reviewed_at": review_snapshot["reviewed_at"],
+                "last_next_review_at": review_snapshot["next_review_at"],
                 "mastery": review_snapshot["mastery"],
                 "exposures": review_snapshot["exposures"],
             },
         )
-        rating_counts = stats["ratingCounts"]
+        rating_counts = stats["rating_counts"]
         rating_key = str(review_snapshot["rating"])
         rating_counts[rating_key] = rating_counts.get(rating_key, 0) + 1
-        stats["totalDurationMs"] = int(stats["totalDurationMs"]) + int(review_snapshot["duration_ms"])
+        stats["total_duration_ms"] = int(stats["total_duration_ms"]) + int(review_snapshot["duration_ms"])
         stats.update(
             {
-                "lastRating": review_snapshot["rating"],
-                "lastDurationMs": review_snapshot["duration_ms"],
-                "lastReviewedAt": review_snapshot["reviewed_at"],
-                "lastNextReviewAt": review_snapshot["next_review_at"],
+                "last_rating": review_snapshot["rating"],
+                "last_duration_ms": review_snapshot["duration_ms"],
+                "last_reviewed_at": review_snapshot["reviewed_at"],
+                "last_next_review_at": review_snapshot["next_review_at"],
                 "mastery": review_snapshot["mastery"],
                 "exposures": review_snapshot["exposures"],
             }

@@ -61,6 +61,7 @@ function DocumentsView() {
 			logger.track("books_attached", { courseId, count: bookIds.length })
 		} catch (error) {
 			logger.error("Failed to attach books", error, { courseId })
+			throw error
 		}
 	}
 

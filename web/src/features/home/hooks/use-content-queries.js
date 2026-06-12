@@ -208,7 +208,7 @@ export function useDeleteContent() {
 		},
 
 		// Optimistic update
-		onMutate: async ({ itemId }) => {
+		onMutate: async ({ itemId, itemType, force }) => {
 			// Cancel any outgoing refetches
 			await queryClient.cancelQueries({ queryKey: contentKeys.all })
 
@@ -217,11 +217,20 @@ export function useDeleteContent() {
 				queryKey: contentKeys.all,
 			})
 
-			// Optimistically update all content queries
-			queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => removeItemFromCache(old, itemId))
+			const canConflict = itemType === "book" && !force
+			if (!canConflict) {
+				// Optimistically update all content queries
+				queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => removeItemFromCache(old, itemId))
+			}
 
 			// Return snapshot for rollback
-			return { previousContent }
+			return { previousContent, removedOptimistically: !canConflict }
+		},
+
+		onSuccess: ({ itemId }, _variables, context) => {
+			if (!context?.removedOptimistically) {
+				queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => removeItemFromCache(old, itemId))
+			}
 		},
 
 		// Rollback on error

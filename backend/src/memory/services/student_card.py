@@ -96,20 +96,7 @@ async def card_replace(
     evidence_refs: list[JsonValue] | None = None,
 ) -> StudentCard:
     """Exact-match replace with uniqueness check."""
-    if not old_str:
-        msg = "old_str must be non-empty"
-        raise CardEditError(msg)
-
-    occurrences = card.card_text.count(old_str)
-    if occurrences == 0:
-        msg = f"old_str not found in card: {old_str[:120]!r}"
-        raise CardEditError(msg)
-    if occurrences > 1:
-        msg = f"old_str occurs {occurrences} times; provide a longer, unique snippet"
-        raise CardEditError(msg)
-
-    new_text = card.card_text.replace(old_str, new_str, 1)
-    _validate_card_text(new_text)
+    new_text = preview_card_replace(card.card_text, old_str=old_str, new_str=new_str)
     return await _commit_edit(
         session,
         card,
@@ -120,6 +107,25 @@ async def card_replace(
     )
 
 
+def preview_card_replace(card_text: str, *, old_str: str, new_str: str) -> str:
+    """Return card text after a validated exact-match replace."""
+    if not old_str:
+        msg = "old_str must be non-empty"
+        raise CardEditError(msg)
+
+    occurrences = card_text.count(old_str)
+    if occurrences == 0:
+        msg = f"old_str not found in card: {old_str[:120]!r}"
+        raise CardEditError(msg)
+    if occurrences > 1:
+        msg = f"old_str occurs {occurrences} times; provide a longer, unique snippet"
+        raise CardEditError(msg)
+
+    new_text = card_text.replace(old_str, new_str, 1)
+    _validate_card_text(new_text)
+    return new_text.strip()
+
+
 async def card_rethink(
     session: AsyncSession,
     card: StudentCard,
@@ -128,15 +134,21 @@ async def card_rethink(
     evidence_refs: list[JsonValue] | None = None,
 ) -> StudentCard:
     """Whole-block consolidation rewrite; all section labels must survive."""
-    _validate_card_text(new_text)
+    validated_text = preview_card_rethink(new_text=new_text)
     return await _commit_edit(
         session,
         card,
-        new_text=new_text,
+        new_text=validated_text,
         tool="student_card_rethink",
         payload={"new_text": new_text},
         evidence_refs=evidence_refs,
     )
+
+
+def preview_card_rethink(*, new_text: str) -> str:
+    """Return validated whole-card replacement text."""
+    _validate_card_text(new_text)
+    return new_text.strip()
 
 
 async def get_card_revisions(session: AsyncSession, card_id: uuid.UUID) -> list[StudentCardRevision]:

@@ -280,16 +280,21 @@ class LearningCapabilityActionService:
         self._session.add(lesson)
         await self._session.flush()
 
+        # Content is generated out-of-request by the worker, so a freshly-appended
+        # lesson is queued rather than ready; reading it here triggers that enqueue.
         content_generated = False
         if payload.generate_content:
             lesson_service = LessonService(self._session, user_id)
-            detail = await lesson_service.get_lesson(course.id, lesson.id, force_refresh=True)
+            detail = await lesson_service.get_lesson(course.id, lesson.id)
             content_generated = bool(detail.content and detail.content.strip())
-            lesson.title = detail.title
+
+        message = "Lesson appended."
+        if payload.generate_content and not content_generated:
+            message = "Lesson appended; its content is being generated and will be ready shortly."
 
         result = AppendCourseLessonCapabilityOutput(
             status="completed",
-            message="Lesson appended.",
+            message=message,
             course_id=course.id,
             lesson_id=lesson.id,
             lesson_title=lesson.title,
@@ -938,6 +943,7 @@ class LearningCapabilityActionService:
         return await llm_client.generate_lesson_content(
             composed_context,
             user_id=user_id,
+            course_id=course.id,
             function_tools=[
                 build_wikipedia_resolver_function_tool(),
                 build_figure_finder_function_tool(verify=llm_client.verify_figure_for_concept),

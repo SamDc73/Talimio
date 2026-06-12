@@ -75,6 +75,11 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 				itemType: item.type,
 			},
 			{
+				onSuccess: () => {
+					if (onDelete) {
+						onDelete(item.id, item.type)
+					}
+				},
 				onError: (error) => {
 					// Books attached to courses return 409; surface the cascade confirm.
 					const conflict = getBookAttachmentConflict(error)
@@ -87,23 +92,24 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 				},
 			}
 		)
-
-		// Notify parent if provided (e.g., to clear pins)
-		if (onDelete) {
-			onDelete(item.id, item.type)
-		}
 	}
 
 	const handleConfirmForceDelete = () => {
 		setAttachmentConflict(null)
-		deleteContentMutation.mutate({
-			itemId: item.id,
-			itemType: item.type,
-			force: true,
-		})
-		if (onDelete) {
-			onDelete(item.id, item.type)
-		}
+		deleteContentMutation.mutate(
+			{
+				itemId: item.id,
+				itemType: item.type,
+				force: true,
+			},
+			{
+				onSuccess: () => {
+					if (onDelete) {
+						onDelete(item.id, item.type)
+					}
+				},
+			}
+		)
 	}
 
 	const attachmentConflictDescription = (() => {

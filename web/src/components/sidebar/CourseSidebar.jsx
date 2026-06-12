@@ -96,9 +96,9 @@ function CourseSidebar({
 
 		try {
 			await updateProgressAsync(courseProgress?.percentage ?? 0, {
-				completed_lessons: nextCompleted,
-				current_lesson_id: lessonIdStr,
-				total_lessons: totalLessons,
+				completedLessons: nextCompleted,
+				currentLessonId: lessonIdStr,
+				totalLessons,
 			})
 		} catch (error) {
 			logger.error("Failed to update lesson completion", error, { courseId, lessonId: lessonIdStr })

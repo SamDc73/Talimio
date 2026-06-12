@@ -84,6 +84,7 @@ class MaintenanceDecision(BaseModel):
 class UserTurn:
     """A persisted user message eligible for memory evaluation."""
 
+    seq: int
     message_id: str
     text: str
     created_at: datetime
@@ -105,8 +106,9 @@ async def defer_profile_maintenance(session: AsyncSession, *, user_id: uuid.UUID
 async def process_user_memory(user_id: uuid.UUID) -> int:
     """Evaluate unprocessed user turns; returns how many turns were evaluated.
 
-    All canonical commits, evidence events, and the watermark advance happen in
-    one transaction, so retries after a crash are exactly-once.
+    Each user turn is proposed outside a database transaction, then committed
+    with its watermark advance. This keeps model latency out of row locks while
+    preserving monotonic progress through conversation history.
     """
     async with async_session_maker() as session:
         if not await _user_is_active(session, user_id):
@@ -116,16 +118,32 @@ async def process_user_memory(user_id: uuid.UUID) -> int:
         items = await _load_unprocessed_items(session, user_id, after_seq=watermark.last_processed_seq)
         if not items:
             return 0
-
-        turns = _extract_user_turns(items)
-        for turn in turns:
-            current_profile = await get_active_slots(session, user_id)
-            decision = await _propose_actions(user_id=user_id, turn=turn, current_profile=current_profile)
-            await _apply_decision(session, user_id=user_id, turn=turn, decision=decision)
-
-        watermark.last_processed_seq = max(item.seq for item, _course in items)
         await session.commit()
-        return len(turns)
+
+    turns = _extract_user_turns(items)
+    if not turns:
+        await _advance_profile_watermark(user_id, max(item.seq for item, _course in items))
+        return 0
+
+    processed = 0
+    for turn in turns:
+        async with async_session_maker() as session:
+            current_profile = await get_active_slots(session, user_id)
+            await session.commit()
+
+        decision = await _propose_actions(user_id=user_id, turn=turn, current_profile=current_profile)
+
+        async with async_session_maker() as session:
+            watermark = await _lock_watermark(session, user_id)
+            if turn.seq <= watermark.last_processed_seq:
+                continue
+            await _apply_decision(session, user_id=user_id, turn=turn, decision=decision)
+            watermark.last_processed_seq = turn.seq
+            await session.commit()
+            processed += 1
+
+    await _advance_profile_watermark(user_id, max(item.seq for item, _course in items))
+    return processed
 
 
 async def advance_watermark_past_history(session: AsyncSession, *, user_id: uuid.UUID) -> None:
@@ -181,14 +199,21 @@ async def _lock_watermark(session: AsyncSession, user_id: uuid.UUID) -> UserMemo
     return watermark
 
 
+async def _advance_profile_watermark(user_id: uuid.UUID, seq: int) -> None:
+    """Advance past non-user history rows without moving backward."""
+    async with async_session_maker() as session:
+        watermark = await _lock_watermark(session, user_id)
+        watermark.last_processed_seq = max(watermark.last_processed_seq, seq)
+        await session.commit()
+
+
 async def _load_unprocessed_items(
     session: AsyncSession, user_id: uuid.UUID, *, after_seq: int
 ) -> list[tuple[AssistantConversationHistoryItem, uuid.UUID | None]]:
-    """Newest unprocessed items first, bounded.
+    """Oldest unprocessed items first, bounded.
 
-    Taking the newest ``_BATCH_LIMIT`` items (then restoring order) keeps each
-    job's LLM work bounded and biases toward fresh evidence; anything older
-    that the bound skips is rebuild-job territory, not hot-path work.
+    Oldest-first ordering lets the watermark advance without skipping backlog
+    when more than ``_BATCH_LIMIT`` rows are pending.
     """
     stmt = (
         select(
@@ -204,14 +229,13 @@ async def _load_unprocessed_items(
             AssistantConversation.user_id == user_id,
             AssistantConversationHistoryItem.seq > after_seq,
         )
-        .order_by(AssistantConversationHistoryItem.seq.desc())
+        .order_by(AssistantConversationHistoryItem.seq.asc())
         .limit(_BATCH_LIMIT)
     )
-    newest_first = [
+    return [
         (item, context_id if context_type == "course" else None)
         for item, context_type, context_id in (await session.execute(stmt)).all()
     ]
-    return list(reversed(newest_first))
 
 
 def _extract_user_turns(items: list[tuple[AssistantConversationHistoryItem, uuid.UUID | None]]) -> list[UserTurn]:
@@ -229,6 +253,7 @@ def _extract_user_turns(items: list[tuple[AssistantConversationHistoryItem, uuid
         prior = user_texts_by_conversation.setdefault(item.conversation_id, [])
         turns.append(
             UserTurn(
+                seq=item.seq,
                 message_id=item.aui_message_id,
                 text=text,
                 created_at=item.created_at,

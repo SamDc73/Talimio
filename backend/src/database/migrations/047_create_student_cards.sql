@@ -3,7 +3,7 @@
 -- append-only full-text revision log as provenance and rebuild substrate.
 
 CREATE TABLE IF NOT EXISTS student_cards (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT app_uuid7(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     card_text TEXT NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS student_cards (
 );
 
 CREATE TABLE IF NOT EXISTS student_card_revisions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT app_uuid7(),
     card_id UUID NOT NULL REFERENCES student_cards(id) ON DELETE CASCADE,
     revision INTEGER NOT NULL,
     card_text TEXT NOT NULL,

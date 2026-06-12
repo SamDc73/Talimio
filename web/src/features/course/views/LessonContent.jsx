@@ -45,7 +45,7 @@ export default function LessonContent() {
 	const errorMessage = error?.message || (typeof error === "string" ? error : null)
 	const lessonWindows = Array.isArray(lesson?.windows) ? lesson.windows : []
 	const savedWindowIndex = useMemo(() => {
-		const positions = rawMetadata?.lesson_window_positions
+		const positions = rawMetadata?.lessonWindowPositions
 		if (!positions || typeof positions !== "object") {
 			return 0
 		}
@@ -207,8 +207,8 @@ export default function LessonContent() {
 			}
 
 			const currentPositions =
-				rawMetadata?.lesson_window_positions && typeof rawMetadata.lesson_window_positions === "object"
-					? rawMetadata.lesson_window_positions
+				rawMetadata?.lessonWindowPositions && typeof rawMetadata.lessonWindowPositions === "object"
+					? rawMetadata.lessonWindowPositions
 					: {}
 
 			if (currentPositions[lesson.id] === nextIndex) {
@@ -216,11 +216,11 @@ export default function LessonContent() {
 			}
 
 			await updateProgressAsync(progress?.percentage ?? 0, {
-				lesson_window_positions: {
+				lessonWindowPositions: {
 					...currentPositions,
 					[lesson.id]: nextIndex,
 				},
-				current_lesson_id: String(lesson.id),
+				currentLessonId: String(lesson.id),
 			})
 		},
 		[courseId, lesson?.id, progress?.percentage, rawMetadata, updateProgressAsync]
