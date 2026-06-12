@@ -18,6 +18,7 @@ from src.ai.client import LLMClient
 from src.ai.errors import AIRuntimeError
 from src.ai.prompts import ASSISTANT_CHAT_SYSTEM_PROMPT
 from src.books.models import Book
+from src.config.settings import get_settings
 from src.courses.models import Course
 from src.exceptions import DomainError, NotFoundError, ValidationError
 from src.learning_capabilities.facade import LearningCapabilitiesFacade
@@ -107,6 +108,20 @@ def _stream_chunk_to_sse_payload(chunk: object) -> tuple[dict[str, JsonValue] | 
         return cast("dict[str, JsonValue]", chunk), None
     delta = str(chunk)
     return {"type": "text-delta", "textDelta": delta}, delta
+
+
+def _resolve_assistant_model_override(*model_candidates: str | None) -> str | None:
+    requested_models = [candidate.strip() for candidate in model_candidates if candidate and candidate.strip()]
+    if not requested_models:
+        return None
+
+    allowed_models = get_settings().primary_llm_models
+    for requested_model in requested_models:
+        if requested_model in allowed_models:
+            return requested_model
+
+        logger.info("assistant.model_override_ignored", extra={"requested_model": requested_model})
+    return None
 
 
 def _extract_message_text(content: object) -> str:
@@ -227,7 +242,7 @@ def _normalize_chat_request(request: ChatRequest) -> NormalizedChatRequest:
         latest_user_text=latest_user_text,
         latest_user_blocks=latest_user_blocks,
         conversation_history=normalized_messages[history_start_index:last_user_index],
-        model=request.model_name or request.model,
+        model=_resolve_assistant_model_override(request.model_name, request.model),
         thread_id=request.thread_id,
         context_type=request.context_type,
         context_id=request.context_id,

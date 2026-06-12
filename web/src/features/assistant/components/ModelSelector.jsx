@@ -93,15 +93,10 @@ function ModelSelectorItem({ model, className, ...props }) {
 function ModelSelectorImpl({ variant = "outline", size = "sm", contentClassName, className }) {
 	const { data, isLoading, isError } = useAssistantModelsQuery()
 	const models = useMemo(() => data?.models ?? [], [data?.models])
+	const modelIds = useMemo(() => new Set(models.map((model) => model.id)), [models])
 	const assistantModel = useAssistantModel()
 	const setAssistantModel = useSetAssistantModel()
 	const api = useAssistantApi()
-
-	useEffect(() => {
-		if (!assistantModel && models.length > 0) {
-			setAssistantModel(models[0].id)
-		}
-	}, [models, assistantModel, setAssistantModel])
 
 	const modelOptions = useMemo(() => {
 		if (isLoading) {
@@ -121,18 +116,24 @@ function ModelSelectorImpl({ variant = "outline", size = "sm", contentClassName,
 	}, [isLoading, isError, models])
 
 	const isSelectable = !isLoading && !isError && models.length > 0
-	const value = isSelectable ? assistantModel || models[0]?.id : modelOptions[0]?.id
+	const fallbackModelId = isSelectable ? models[0]?.id : undefined
+	const selectedModelId =
+		isSelectable && assistantModel && modelIds.has(assistantModel) ? assistantModel : fallbackModelId
+	const value = isSelectable ? selectedModelId : modelOptions[0]?.id
 	const shouldHideSelector = !isLoading && !isError && models.length === 1
 
 	useEffect(() => {
-		if (!value) return
-		const activeModel = modelOptions.find((model) => model.id === value)
-		if (activeModel?.disabled) return
-		const config = { config: { modelName: value } }
+		if (!isSelectable || !selectedModelId || assistantModel === selectedModelId) return
+		setAssistantModel(selectedModelId)
+	}, [assistantModel, isSelectable, selectedModelId, setAssistantModel])
+
+	useEffect(() => {
+		if (!isSelectable || !selectedModelId) return
+		const config = { config: { modelName: selectedModelId } }
 		return api.modelContext().register({
 			getModelContext: () => config,
 		})
-	}, [api, value, modelOptions])
+	}, [api, isSelectable, selectedModelId])
 
 	if (shouldHideSelector) {
 		return null
@@ -143,7 +144,7 @@ function ModelSelectorImpl({ variant = "outline", size = "sm", contentClassName,
 			models={modelOptions}
 			value={value}
 			onValueChange={(nextValue) => {
-				if (!isSelectable) return
+				if (!isSelectable || !modelIds.has(nextValue)) return
 				setAssistantModel(nextValue)
 			}}
 		>
