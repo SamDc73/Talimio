@@ -140,12 +140,12 @@ export function PersonalizationDialog({ open, onOpenChange }) {
 
 		const payload = {
 			url: trimmedUrl,
-			auth_type: serverForm.authType,
+			authType: serverForm.authType,
 			enabled: true,
 		}
 
 		if (serverForm.authType === "bearer") {
-			payload.auth_token = serverForm.authToken.trim()
+			payload.authToken = serverForm.authToken.trim()
 		}
 
 		if (headerEntries.length > 0) {
