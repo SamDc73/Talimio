@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import AliasChoices, AnyHttpUrl, ConfigDict, Field, SecretStr, ValidationInfo, field_validator
+from pydantic import AnyHttpUrl, ConfigDict, Field, SecretStr, ValidationInfo, field_validator
 
 from src.config.schema_casing import CamelModel
 
@@ -22,8 +22,7 @@ class MCPServerCreateRequest(CamelModel):
     auth_token: SecretStr | None = None
     static_headers: dict[str, SecretStr] | None = Field(
         default=None,
-        validation_alias=AliasChoices("static_headers", "staticHeaders", "headers"),
-        serialization_alias="headers",
+        alias="headers",
         description="Static headers to send with every MCP request",
     )
     enabled: bool = True
