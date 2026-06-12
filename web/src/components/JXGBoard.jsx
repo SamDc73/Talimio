@@ -1,6 +1,6 @@
 import JXG from "jsxgraph"
 import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react"
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/Button"
 import { cn } from "@/lib/utils"
 
@@ -44,6 +44,13 @@ function readCssColor(cssVariable, fallback) {
 
 	const value = getComputedStyle(document.documentElement).getPropertyValue(cssVariable).trim()
 	return value || fallback
+}
+
+function isDarkTheme() {
+	if (typeof document === "undefined") {
+		return false
+	}
+	return document.documentElement.classList.contains("dark")
 }
 
 function getBoardPalette() {
@@ -166,13 +173,13 @@ export function JXGBoard({
 		}
 	}, [isVisible])
 
-	useEffect(() => {
-		if (!isVisible || !boardHostRef.current || boardRef.current) {
-			return
+	const createBoard = useCallback(() => {
+		const hostElement = boardHostRef.current
+		if (!hostElement) {
+			return null
 		}
 
 		const resolvedBoundingBox = boundingBoxKey.split(",").map(Number)
-		const hostElement = boardHostRef.current
 		const themeOptions = getThemeOptions(resolvedTheme)
 
 		const board = JXG.JSXGraph.initBoard(boardId, {
@@ -316,7 +323,40 @@ export function JXGBoard({
 			JXG.JSXGraph.freeBoard(board)
 			boardRef.current = null
 		}
-	}, [axis, boardId, boundingBoxKey, grid, isVisible, keepAspectRatio, resolvedTheme])
+	}, [axis, boardId, boundingBoxKey, grid, keepAspectRatio, resolvedTheme])
+
+	useEffect(() => {
+		if (!isVisible || !boardHostRef.current || boardRef.current) {
+			return
+		}
+
+		// Create the board now, then rebuild it whenever the app light/dark theme
+		// toggles. The palette is resolved from CSS variables at creation time and the
+		// setup callback bakes those colors into its elements, so a mounted board must
+		// re-init to pick up the new `.dark` tokens. Mirrors the MutationObserver
+		// theme-sync pattern in EpubViewer (observe <html> class, cleanup disconnect).
+		let teardownBoard = createBoard()
+		let wasDark = isDarkTheme()
+
+		const observer = new MutationObserver(() => {
+			const isDark = isDarkTheme()
+			if (isDark === wasDark) {
+				return
+			}
+			wasDark = isDark
+			teardownBoard?.()
+			teardownBoard = createBoard()
+		})
+		observer.observe(document.documentElement, {
+			attributes: true,
+			attributeFilter: ["class"],
+		})
+
+		return () => {
+			observer.disconnect()
+			teardownBoard?.()
+		}
+	}, [createBoard, isVisible])
 
 	return (
 		<section

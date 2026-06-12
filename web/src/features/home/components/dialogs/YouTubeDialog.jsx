@@ -19,7 +19,7 @@ const YOUTUBE_HOSTS = new Set([
 	"www.youtube-nocookie.com",
 ])
 const YOUTUBE_URL_FIELDSET_CLASS_NAME =
-	"relative flex flex-col rounded-lg border border-border/70 bg-background/95 shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-video) focus-within:ring-4 focus-within:ring-(--color-video)/10"
+	"relative flex flex-col rounded-lg border border-input bg-background/95 shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-video) focus-within:ring-4 focus-within:ring-(--color-video)/10"
 
 function extractYouTubeVideoId(rawUrl) {
 	let parsedUrl

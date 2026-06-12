@@ -78,7 +78,7 @@ const ACCEPTED_ATTACHMENT_MIME_TYPES = {
 }
 
 const COURSE_PROMPT_FIELDSET_CLASS_NAME =
-	"relative flex flex-col rounded-lg border border-border/70 bg-background/95 shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
+	"relative flex flex-col rounded-lg border border-input bg-background/95 shadow-sm transition-all duration-200 hover:border-muted-foreground/30 focus-within:border-(--color-course) focus-within:ring-4 focus-within:ring-(--color-course)/10"
 const COURSE_ATTACHMENT_CHIP_CLASS_NAME =
 	"caption-bold group flex items-center gap-2xs rounded-md border border-border/70 bg-muted/40 px-sm py-xs text-foreground"
 const ACTIVE_CHIP =
@@ -778,7 +778,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 																				<Loader2 className="size-1.5 animate-spin text-(--color-course)" />
 																			)}
 																			{attachment.status === "uploaded" && (
-																				<Check className="size-1.5 text-green-500" />
+																				<Check className="size-1.5 text-completed" />
 																			)}
 																			{attachment.status === "failed" && (
 																				<button

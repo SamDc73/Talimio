@@ -11,7 +11,7 @@ const ThemeContext = createContext(undefined)
 
 export function ThemeProvider({ children }) {
 	// Get theme state and actions from Zustand store with proper selectors
-	const theme = useAppStore((state) => state.preferences?.theme ?? "light")
+	const theme = useAppStore((state) => state.preferences?.theme ?? "system")
 	const updatePreference = useAppStore((state) => state.updatePreference)
 
 	/**

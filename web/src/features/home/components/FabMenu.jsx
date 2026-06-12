@@ -17,7 +17,7 @@ export default function FabMenu({ isFabExpanded, onToggleExpanded, onGenerateCou
 					>
 						<TooltipButton
 							variant="secondary"
-							className="rounded-full size-14  shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 bg-course/10 hover:bg-course/20 border-course/20"
+							className="rounded-full size-14  shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 bg-course/10 hover:bg-course/20 border-course/20 dark:border dark:border-course/60 dark:bg-surface-2 dark:hover:bg-surface-3"
 							onClick={() => {
 								onGenerateCourse()
 								onToggleExpanded()
@@ -30,7 +30,7 @@ export default function FabMenu({ isFabExpanded, onToggleExpanded, onGenerateCou
 						</TooltipButton>
 						<TooltipButton
 							variant="secondary"
-							className="rounded-full size-14  shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 bg-book/10 hover:bg-book/20 border-book/20"
+							className="rounded-full size-14  shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 bg-book/10 hover:bg-book/20 border-book/20 dark:border dark:border-book/60 dark:bg-surface-2 dark:hover:bg-surface-3"
 							onClick={() => {
 								onUploadBook()
 								onToggleExpanded()
@@ -43,7 +43,7 @@ export default function FabMenu({ isFabExpanded, onToggleExpanded, onGenerateCou
 						</TooltipButton>
 						<TooltipButton
 							variant="secondary"
-							className="rounded-full size-14  shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 bg-video/10 hover:bg-video/20 border-video/20"
+							className="rounded-full size-14  shadow-lg hover:shadow-xl transition-all duration-200 hover:-translate-y-0.5 bg-video/10 hover:bg-video/20 border-video/20 dark:border dark:border-video/60 dark:bg-surface-2 dark:hover:bg-surface-3"
 							onClick={() => {
 								onAddYoutube()
 								onToggleExpanded()

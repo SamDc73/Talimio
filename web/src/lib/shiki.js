@@ -1,9 +1,11 @@
 import { createHighlighter } from "shiki"
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript"
 
-// Single Catppuccin Latte flavor across the app. To support light + dark in the
-// future, add the other flavors here and select per-theme at the call site.
-const THEME = "catppuccin-latte"
+// Dual Catppuccin flavors: Latte for light, Frappé for dark. Shiki emits both in
+// a single pass with defaultColor:"light" — Latte as the normal inline color and
+// Frappé as --shiki-dark/--shiki-dark-bg CSS vars. A .dark rule in app.css swaps
+// to the dark vars, so light renders exactly as before.
+const THEMES = { light: "catppuccin-latte", dark: "catppuccin-frappe" }
 
 // Map common alias/label cases to Shiki language ids. Anything not in this map
 // is passed through verbatim (Shiki accepts canonical ids directly).
@@ -47,7 +49,7 @@ let highlighterPromise = null
 function getHighlighter() {
 	if (!highlighterPromise) {
 		highlighterPromise = createHighlighter({
-			themes: [THEME],
+			themes: [THEMES.light, THEMES.dark],
 			langs: [],
 			engine: createJavaScriptRegexEngine(),
 		})
@@ -69,12 +71,21 @@ async function ensureLanguageLoaded(highlighter, language) {
 	}
 }
 
+// Dual-theme tokens carry their colors on `htmlStyle` (a { color, --shiki-dark }
+// object in Shiki v4) instead of the single `color` string, so flatten it into an
+// inline style string the same way Shiki's own HTML renderer does.
+function tokenStyle(token) {
+	return Object.entries(token.htmlStyle)
+		.map(([property, value]) => `${property}:${value}`)
+		.join(";")
+}
+
 // Full <pre class="shiki"><code>...</code></pre> output. Use for read-only
 // surfaces (chat, quizzes, lesson display).
 export async function highlightToHtml(code, language) {
 	const highlighter = await getHighlighter()
 	const lang = await ensureLanguageLoaded(highlighter, normalizeLanguage(language))
-	return highlighter.codeToHtml(code, { lang, theme: THEME })
+	return highlighter.codeToHtml(code, { lang, themes: THEMES, defaultColor: "light" })
 }
 
 // Inner colored <span> stream only (no wrapping <pre><code>). Use when the
@@ -82,10 +93,10 @@ export async function highlightToHtml(code, language) {
 export async function highlightToInnerHtml(code, language) {
 	const highlighter = await getHighlighter()
 	const lang = await ensureLanguageLoaded(highlighter, normalizeLanguage(language))
-	const { tokens } = highlighter.codeToTokens(code, { lang, theme: THEME })
+	const { tokens } = highlighter.codeToTokens(code, { lang, themes: THEMES, defaultColor: "light" })
 	return tokens
 		.map((line) =>
-			line.map((token) => `<span style="color:${token.color}">${escapeHtml(token.content)}</span>`).join("")
+			line.map((token) => `<span style="${tokenStyle(token)}">${escapeHtml(token.content)}</span>`).join("")
 		)
 		.join("\n")
 }

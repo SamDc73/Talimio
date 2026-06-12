@@ -91,7 +91,7 @@ export default function WorkspaceCodeRunner({ workspaceId, lessonId, courseId })
 						)
 					})}
 				</div>
-				<div>
+				<div className="bg-code-surface">
 					<ErrorBoundary>
 						<CodeBlockEditor
 							value={activeFile?.code || ""}
