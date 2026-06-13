@@ -827,6 +827,8 @@ class LLMClient:
             request_model = model or settings.primary_llm_model
             tool_names = self._collect_tool_names(tools)
 
+            # `timeout` bounds each attempt inside LiteLLM; retries (litellm.num_retries)
+            # and `fallbacks` add attempts beyond it, so no outer total-time cap belongs here.
             common_kwargs: dict[str, object] = {"model": request_model, "timeout": settings.ai_request_timeout}
             if user_id:
                 common_kwargs["user"] = str(user_id)
@@ -862,7 +864,7 @@ class LLMClient:
                 response_kwargs["input"] = list(messages)
                 if previous_response_id is not None:
                     response_kwargs["previous_response_id"] = previous_response_id
-                response = await asyncio.wait_for(litellm.responses(**response_kwargs), timeout=settings.ai_request_timeout)
+                response = await litellm.responses(**response_kwargs)
                 if not stream:
                     self._record_response_observability_fields(response, tool_names=tool_names)
                 return response
@@ -877,7 +879,7 @@ class LLMClient:
             if model is None and len(settings.primary_llm_models) > 1:
                 completion_kwargs["fallbacks"] = settings.primary_llm_models[1:]
 
-            response = await asyncio.wait_for(litellm.acompletion(**completion_kwargs), timeout=settings.ai_request_timeout)
+            response = await litellm.acompletion(**completion_kwargs)
             if not stream:
                 self._record_response_observability_fields(response, tool_names=tool_names)
             return response
