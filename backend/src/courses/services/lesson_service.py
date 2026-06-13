@@ -45,6 +45,7 @@ from src.courses.services.lesson_version_service import LessonVersionService
 from src.courses.services.lesson_window_service import LessonWindowService
 from src.exceptions import ConflictError, NotFoundError, UpstreamUnavailableError, ValidationError
 from src.memory import record_course_feedback, record_teaching_event
+from src.memory.models import TeachingEvent
 
 
 logger = logging.getLogger(__name__)
@@ -700,7 +701,6 @@ class LessonService:
             user_id=self.user_id,
             generation_mode="adaptive_revisit_pass",
             source_version_id=current_version.id,
-            force=force,
         )
         return pending_version, []
 
@@ -1042,6 +1042,12 @@ class LessonService:
         selected_windows: list[LessonVersionWindow] = []
         if selected_version.generation_status != "generating":
             selected_windows = await lesson_window_service.get_or_build_windows(lesson_version=selected_version)
+            await self._record_revisit_pass_shown_once(
+                lesson=lesson,
+                course=course,
+                version=selected_version,
+                window_count=len(selected_windows),
+            )
 
         return await self._build_lesson_detail_response(
             lesson=lesson,
@@ -1138,16 +1144,11 @@ class LessonService:
             message = "Unable to generate lesson content. Please try again."
             raise UpstreamUnavailableError(message, feature_area="courses") from exc
 
-        await record_teaching_event(
-            self.session,
-            user_id=course.user_id,
-            course_id=course.id,
-            event_type="lesson_version_shown",
-            lesson_id=lesson.id,
-            lesson_version_id=selected_version.id,
-            concept_id=lesson.concept_id,
-            strategy_label=selected_version.version_kind,
-            window_count=len(selected_windows) if selected_windows else None,
+        await self._record_revisit_pass_shown_once(
+            lesson=lesson,
+            course=course,
+            version=selected_version,
+            window_count=len(selected_windows),
         )
         await self.session.refresh(lesson)
         available_versions = await lesson_version_service.list_versions(lesson=lesson)
@@ -1247,7 +1248,6 @@ class LessonService:
         generation_mode: LessonGenerationMode,
         source_version_id: uuid.UUID | None,
         critique_text: str | None,
-        force: bool,
     ) -> None:
         """Job body: fill one pending lesson version with generated content.
 
@@ -1279,7 +1279,6 @@ class LessonService:
                 generation_mode=generation_mode,
                 source_version_id=source_version_id,
                 critique_text=critique_text,
-                force=force,
             )
             await self.session.commit()
         except Exception:
@@ -1306,7 +1305,6 @@ class LessonService:
         generation_mode: LessonGenerationMode,
         source_version_id: uuid.UUID | None,
         critique_text: str | None,
-        force: bool,
     ) -> None:
         lesson_version_service = LessonVersionService(self.session)
         lesson_window_service = LessonWindowService(self.session)
@@ -1320,7 +1318,6 @@ class LessonService:
             recommendation = self._build_revisit_recommendation(
                 source_version=source_version,
                 source_reason=self._build_source_reason(version=version) or "Adaptive revisit pass.",
-                force=force,
             )
 
         lesson_context = await self._prepare_lesson_context(
@@ -1360,13 +1357,47 @@ class LessonService:
         *,
         source_version: LessonVersion,
         source_reason: str,
-        force: bool,
     ) -> AdaptivePassRecommendation:
-        del force
         return AdaptivePassRecommendation(
             action="deepen_with_next_major_pass",
             recommended_major_version=source_version.major_version + 1,
             reason=source_reason,
+        )
+
+    async def _record_revisit_pass_shown_once(
+        self,
+        *,
+        lesson: Lesson,
+        course: Course,
+        version: LessonVersion,
+        window_count: int,
+    ) -> None:
+        if version.version_kind != "revisit_pass" or version.generation_status != "ready":
+            return
+
+        existing_event_id = await self.session.scalar(
+            select(TeachingEvent.id)
+            .where(
+                TeachingEvent.user_id == course.user_id,
+                TeachingEvent.course_id == course.id,
+                TeachingEvent.event_type == "lesson_version_shown",
+                TeachingEvent.lesson_version_id == version.id,
+            )
+            .limit(1)
+        )
+        if existing_event_id is not None:
+            return
+
+        await record_teaching_event(
+            self.session,
+            user_id=course.user_id,
+            course_id=course.id,
+            event_type="lesson_version_shown",
+            lesson_id=lesson.id,
+            lesson_version_id=version.id,
+            concept_id=lesson.concept_id,
+            strategy_label=version.version_kind,
+            window_count=window_count,
         )
 
     async def _record_generation_event(
@@ -1378,8 +1409,8 @@ class LessonService:
         generation_mode: LessonGenerationMode,
         critique_text: str | None,
     ) -> None:
-        # next-pass records ``lesson_version_shown`` at request time; first-pass
-        # reads record nothing. Only regeneration owns a generation-time event.
+        # Ready revisit-pass reads record ``lesson_version_shown`` once. Only
+        # regeneration owns a generation-time event.
         if generation_mode != "regeneration":
             return
         await record_teaching_event(
