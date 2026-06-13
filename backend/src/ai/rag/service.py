@@ -218,7 +218,12 @@ class RAGService:
             except OSError:
                 logger.warning("rag.book.temp_cleanup_failed", extra={"book_id": str(book.id)}, exc_info=True)
 
-    async def process_book(self, session: AsyncSession, book_id: uuid.UUID) -> None:
+    async def process_book(self, book_id: uuid.UUID) -> None:
+        """Process one book in a dedicated RAG-owned session."""
+        async with async_session_maker() as session:
+            await self._process_book_in_session(session, book_id)
+
+    async def _process_book_in_session(self, session: AsyncSession, book_id: uuid.UUID) -> None:
         """Process a book (parse, chunk, embed, index) with unified RAG pipeline."""
         try:
             # Load book
@@ -328,11 +333,14 @@ class RAGService:
             .all()
         )
         for book_id in book_ids:
-            await self.process_book(session, book_id)
-        if not book_ids:
-            await session.commit()
+            await self.process_book(book_id)
 
-    async def process_video(self, session: AsyncSession, video_id: uuid.UUID) -> None:
+    async def process_video(self, video_id: uuid.UUID) -> None:
+        """Process one video in a dedicated RAG-owned session."""
+        async with async_session_maker() as session:
+            await self._process_video_in_session(session, video_id)
+
+    async def _process_video_in_session(self, session: AsyncSession, video_id: uuid.UUID) -> None:
         """Process a video (transcript segments to chunks → embed → index)."""
         try:
             video = await session.get(Video, video_id)
@@ -358,6 +366,7 @@ class RAGService:
                 logger.warning("rag.video.no_transcript_chunks", extra={"video_id": str(video_id)})
                 video.rag_status = RAG_STATUS_FAILED
                 await session.flush()
+                await session.commit()
                 return
 
             await self.vector_rag.store_document_chunks_with_embeddings(
@@ -373,23 +382,27 @@ class RAGService:
             if not video:
                 # Video was deleted while embedding; clean up any chunks written in this run.
                 await self.delete_chunks_by_doc_id(session, video_id, doc_type=CONTENT_TYPE_VIDEO)
+                await session.commit()
                 return
 
             # Mark completed
             video.rag_status = RAG_STATUS_COMPLETED
             video.rag_processed_at = datetime.now(UTC)
             await session.flush()
+            await session.commit()
 
             logger.info("Successfully processed video %s", video_id)
 
         except _RAG_RUNTIME_ERROR_TYPES:
             logger.exception("Failed to process video %s", video_id)
             try:
+                await session.rollback()
                 video = await session.get(Video, video_id)
                 if video:
                     video.rag_status = RAG_STATUS_FAILED
-                    await session.flush()
+                    await session.commit()
             except SQLAlchemyError:
+                await session.rollback()
                 logger.debug("Failed to set video %s failed status after processing error", video_id, exc_info=True)
             raise
 
@@ -418,49 +431,51 @@ class RAGService:
         return any(chunk.strip() for chunk in chunks)
 
     async def search_documents(
-        self, session: AsyncSession, user_id: uuid.UUID, course_id: uuid.UUID, query: str, top_k: int | None = None
+        self, user_id: uuid.UUID, course_id: uuid.UUID, query: str, top_k: int | None = None
     ) -> list[SearchResult]:
-        """Search documents scoped by session and user ownership."""
-        await self._ensure_course_owned(session, user_id, course_id)
-        await session.commit()
-        return await self.search_course_documents(session, course_id, query, top_k)
+        """Search documents scoped by user ownership."""
+        try:
+            async with async_session_maker() as session:
+                await self._ensure_course_owned(session, user_id, course_id)
+                candidates, effective_top_k, rerank_model = await self._load_course_document_candidates(
+                    session=session,
+                    course_id=course_id,
+                    query=query,
+                    top_k=top_k,
+                )
+                await session.commit()
+
+            return await self._finalize_course_document_search(
+                query=query,
+                candidates=candidates,
+                top_k=effective_top_k,
+                rerank_model=rerank_model,
+            )
+
+        except _RAG_RUNTIME_ERROR_TYPES as error:
+            logger.exception("Failed to search documents")
+            message = "Failed to search documents"
+            raise RagUnavailableError(message) from error
 
     async def search_course_documents(
-        self, session: AsyncSession, course_id: uuid.UUID, query: str, top_k: int | None = None
+        self, course_id: uuid.UUID, query: str, top_k: int | None = None
     ) -> list[SearchResult]:
         """Search book chunks reachable through the course's attachments."""
         try:
-            if top_k is None:
-                top_k = DEFAULT_SEARCH_TOP_K
-
-            rerank_model = self.config.rerank_model.strip()
-            should_rerank = bool(rerank_model)
-            search_limit = top_k * RERANK_CANDIDATE_MULTIPLIER if should_rerank else top_k
-
-            candidates = await self.vector_rag.search(
-                session=session,
-                doc_type=CONTENT_TYPE_BOOK,
-                query=query,
-                limit=search_limit,
-                course_id=course_id,
-            )
-            await session.commit()
-
-            if not should_rerank:
-                logger.info(
-                    "rag.rerank",
-                    extra={
-                        "rerank_ran": False,
-                        "rerank_model": "",
-                        "candidates_in": len(candidates),
-                        "results_out": len(candidates),
-                        "latency_ms": 0,
-                    },
+            async with async_session_maker() as session:
+                candidates, effective_top_k, rerank_model = await self._load_course_document_candidates(
+                    session=session,
+                    course_id=course_id,
+                    query=query,
+                    top_k=top_k,
                 )
-                return candidates
+                await session.commit()
 
-            return await self._rerank_candidates(
-                query=query, candidates=candidates, top_k=top_k, rerank_model=rerank_model
+            return await self._finalize_course_document_search(
+                query=query,
+                candidates=candidates,
+                top_k=effective_top_k,
+                rerank_model=rerank_model,
             )
 
         except _RAG_RUNTIME_ERROR_TYPES as error:
@@ -470,7 +485,6 @@ class RAGService:
 
     async def search_lesson_documents(
         self,
-        session: AsyncSession,
         course_id: uuid.UUID,
         query: str,
         *,
@@ -478,8 +492,9 @@ class RAGService:
         top_k: int = LESSON_CONTEXT_TOP_K,
     ) -> list[SearchResult]:
         """Search course sources with lesson-specific query expansion and context packing."""
-        has_searchable_chunks = await self._has_searchable_attached_book_chunks(session=session, course_id=course_id)
-        await session.commit()
+        async with async_session_maker() as session:
+            has_searchable_chunks = await self._has_searchable_attached_book_chunks(session=session, course_id=course_id)
+            await session.commit()
         if not has_searchable_chunks:
             return []
 
@@ -488,14 +503,12 @@ class RAGService:
 
         if self._word_count(retrieval_query) < MULTI_VIEW_MIN_WORDS:
             results = await self.search_course_documents(
-                session=session,
                 course_id=course_id,
                 query=retrieval_query,
                 top_k=LESSON_RETRIEVAL_CANDIDATE_TOP_K,
             )
         else:
             results = await self._search_lesson_multi_view(
-                session=session,
                 course_id=course_id,
                 query=retrieval_query,
                 top_k=LESSON_RETRIEVAL_CANDIDATE_TOP_K,
@@ -504,6 +517,53 @@ class RAGService:
         deduped_results = deduplicate_by_similarity(results)
         filtered_results = await self._filter_results_by_utility(query=retrieval_query, results=deduped_results)
         return filtered_results[:top_k]
+
+    async def _load_course_document_candidates(
+        self,
+        *,
+        session: AsyncSession,
+        course_id: uuid.UUID,
+        query: str,
+        top_k: int | None,
+    ) -> tuple[list[SearchResult], int, str]:
+        effective_top_k = top_k if top_k is not None else DEFAULT_SEARCH_TOP_K
+        rerank_model = self.config.rerank_model.strip()
+        search_limit = effective_top_k * RERANK_CANDIDATE_MULTIPLIER if rerank_model else effective_top_k
+        candidates = await self.vector_rag.search(
+            session=session,
+            doc_type=CONTENT_TYPE_BOOK,
+            query=query,
+            limit=search_limit,
+            course_id=course_id,
+        )
+        return candidates, effective_top_k, rerank_model
+
+    async def _finalize_course_document_search(
+        self,
+        *,
+        query: str,
+        candidates: list[SearchResult],
+        top_k: int,
+        rerank_model: str,
+    ) -> list[SearchResult]:
+        if not rerank_model:
+            logger.info(
+                "rag.rerank",
+                extra={
+                    "rerank_ran": False,
+                    "rerank_model": "",
+                    "candidates_in": len(candidates),
+                    "results_out": len(candidates),
+                    "latency_ms": 0,
+                },
+            )
+            return candidates
+        return await self._rerank_candidates(
+            query=query,
+            candidates=candidates,
+            top_k=top_k,
+            rerank_model=rerank_model,
+        )
 
     async def _has_searchable_attached_book_chunks(self, *, session: AsyncSession, course_id: uuid.UUID) -> bool:
         has_chunks = await session.scalar(
@@ -558,18 +618,17 @@ class RAGService:
     async def _search_lesson_multi_view(
         self,
         *,
-        session: AsyncSession,
         course_id: uuid.UUID,
         query: str,
         top_k: int,
     ) -> list[SearchResult]:
         perspective_queries = await self._build_multi_view_queries(query)
         if not perspective_queries:
-            return await self.search_course_documents(session=session, course_id=course_id, query=query, top_k=top_k)
+            return await self.search_course_documents(course_id=course_id, query=query, top_k=top_k)
 
         result_sets = await asyncio.gather(
             *(
-                self._search_course_documents_in_new_session(
+                self.search_course_documents(
                     course_id=course_id,
                     query=perspective_query,
                     top_k=top_k,
@@ -591,18 +650,8 @@ class RAGService:
             valid_result_sets.append(result_set)
 
         if not valid_result_sets:
-            return await self.search_course_documents(session=session, course_id=course_id, query=query, top_k=top_k)
+            return await self.search_course_documents(course_id=course_id, query=query, top_k=top_k)
         return self._merge_results_with_rrf(valid_result_sets, top_k=top_k)
-
-    async def _search_course_documents_in_new_session(
-        self,
-        *,
-        course_id: uuid.UUID,
-        query: str,
-        top_k: int,
-    ) -> list[SearchResult]:
-        async with async_session_maker() as search_session:
-            return await self.search_course_documents(search_session, course_id=course_id, query=query, top_k=top_k)
 
     async def _build_multi_view_queries(self, query: str) -> list[str]:
         llm_client = LLMClient()

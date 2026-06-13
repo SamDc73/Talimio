@@ -85,8 +85,6 @@ class CourseContentService:
         if not course.title or course.title == "Draft course":
             course.title = f"Generating: {prompt_text[:30]}..." if prompt_text else "Generating course..."
         course.generation_status = "generating"
-        # The prompt is needed by the outline job; stash it where the job reloads it.
-        course.description = prompt_text or course.description
 
         session.add(course)
         await session.flush()
@@ -101,6 +99,7 @@ class CourseContentService:
             session,
             course_id=course_id,
             user_id=user_id,
+            prompt_text=prompt_text,
             image_data_urls=image_payload,
             book_ids=linked_book_ids,
         )
@@ -123,14 +122,14 @@ class CourseContentService:
         *,
         course_id: uuid.UUID,
         user_id: uuid.UUID,
+        prompt_text: str,
         image_data_urls: Sequence[str],
         book_ids: Sequence[uuid.UUID],
     ) -> None:
         """Job body: build the outline in this dedicated session and eager-enqueue lesson content.
 
-        Owns its own commit/rollback. The course's ``description`` still holds the
-        original prompt (set at draft creation); it is overwritten with the
-        generated description once the outline lands.
+        Owns its own commit/rollback. The original prompt is passed in the job
+        payload; ``course.description`` stays user-facing while generation runs.
         """
         tracer = trace.get_tracer(__name__)
         with tracer.start_as_current_span("courses.generation.outline") as span:
@@ -155,7 +154,7 @@ class CourseContentService:
                     await session.commit()
 
                 is_adaptive = bool(course.adaptive_enabled)
-                prompt_text = self._normalize_prompt_text(course.description)
+                prompt_text = self._normalize_prompt_text(prompt_text)
                 image_payload = list(image_data_urls)
                 book_id_list = list(book_ids)
                 span.set_attribute("app.adaptive_enabled", is_adaptive)
@@ -282,7 +281,6 @@ class CourseContentService:
             await rag_service.ensure_attached_books_processed(session, course.id)
             prompt_text = await self._build_augmented_prompt(
                 rag_service=rag_service,
-                session=session,
                 user_id=user_id,
                 course_id=course.id,
                 prompt_text=prompt_text,
@@ -436,7 +434,6 @@ class CourseContentService:
         self,
         *,
         rag_service: RAGService,
-        session: AsyncSession,
         user_id: uuid.UUID,
         course_id: uuid.UUID,
         prompt_text: str,
@@ -475,7 +472,6 @@ class CourseContentService:
             span.set_attribute("llm.retrieval.top_k", 5)
 
             results = await rag_service.search_documents(
-                session=session,
                 user_id=user_id,
                 course_id=course_id,
                 query=prompt_text,

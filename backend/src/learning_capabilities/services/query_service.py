@@ -225,11 +225,10 @@ class LearningCapabilityQueryService:
             return SearchCourseSourcesCapabilityOutput(course_id=course.id, items=[])
 
         results = await RAGService().search_documents(
-            self._session,
-            user_id,
-            course.id,
-            query_text,
-            payload.limit,
+            user_id=user_id,
+            course_id=course.id,
+            query=query_text,
+            top_k=payload.limit,
         )
         items = [_build_source_excerpt(course_id=course.id, result=result) for result in results]
         return SearchCourseSourcesCapabilityOutput(course_id=course.id, items=items)

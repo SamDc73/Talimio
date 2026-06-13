@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 async def generate_course_outline(
     course_id: str,
     user_id: str,
+    prompt_text: str,
     image_data_urls: list[str] | None = None,
     book_ids: list[str] | None = None,
 ) -> None:
@@ -33,6 +34,7 @@ async def generate_course_outline(
     await run_course_outline_generation(
         course_id=uuid.UUID(course_id),
         user_id=uuid.UUID(user_id),
+        prompt_text=prompt_text,
         image_data_urls=list(image_data_urls or []),
         book_ids=[uuid.UUID(book_id) for book_id in (book_ids or [])],
     )

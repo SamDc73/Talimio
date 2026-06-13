@@ -37,6 +37,7 @@ async def defer_course_outline_generation(
     *,
     course_id: uuid.UUID,
     user_id: uuid.UUID,
+    prompt_text: str,
     image_data_urls: list[str],
     book_ids: list[uuid.UUID],
 ) -> int | None:
@@ -48,6 +49,7 @@ async def defer_course_outline_generation(
         args={
             "course_id": str(course_id),
             "user_id": str(user_id),
+            "prompt_text": prompt_text,
             "image_data_urls": list(image_data_urls),
             "book_ids": [str(book_id) for book_id in book_ids],
         },
@@ -85,6 +87,7 @@ async def run_course_outline_generation(
     *,
     course_id: uuid.UUID,
     user_id: uuid.UUID,
+    prompt_text: str,
     image_data_urls: list[str],
     book_ids: list[uuid.UUID],
 ) -> None:
@@ -96,6 +99,7 @@ async def run_course_outline_generation(
         await service.run_outline_generation_job(
             course_id=course_id,
             user_id=user_id,
+            prompt_text=prompt_text,
             image_data_urls=image_data_urls,
             book_ids=book_ids,
         )

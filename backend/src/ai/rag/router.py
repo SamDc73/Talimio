@@ -29,10 +29,9 @@ async def search_documents(
 ) -> SearchResponse:
     """Search attached book sources within a course using RAG."""
     results = await rag_service.search_documents(
-        auth.session,
-        auth.user_id,
-        course_id,
-        search_request.query,
-        search_request.top_k,
+        user_id=auth.user_id,
+        course_id=course_id,
+        query=search_request.query,
+        top_k=search_request.top_k,
     )
     return SearchResponse(results=results, total=len(results))
