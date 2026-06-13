@@ -325,10 +325,6 @@ async def signup(session: DbSession, data: SignupRequest) -> SignupResponse:
     _validate_password_or_raise(data.password)
     username = await _resolve_signup_username(session, full_name=data.full_name, username=data.username)
 
-    existing = await local_crud.get_user_by_email(session, normalized_email)
-    if existing:
-        return _GENERIC_SIGNUP_RESPONSE
-
     try:
         user = await local_crud.create_user(
             session,
