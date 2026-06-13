@@ -274,6 +274,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const fileInputRef = useRef(null)
 	const promptInputRef = useRef(null)
 	const attachmentSequenceRef = useRef(0)
+	const uploadControllersRef = useRef(new Map())
 	const attachmentsRef = useRef([])
 	const promptId = useId()
 
@@ -282,17 +283,34 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	const selfAssessmentEnabled = useAppStore(selectSelfAssessmentEnabled) ?? false
 	const setSelfAssessmentEnabled = useAppStore(selectSetSelfAssessmentEnabled)
 
+	const abortBookUpload = useCallback((attachmentId) => {
+		const controller = uploadControllersRef.current.get(attachmentId)
+		if (!controller) {
+			return
+		}
+		controller.abort()
+		uploadControllersRef.current.delete(attachmentId)
+	}, [])
+
+	const abortAllBookUploads = useCallback(() => {
+		for (const controller of uploadControllersRef.current.values()) {
+			controller.abort()
+		}
+		uploadControllersRef.current.clear()
+	}, [])
+
 	useEffect(() => {
 		attachmentsRef.current = attachments
 	}, [attachments])
 
 	useEffect(() => {
 		return () => {
+			abortAllBookUploads()
 			for (const attachment of attachmentsRef.current) {
 				revokeAttachmentPreviewUrl(attachment.previewUrl)
 			}
 		}
-	}, [])
+	}, [abortAllBookUploads])
 
 	useEffect(() => {
 		if (!isGenerating) {
@@ -309,6 +327,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	}, [isGenerating])
 
 	const resetForm = useCallback(() => {
+		abortAllBookUploads()
 		setPrompt("")
 		setIsGenerating(false)
 		setPendingCourseId(null)
@@ -325,7 +344,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		if (fileInputRef.current) {
 			fileInputRef.current.value = ""
 		}
-	}, [defaultAdaptiveEnabled])
+	}, [abortAllBookUploads, defaultAdaptiveEnabled])
 
 	const closeModal = useCallback(
 		(force = false) => {
@@ -422,24 +441,17 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 
 		const newAttachments = validFiles.map((file) => {
 			attachmentSequenceRef.current += 1
-			const isBook = isBookAttachmentFile(file)
 			return {
 				id: buildAttachmentId(file, attachmentSequenceRef.current),
 				file,
 				previewUrl: createAttachmentPreviewUrl(file),
-				status: isBook ? "uploading" : "idle",
+				status: "idle",
 				bookId: null,
 				error: null,
 			}
 		})
 
 		setAttachments((prev) => [...prev, ...newAttachments])
-
-		for (const attachment of newAttachments) {
-			if (isBookAttachmentFile(attachment.file)) {
-				uploadBookAttachment(attachment.id, attachment.file)
-			}
-		}
 	}
 
 	const handleFileInputChange = (event) => {
@@ -476,6 +488,7 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 		if (isGenerating) {
 			return
 		}
+		abortBookUpload(attachmentId)
 		setAttachments((previousAttachments) => {
 			const nextAttachments = []
 			for (const attachment of previousAttachments) {
@@ -490,25 +503,49 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 	}
 
 	const uploadBookAttachment = async (attachmentId, file) => {
+		abortBookUpload(attachmentId)
+		const controller = new AbortController()
+		uploadControllersRef.current.set(attachmentId, controller)
+		setAttachments((prev) => prev.map((a) => (a.id === attachmentId ? { ...a, status: "uploading", error: null } : a)))
+
 		try {
-			const book = await createBookFromCourseAttachment(file)
-			setAttachments((prev) =>
-				prev.map((a) => (a.id === attachmentId ? { ...a, status: "uploaded", bookId: book.id } : a))
-			)
+			const book = await createBookFromCourseAttachment(file, { signal: controller.signal })
+			if (!book?.id) {
+				throw new Error("Book upload finished without a book ID")
+			}
+			if (controller.signal.aborted) {
+				return { aborted: true }
+			}
+			setAttachments((prev) => {
+				if (!prev.some((a) => a.id === attachmentId)) {
+					return prev
+				}
+				return prev.map((a) => (a.id === attachmentId ? { ...a, status: "uploaded", bookId: book.id } : a))
+			})
+			return { bookId: book.id }
 		} catch (uploadError) {
-			setAttachments((prev) =>
-				prev.map((a) => (a.id === attachmentId ? { ...a, status: "failed", error: uploadError.message } : a))
-			)
+			if (controller.signal.aborted || uploadError?.name === "AbortError") {
+				return { aborted: true }
+			}
+			setAttachments((prev) => {
+				if (!prev.some((a) => a.id === attachmentId)) {
+					return prev
+				}
+				return prev.map((a) => (a.id === attachmentId ? { ...a, status: "failed", error: uploadError.message } : a))
+			})
+			return { error: uploadError }
+		} finally {
+			if (uploadControllersRef.current.get(attachmentId) === controller) {
+				uploadControllersRef.current.delete(attachmentId)
+			}
 		}
 	}
 
 	const retryBookUpload = (attachmentId) => {
 		const attachment = attachments.find((a) => a.id === attachmentId)
-		if (!attachment || !isBookAttachmentFile(attachment.file)) return
+		if (!attachment || !isBookAttachmentFile(attachment.file) || isGenerating) return
 
-		setAttachments((prev) => prev.map((a) => (a.id === attachmentId ? { ...a, status: "uploading", error: null } : a)))
-
-		uploadBookAttachment(attachmentId, attachment.file)
+		void uploadBookAttachment(attachmentId, attachment.file)
 	}
 
 	const handlePaste = (event) => {
@@ -586,23 +623,38 @@ function CoursePromptModal({ isOpen, onClose, onSuccess, defaultPrompt = "", def
 			return
 		}
 
-		const failedBooks = attachments.filter((a) => a.status === "failed")
-		if (failedBooks.length > 0) {
-			setError(`${failedBooks.length} book upload(s) failed. Click the retry icon or remove them.`)
-			setActiveStep(MODAL_STEPS.PROMPT)
-			return
-		}
-
 		const summaryBlock = formatSelfAssessmentSummary(responses)
 		const finalPrompt = buildFinalPrompt(trimmedPrompt, summaryBlock)
 
 		setIsGenerating(true)
 		setError("")
 
-		const bookIds = attachments.filter((a) => a.status === "uploaded" && a.bookId).map((a) => a.bookId)
 		const imageFiles = attachments.filter((a) => !isBookAttachmentFile(a.file)).map((a) => a.file)
 
 		try {
+			const bookIds = []
+			for (const attachment of attachments) {
+				if (!isBookAttachmentFile(attachment.file)) {
+					continue
+				}
+				if (attachment.status === "uploaded" && attachment.bookId) {
+					bookIds.push(attachment.bookId)
+					continue
+				}
+
+				const result = await uploadBookAttachment(attachment.id, attachment.file)
+				if (result?.bookId) {
+					bookIds.push(result.bookId)
+					continue
+				}
+
+				if (result?.aborted) {
+					throw new Error("Book upload was cancelled")
+				}
+
+				throw result?.error || new Error("Book upload failed")
+			}
+
 			const response = await courseService.createCourse({
 				prompt: finalPrompt,
 				adaptive_enabled: adaptiveEnabled,
