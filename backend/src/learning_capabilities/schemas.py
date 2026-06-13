@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import ConfigDict, Field, JsonValue
 
+from src.books.schemas import BookRagStatus
 from src.config.schema_casing import CamelModel
 
 
@@ -674,7 +675,7 @@ class BookMatch(CamelModel):
     title: str
     author: str | None = None
     archived: bool = False
-    rag_status: str = "pending"
+    rag_status: BookRagStatus = "pending"
     excerpt: str | None = None
     similarity: float | None = None
 
@@ -717,7 +718,7 @@ class CourseAttachmentItem(CamelModel):
     kind: Literal["book"] = "book"
     book_id: uuid.UUID
     title: str
-    rag_status: str
+    rag_status: BookRagStatus
     archived: bool
     created_at: datetime
 

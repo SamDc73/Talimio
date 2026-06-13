@@ -301,23 +301,28 @@ class LearningCapabilityQueryService:
             await self._session.execute(
                 text(
                     """
-                    SELECT DISTINCT ON (b.id)
-                        b.id AS book_id,
-                        b.title AS title,
-                        b.author AS author,
-                        b.archived AS archived,
-                        b.rag_status AS rag_status,
-                        chunk.content AS content,
-                        GREATEST(
-                            0.0::double precision,
-                            1.0::double precision - (chunk.embedding <=> CAST(:query_embedding AS vector))
-                        ) AS similarity
-                    FROM rag_document_chunks chunk
-                    JOIN books b ON b.id = chunk.doc_id
-                    WHERE chunk.doc_type = 'book'
-                      AND b.user_id = :user_id
-                      AND chunk.embedding IS NOT NULL
-                    ORDER BY b.id, chunk.embedding <=> CAST(:query_embedding AS vector)
+                    WITH best_book_chunks AS (
+                        SELECT DISTINCT ON (b.id)
+                            b.id AS book_id,
+                            b.title AS title,
+                            b.author AS author,
+                            b.archived AS archived,
+                            b.rag_status AS rag_status,
+                            chunk.content AS content,
+                            GREATEST(
+                                0.0::double precision,
+                                1.0::double precision - (chunk.embedding <=> CAST(:query_embedding AS vector))
+                            ) AS similarity
+                        FROM rag_document_chunks chunk
+                        JOIN books b ON b.id = chunk.doc_id
+                        WHERE chunk.doc_type = 'book'
+                          AND b.user_id = :user_id
+                          AND chunk.embedding IS NOT NULL
+                        ORDER BY b.id, chunk.embedding <=> CAST(:query_embedding AS vector)
+                    )
+                    SELECT *
+                    FROM best_book_chunks
+                    ORDER BY similarity DESC, title, book_id
                     LIMIT :limit
                     """
                 ),
