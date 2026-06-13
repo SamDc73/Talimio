@@ -270,7 +270,6 @@ class LessonService:
             rag_service = RAGService()
             learner_level = await self._resolve_learner_level(concept_id=lesson.concept_id)
             search_results = await rag_service.search_lesson_documents(
-                session=self.session,
                 course_id=course_id,
                 query=search_query,
                 learner_level=learner_level,

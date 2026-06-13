@@ -162,16 +162,10 @@ class BooksFacade:
 
     async def embed_book_background(self, book_id: uuid.UUID) -> None:
         """Process embeddings for a book in a dedicated background session."""
-        async with async_session_maker() as session:
-            try:
-                await RAGService().process_book(session, book_id)
-                await session.commit()
-            except (SQLAlchemyError, RuntimeError, ValueError):
-                try:
-                    await session.commit()
-                except SQLAlchemyError:
-                    logger.debug("Failed to commit failed RAG status for book %s", book_id, exc_info=True)
-                logger.exception("Failed to embed book %s", book_id)
+        try:
+            await RAGService().process_book(book_id)
+        except (SQLAlchemyError, RuntimeError, ValueError):
+            logger.exception("Failed to embed book %s", book_id)
 
     async def extract_book_metadata_background(self, book_id: uuid.UUID) -> None:
         """Download the uploaded file once and persist page count + table of contents.

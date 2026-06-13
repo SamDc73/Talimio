@@ -149,16 +149,10 @@ def _extract_video_id_from_url(url: str) -> str:
 
 async def _embed_video_background(video_id: uuid.UUID) -> None:
     """Background task to embed a video."""
-    async with async_session_maker() as session:
-        try:
-            await RAGService().process_video(session, video_id)
-            await session.commit()
-        except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
-            try:
-                await session.commit()
-            except SQLAlchemyError:
-                logger.debug("Failed to commit failed RAG status for video %s", video_id, exc_info=True)
-            logger.exception("Failed to embed video %s", video_id)
+    try:
+        await RAGService().process_video(video_id)
+    except (SQLAlchemyError, RuntimeError, ValueError, TypeError):
+        logger.exception("Failed to embed video %s", video_id)
 
 
 def _parse_json_tags(raw_tags: str | None) -> list[str]:
