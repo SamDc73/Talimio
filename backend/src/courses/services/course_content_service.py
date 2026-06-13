@@ -485,6 +485,9 @@ class CourseContentService:
             chunks = [result.content for result in results if result.content]
             span.set_attribute("llm.retrieval.chunk_count", len(chunks))
         if not chunks:
+            if has_linked_books:
+                message = "Selected books did not produce searchable context for course generation"
+                raise RuntimeError(message)
             return prompt_text
 
         context_block = "\n\nReference Context:\n" + "\n\n".join(chunks)

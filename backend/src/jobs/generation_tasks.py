@@ -49,7 +49,6 @@ async def generate_lesson_version(
     generation_mode: str,
     source_version_id: str | None = None,
     critique_text: str | None = None,
-    force: bool = False,
 ) -> None:
     """Fill one pending lesson version with generated content out-of-request."""
     from src.courses.services.generation_jobs import LessonGenerationMode, run_lesson_version_generation
@@ -64,7 +63,6 @@ async def generate_lesson_version(
         generation_mode=mode,
         source_version_id=uuid.UUID(source_version_id) if source_version_id else None,
         critique_text=critique_text,
-        force=force,
     )
     logger.info(
         "jobs.lesson_version.done",

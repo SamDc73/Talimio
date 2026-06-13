@@ -64,7 +64,6 @@ async def defer_lesson_version_generation(
     generation_mode: LessonGenerationMode,
     source_version_id: uuid.UUID | None = None,
     critique_text: str | None = None,
-    force: bool = False,
 ) -> int | None:
     """Enqueue lesson-version content generation inside the caller's transaction."""
     return await defer_job(
@@ -77,7 +76,6 @@ async def defer_lesson_version_generation(
             "generation_mode": generation_mode,
             "source_version_id": str(source_version_id) if source_version_id else None,
             "critique_text": critique_text,
-            "force": force,
         },
         queueing_lock=lesson_version_queueing_lock(version_id),
     )
@@ -110,7 +108,6 @@ async def run_lesson_version_generation(
     generation_mode: LessonGenerationMode,
     source_version_id: uuid.UUID | None,
     critique_text: str | None,
-    force: bool,
 ) -> None:
     """Job body: fill one pending lesson version with generated content in a dedicated session."""
     from src.courses.services.lesson_service import LessonService
@@ -122,5 +119,4 @@ async def run_lesson_version_generation(
             generation_mode=generation_mode,
             source_version_id=source_version_id,
             critique_text=critique_text,
-            force=force,
         )
