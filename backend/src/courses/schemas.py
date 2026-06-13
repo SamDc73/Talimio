@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 
 from pydantic import ConfigDict, Field, JsonValue, field_validator, model_validator
 
+from src.books.schemas import BookRagStatus
 from src.config.schema_casing import CamelModel
 from src.courses.models import CourseGenerationStatus
 
@@ -225,7 +226,7 @@ class CourseAttachmentRead(CamelModel):
     kind: Literal["book"] = Field("book", description="Attachment kind")
     book_id: uuid.UUID = Field(description="Attached book ID")
     title: str = Field(description="Book title")
-    rag_status: str = Field(description="Book embedding status")
+    rag_status: BookRagStatus = Field(description="Book embedding status")
     archived: bool = Field(description="Whether the book is archived")
     created_at: datetime = Field(description="Attachment creation timestamp")
 

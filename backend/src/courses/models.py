@@ -223,7 +223,7 @@ class LessonFeedbackEvent(Base):
 
     __tablename__ = "lesson_feedback_events"
 
-    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("app_uuid7()"))
     course_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),

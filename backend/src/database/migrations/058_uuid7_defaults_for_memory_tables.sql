@@ -1,4 +1,4 @@
--- Migrations 041/044/046/047/050 originally created these tables with
+-- Migrations 027/041/044/046/047/050 originally created these tables with
 -- gen_random_uuid() id defaults and were later edited in place to app_uuid7().
 -- The runner tracks applied migrations by filename, so databases that already
 -- ran them still carry the uuid4 default. Align existing databases with the
@@ -17,3 +17,5 @@ ALTER TABLE student_cards ALTER COLUMN id SET DEFAULT app_uuid7();
 ALTER TABLE student_card_revisions ALTER COLUMN id SET DEFAULT app_uuid7();
 
 ALTER TABLE pedagogical_notes ALTER COLUMN id SET DEFAULT app_uuid7();
+
+ALTER TABLE lesson_feedback_events ALTER COLUMN id SET DEFAULT app_uuid7();
