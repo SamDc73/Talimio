@@ -31,7 +31,7 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 	const [showTagEditModal, setShowTagEditModal] = useState(false)
 
 	// Use React Query mutations
-	const deleteContentMutation = useDeleteContent()
+	const deleteContentMutation = useDeleteContent({ onDeleteSuccess: onDelete })
 	const archiveContentMutation = useArchiveContent()
 	const queryClient = useQueryClient()
 
@@ -75,11 +75,6 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 				itemType: item.type,
 			},
 			{
-				onSuccess: () => {
-					if (onDelete) {
-						onDelete(item.id, item.type)
-					}
-				},
 				onError: (error) => {
 					// Books attached to courses return 409; surface the cascade confirm.
 					const conflict = getBookAttachmentConflict(error)
@@ -96,20 +91,11 @@ function ContentCard({ item, pinned, onTogglePin, onDelete, onTagsUpdated, index
 
 	const handleConfirmForceDelete = () => {
 		setAttachmentConflict(null)
-		deleteContentMutation.mutate(
-			{
-				itemId: item.id,
-				itemType: item.type,
-				force: true,
-			},
-			{
-				onSuccess: () => {
-					if (onDelete) {
-						onDelete(item.id, item.type)
-					}
-				},
-			}
-		)
+		deleteContentMutation.mutate({
+			itemId: item.id,
+			itemType: item.type,
+			force: true,
+		})
 	}
 
 	const attachmentConflictDescription = (() => {

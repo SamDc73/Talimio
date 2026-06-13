@@ -55,7 +55,7 @@ async function encodeFileAsDataUrl(file) {
 	})
 }
 
-async function uploadFileToSession(file, uploadSession) {
+async function uploadFileToSession(file, uploadSession, signal) {
 	if (!file?.size) {
 		throw new Error("Cannot upload an empty file")
 	}
@@ -67,6 +67,7 @@ async function uploadFileToSession(file, uploadSession) {
 			"Content-Type": getUploadContentType(file),
 		},
 		body: file,
+		signal,
 	})
 
 	if (!response.ok) {
@@ -75,23 +76,31 @@ async function uploadFileToSession(file, uploadSession) {
 	}
 }
 
-export async function createBookFromCourseAttachment(file) {
-	const uploadSession = await api.post("/upload-sessions", {
-		filename: file.name,
-		contentType: getUploadContentType(file),
-		fileSize: file.size,
-	})
+export async function createBookFromCourseAttachment(file, { signal } = {}) {
+	const uploadSession = await api.post(
+		"/upload-sessions",
+		{
+			filename: file.name,
+			contentType: getUploadContentType(file),
+			fileSize: file.size,
+		},
+		{ signal }
+	)
 
-	await uploadFileToSession(file, uploadSession)
+	await uploadFileToSession(file, uploadSession, signal)
 
-	return api.post("/books", {
-		title: getBookTitleFromFile(file),
-		tags: [],
-		filePath: uploadSession.filePath,
-		storageProvider: uploadSession.storageProvider,
-		fileSize: file.size,
-		processInBackground: false,
-	})
+	return api.post(
+		"/books",
+		{
+			title: getBookTitleFromFile(file),
+			tags: [],
+			filePath: uploadSession.filePath,
+			storageProvider: uploadSession.storageProvider,
+			fileSize: file.size,
+			processInBackground: false,
+		},
+		{ signal }
+	)
 }
 
 export async function fetchCourseById(courseId, signal) {

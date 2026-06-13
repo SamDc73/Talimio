@@ -198,7 +198,7 @@ export function useContentList(filters = {}) {
 /**
  * Delete content with optimistic update
  */
-export function useDeleteContent() {
+export function useDeleteContent({ onDeleteSuccess } = {}) {
 	const queryClient = useQueryClient()
 
 	return useMutation({
@@ -227,10 +227,11 @@ export function useDeleteContent() {
 			return { previousContent, removedOptimistically: !canConflict }
 		},
 
-		onSuccess: ({ itemId }, _variables, context) => {
+		onSuccess: ({ itemId, itemType }, _variables, context) => {
 			if (!context?.removedOptimistically) {
 				queryClient.setQueriesData({ queryKey: contentKeys.all }, (old) => removeItemFromCache(old, itemId))
 			}
+			onDeleteSuccess?.(itemId, itemType)
 		},
 
 		// Rollback on error
