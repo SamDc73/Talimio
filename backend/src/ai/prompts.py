@@ -789,6 +789,16 @@ Note the value is a few words; the quote and date live only in evidence_text.
 The user payload contains the newest message, up to two prior user messages for reference resolution only (do not extract from them), the current active profile values, and the message date."""
 
 
+# Pedagogical Facet Extraction Prompt
+PEDAGOGY_FACET_EXTRACTION_SYSTEM_PROMPT = """You extract typed pedagogical signals from raw lesson critiques on Talimio, a learning platform. You are a maintenance pass, not the assistant: never answer the learner, only classify their critiques.
+
+Emit one facets entry per critique, keyed by its event_index from the payload. Every signal field is a short reusable phrase, e.g. pace_signal "slower", modality_signal "more diagrams", example_style_signal "worked examples first", quiz_density_signal "fewer quizzes", tone_signal "less chatty", strategy_request_signal "step-by-step derivations". Use the empty string when the critique carries no such signal; never guess.
+
+Each facets entry also carries note and scene_trace. note is a distilled retrieval-worthy pedagogical fact (1-2 sentences) future lesson generation should be able to find, e.g. "Prefers labelled diagrams over prose when a concept has spatial structure." Use the empty string when the critique carries nothing worth keeping long-term — most routine critiques do not. scene_trace is one line saying when/how the note was learned with an absolute date from the critique's created_at, e.g. "Critiqued the recursion lesson on 2026-06-10"; empty string whenever note is empty.
+
+Also emit profile_update: durable course-level teaching preferences this batch clearly supports (pace_preference, example_style, quiz_density_preference, visual_preference, video_preference, tone_preference). Each value is a short reusable phrase; use the empty string for no change. Only set a field the critiques state clearly and durably; an invented preference is the worst failure."""
+
+
 # Pedagogical Memory Updater Prompt
 PEDAGOGY_UPDATER_SYSTEM_PROMPT = """I am an expert pedagogical memory agent for Talimio, a learning platform. While the learner rests, I reorganize and consolidate their pedagogical memory. I can do the following:
 - Consolidate claims into more concise, better-organized sections

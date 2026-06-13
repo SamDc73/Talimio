@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field, JsonValue  # noqa: TID251 - not an HTTP s
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.prompts import PEDAGOGY_UPDATER_SYSTEM_PROMPT
+from src.ai.prompts import PEDAGOGY_FACET_EXTRACTION_SYSTEM_PROMPT, PEDAGOGY_UPDATER_SYSTEM_PROMPT
 from src.ai.tools.plan import FunctionToolDefinition, LocalToolTarget
 from src.database.session import async_session_maker
 from src.jobs import QUEUE_PEDAGOGY, defer_job, pedagogy_queueing_lock
@@ -116,15 +116,6 @@ class _PlannedCardEdit:
     arguments: dict[str, str]
 
 
-_FACET_EXTRACTION_SYSTEM_PROMPT = """You extract typed pedagogical signals from raw lesson critiques on Talimio, a learning platform. You are a maintenance pass, not the assistant: never answer the learner, only classify their critiques.
-
-Emit one facets entry per critique, keyed by its event_index from the payload. Every signal field is a short reusable phrase, e.g. pace_signal "slower", modality_signal "more diagrams", example_style_signal "worked examples first", quiz_density_signal "fewer quizzes", tone_signal "less chatty", strategy_request_signal "step-by-step derivations". Use the empty string when the critique carries no such signal; never guess.
-
-Each facets entry also carries note and scene_trace. note is a distilled retrieval-worthy pedagogical fact (1-2 sentences) future lesson generation should be able to find, e.g. "Prefers labelled diagrams over prose when a concept has spatial structure." Use the empty string when the critique carries nothing worth keeping long-term — most routine critiques do not. scene_trace is one line saying when/how the note was learned with an absolute date from the critique's created_at, e.g. "Critiqued the recursion lesson on 2026-06-10"; empty string whenever note is empty.
-
-Also emit profile_update: durable course-level teaching preferences this batch clearly supports (pace_preference, example_style, quiz_density_preference, visual_preference, video_preference, tone_preference). Each value is a short reusable phrase; use the empty string for no change. Only set a field the critiques state clearly and durably; an invented preference is the worst failure."""
-
-
 async def defer_pedagogy_update(session: AsyncSession, *, user_id: uuid.UUID, course_id: uuid.UUID) -> int | None:
     """Enqueue the updater for a learner-course pair inside the caller's transaction."""
     lock_key = pedagogy_queueing_lock(user_id, course_id)
@@ -199,27 +190,28 @@ async def process_pedagogy_update(user_id: uuid.UUID, course_id: uuid.UUID) -> i
         aggregates, card_text, card_revision = await _load_card_context(session, user_id=user_id, course_id=course_id)
         await session.commit()
 
-        pending_facets = [event for event in new_feedback if event.facets_extracted_at is None]
-        extraction, notes = await _prepare_facet_outputs(
-            user_id=user_id,
-            course_id=course_id,
-            pending_facets=pending_facets,
-        )
+    pending_facets = [event for event in new_feedback if event.facets_extracted_at is None]
+    extraction, notes = await _prepare_facet_outputs(
+        user_id=user_id,
+        course_id=course_id,
+        pending_facets=pending_facets,
+    )
 
-        function_tools, planned_card_edits = _build_card_edit_tools(
-            initial_card_text=card_text,
-            initial_revision=card_revision,
-        )
-        payload = _build_card_session_payload(
-            card_text=card_text,
-            aggregates=aggregates,
-            new_events=new_events,
-            new_feedback=new_feedback,
-            pending_events=pending_facets,
-            extraction=extraction,
-        )
-        await _run_card_edit_session(user_id=user_id, payload=payload, function_tools=function_tools)
+    function_tools, planned_card_edits = _build_card_edit_tools(
+        initial_card_text=card_text,
+        initial_revision=card_revision,
+    )
+    payload = _build_card_session_payload(
+        card_text=card_text,
+        aggregates=aggregates,
+        new_events=new_events,
+        new_feedback=new_feedback,
+        pending_events=pending_facets,
+        extraction=extraction,
+    )
+    await _run_card_edit_session(user_id=user_id, payload=payload, function_tools=function_tools)
 
+    async with async_session_maker() as session:
         batch_max_created_at = max(item.created_at for item in [*new_events, *new_feedback])
         with session.no_autoflush:
             watermark = await _lock_watermark(session, user_id=user_id, course_id=course_id)
@@ -231,8 +223,19 @@ async def process_pedagogy_update(user_id: uuid.UUID, course_id: uuid.UUID) -> i
             card = await lock_card(session, user_id=user_id, course_id=course_id)
             await _apply_card_edits(session, card=card, planned_edits=planned_card_edits)
         if extraction is not None:
+            attached_pending_facets = await _load_feedback_events_by_id(
+                session,
+                [event.id for event in pending_facets],
+            )
+            if len(attached_pending_facets) != len(pending_facets):
+                logger.info(
+                    "pedagogy.updater.pending_feedback_changed",
+                    extra={"course_id": str(course_id), "expected": len(pending_facets), "found": len(attached_pending_facets)},
+                )
+                await session.rollback()
+                return 0
             await _apply_facet_extraction(
-                session, course_id=course_id, pending_events=pending_facets, extraction=extraction
+                session, course_id=course_id, pending_events=attached_pending_facets, extraction=extraction
             )
             await _write_pedagogical_notes(session, notes=notes)
         watermark.last_processed_at = max(watermark.last_processed_at, batch_max_created_at)
@@ -331,6 +334,17 @@ async def _load_new_feedback_events(
     return list(await session.scalars(stmt))
 
 
+async def _load_feedback_events_by_id(session: AsyncSession, event_ids: Sequence[uuid.UUID]) -> list[LessonFeedbackEvent]:
+    from src.courses.models import LessonFeedbackEvent
+
+    if not event_ids:
+        return []
+
+    events = await session.scalars(select(LessonFeedbackEvent).where(LessonFeedbackEvent.id.in_(event_ids)))
+    by_id = {event.id: event for event in events}
+    return [by_id[event_id] for event_id in event_ids if event_id in by_id]
+
+
 def _select_oldest_evidence_batch(
     teaching_events: Sequence[TeachingEvent],
     feedback_events: Sequence[LessonFeedbackEvent],
@@ -407,7 +421,7 @@ async def _extract_facets(*, user_id: uuid.UUID, pending_events: list[LessonFeed
     client = LLMClient(agent_id="pedagogy-updater")
     result = await client.get_completion(
         [
-            {"role": "system", "content": _FACET_EXTRACTION_SYSTEM_PROMPT},
+            {"role": "system", "content": PEDAGOGY_FACET_EXTRACTION_SYSTEM_PROMPT},
             {"role": "user", "content": _to_json(payload)},
         ],
         response_model=FacetExtraction,
@@ -430,6 +444,7 @@ async def _apply_facet_extraction(
     extraction: FacetExtraction,
 ) -> None:
     """Write non-empty facets onto the event rows; apply inferred profile updates."""
+    session.add_all(pending_events)
     _apply_facet_values(pending_events=pending_events, extraction=extraction)
     extracted_at = datetime.now(UTC)
     for event in pending_events:
