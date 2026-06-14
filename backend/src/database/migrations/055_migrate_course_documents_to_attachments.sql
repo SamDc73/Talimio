@@ -1,31 +1,22 @@
 -- Collapse course_documents into the books-first attachment model.
 --
 -- Book-pointer rows become course_attachments rows. Their copied chunks are
--- exact duplicates of the book's own chunks and are deleted. Direct rows cannot
--- honestly become books because course_documents never stored book-required
--- author, file size, or storage-provider data; abort instead of inventing those
--- fields. After this migration no chunk carries doc_type='course' or a course_id
+-- exact duplicates of the book's own chunks and are deleted. Direct legacy
+-- rows cannot honestly become books because course_documents never stored
+-- book-required metadata, and the production count is small enough to clean up
+-- once instead of carrying a second course-source path forever.
+--
+-- After this migration no chunk carries doc_type='course' or a course_id
 -- metadata key, and course_documents is gone.
 
--- Preflight unmappable data before mutating anything. The migration is allowed
--- to delete only verified book-pointer chunk copies; direct rows and direct
--- course chunks must abort before anything is dropped.
+-- Preflight before mutating anything. The migration is allowed to delete direct
+-- legacy course chunks and verified book-pointer chunk copies; book-pointer
+-- chunks must prove they duplicate their source book chunks before deletion.
 DO $$
 DECLARE
-    direct_rows BIGINT;
-    direct_course_chunks BIGINT;
     pointer_chunks_without_attachment_source BIGINT;
     pointer_chunks_without_matching_book_chunk BIGINT;
 BEGIN
-    SELECT COUNT(*) INTO direct_rows
-    FROM course_documents cd
-    WHERE cd.book_id IS NULL;
-
-    SELECT COUNT(*) INTO direct_course_chunks
-    FROM rag_document_chunks ch
-    WHERE ch.doc_type = 'course'
-      AND ch.metadata->>'source_book_id' IS NULL;
-
     SELECT COUNT(*) INTO pointer_chunks_without_attachment_source
     FROM rag_document_chunks ch
     WHERE ch.doc_type = 'course'
@@ -51,14 +42,6 @@ BEGIN
             AND source_chunk.content = ch.content
       );
 
-    IF direct_rows <> 0 THEN
-        RAISE EXCEPTION 'migration 055: % direct course_documents rows cannot become books without fabricated metadata',
-            direct_rows;
-    END IF;
-    IF direct_course_chunks <> 0 THEN
-        RAISE EXCEPTION 'migration 055: % direct course chunks cannot be re-keyed without a real book',
-            direct_course_chunks;
-    END IF;
     IF pointer_chunks_without_attachment_source <> 0 THEN
         RAISE EXCEPTION 'migration 055: % book-pointer chunks have no course_documents attachment source',
             pointer_chunks_without_attachment_source;
@@ -77,7 +60,8 @@ SELECT
     (SELECT COUNT(*) FROM rag_document_chunks
       WHERE doc_type = 'course' AND metadata->>'source_book_id' IS NOT NULL) AS pointer_copy_chunks,
     (SELECT COUNT(*) FROM rag_document_chunks WHERE doc_type = 'book') AS book_chunks,
-    (SELECT COUNT(*) FROM course_documents WHERE book_id IS NOT NULL) AS pointer_rows;
+    (SELECT COUNT(*) FROM course_documents WHERE book_id IS NOT NULL) AS pointer_rows,
+    (SELECT COUNT(*) FROM course_documents WHERE book_id IS NULL) AS discarded_direct_rows;
 
 -- 1) Book-pointer rows -> attachments.
 INSERT INTO course_attachments (course_id, book_id)
@@ -86,12 +70,12 @@ FROM course_documents cd
 WHERE cd.book_id IS NOT NULL
 ON CONFLICT (course_id, book_id) DO NOTHING;
 
--- 2) Drop the remaining doc_type='course' chunks: preflight verified these
--- are book-pointer copies that duplicate the book's own chunks.
+-- 2) Drop all old course-owned chunks. Direct chunks are legacy local sources
+-- being intentionally retired; pointer chunks were preflighted as duplicates.
 DELETE FROM rag_document_chunks WHERE doc_type = 'course';
 
--- 3) Verify exact deltas before dropping anything; abort the whole
--- transaction on any mismatch.
+-- 3) Verify exact deltas before dropping anything; abort the whole transaction
+-- on any mismatch.
 DO $$
 DECLARE
     before RECORD;
@@ -134,8 +118,8 @@ BEGIN
             after_total, before.total_chunks - before.course_chunks, before.total_chunks, before.course_chunks;
     END IF;
 
-    RAISE NOTICE 'migration 055: pointer_rows=% deleted_chunks=%',
-        before.pointer_rows, before.course_chunks;
+    RAISE NOTICE 'migration 055: pointer_rows=% discarded_direct_rows=% deleted_chunks=%',
+        before.pointer_rows, before.discarded_direct_rows, before.course_chunks;
 END $$;
 
 -- 4) Retire the table and its dead chunk index.
