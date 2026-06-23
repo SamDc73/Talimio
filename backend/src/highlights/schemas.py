@@ -1,5 +1,4 @@
-
-"""Pydantic schemas for highlights feature."""
+"""Pydantic schemas for the highlights feature."""
 
 import uuid
 from datetime import datetime
@@ -10,15 +9,15 @@ from src.config.schema_casing import CamelModel
 
 
 class HighlightCreate(CamelModel):
-    """Schema for creating a new highlight."""
+    """Request body for creating or updating a highlight."""
 
-    source_data: dict[str, object] = Field(
-        description="Web-highlighter source data containing startMeta, endMeta, text, etc."
+    highlight_data: dict[str, object] = Field(
+        description="Selected-text payload: text plus type-specific fields (page/position, cfi, or start/end time)."
     )
 
 
 class HighlightResponse(CamelModel):
-    """Schema for highlight response."""
+    """A stored highlight."""
 
     id: uuid.UUID
     user_id: uuid.UUID

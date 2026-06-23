@@ -1,19 +1,15 @@
+"""Highlight payload validation.
+
+Each content type validates against the schema that matches its data shape:
+
+- ``video``  -> strict transcript timing (``VideoHighlightData``)
+- ``lesson`` -> plain selected text plus optional location (``GenericHighlightData``)
+- ``book``   -> PDF position, EPUB CFI, or generic text, detected from the payload
 """
-Highlight Data Validation Schemas.
 
-Provides comprehensive JSON schema validation for highlight data
-to ensure data integrity across different content types (PDF, video, EPUB).
-"""
-
-import json
-import logging
-
-from pydantic import ConfigDict, Field, JsonValue, ValidationError, ValidationInfo, field_validator
+from pydantic import ConfigDict, Field, JsonValue, ValidationInfo, field_validator
 
 from src.config.schema_casing import CamelModel
-
-
-logger = logging.getLogger(__name__)
 
 
 class PDFHighlightData(CamelModel):
@@ -135,9 +131,9 @@ class EPUBHighlightData(CamelModel):
 
 
 class GenericHighlightData(CamelModel):
-    """Fallback validation schema for generic highlight data."""
+    """Validation schema for plain selected text plus optional location data."""
 
-    # Minimal required fields
+    # Minimal required field
     text: str = Field(min_length=1, max_length=10000, description="Selected text content")
 
     # Optional fields that any highlight type might have
@@ -147,194 +143,25 @@ class GenericHighlightData(CamelModel):
     model_config = ConfigDict(extra="allow")
 
 
-def detect_highlight_type(data: dict[str, JsonValue]) -> str:
+def _book_schema(data: dict[str, JsonValue]) -> type[CamelModel]:
+    """Pick the book schema from the payload shape: PDF position, EPUB CFI, else generic text."""
+    position = data.get("position")
+    if isinstance(position, dict) and "rects" in position and "pageNumber" in position:
+        return PDFHighlightData
+    if isinstance(data.get("cfi"), str):
+        return EPUBHighlightData
+    return GenericHighlightData
+
+
+def validate_highlight_data(data: dict[str, JsonValue], content_type: str) -> dict[str, object]:
+    """Validate a highlight payload for its content type and return the normalized blob.
+
+    Raises ``pydantic.ValidationError`` when the payload does not match its schema.
     """
-    Detect the type of highlight based on data structure.
-
-    Args:
-        data: Raw highlight data dictionary
-
-    Returns
-    -------
-        Detected highlight type: 'pdf', 'video', 'epub', or 'generic'
-
-    Note: This function detects the data structure type, not the content type.
-    Content types ('book', 'course', 'video') are different from structure types.
-    Books can contain PDF or EPUB data, courses can contain various structures.
-    """
-    # PDF highlights have position data with rects and pageNumber
-    if "position" in data and isinstance(data["position"], dict):
-        position = data["position"]
-        if "rects" in position and "pageNumber" in position:
-            return "pdf"
-
-    # Video highlights have start/end times. Accept both spellings on input -
-    # the models validate either (validate_by_name) - so snake input still
-    # normalizes into the camelCase dump instead of falling through to a raw
-    # generic blob that would store snake keys verbatim.
-    has_start = "startTime" in data or "start_time" in data
-    has_end = "endTime" in data or "end_time" in data
-    if has_start and has_end:
-        return "video"
-
-    # EPUB highlights have CFI (Canonical Fragment Identifier)
-    if "cfi" in data and isinstance(data["cfi"], str):
-        return "epub"
-
-    # Default to generic validation
-    return "generic"
-
-
-def validate_highlight_data(data: dict[str, JsonValue], _content_type: str | None = None) -> dict[str, object]:
-    """
-    Validate highlight data against appropriate schema.
-
-    Args:
-        data: Raw highlight data dictionary
-        _content_type: Optional content type hint ('book', 'video', etc.)
-
-    Returns
-    -------
-        Validated and normalized highlight data
-
-    Raises
-    ------
-        ValidationError: If data doesn't match any valid schema
-    """
-    # Auto-detect type if not provided or if _content_type is too generic
-    detected_type = detect_highlight_type(data)
-
-    # Map content types to validation schemas
-    schema_map = {
-        "pdf": PDFHighlightData,
-        "video": VideoHighlightData,
-        "epub": EPUBHighlightData,
-        "generic": GenericHighlightData,
-    }
-
-    # Prefer detected type over _content_type for validation
-    schema_class = schema_map.get(detected_type, GenericHighlightData)
-
-    try:
-        # Validate using the appropriate schema
-        validated_data = schema_class.model_validate(data)
-
-        # Return as dictionary with type annotation
-        result: dict[str, object] = validated_data.model_dump(by_alias=True)
-        result["_validation_type"] = detected_type
-
-        logger.debug("Successfully validated %s highlight data", detected_type)
-        return result
-
-    except ValidationError as validation_error:
-        logger.exception("highlights.validation.failed", extra={"detected_type": str(detected_type)})
-
-        # If strict validation fails, try generic schema as fallback
-        if detected_type != "generic":
-            logger.info("Attempting fallback to generic validation")
-            try:
-                validated_data = GenericHighlightData.model_validate(data)
-                result: dict[str, object] = validated_data.model_dump(by_alias=True)
-                result["_validation_type"] = "generic"
-                return result
-            except ValidationError as fallback_error:
-                logger.exception("highlights.validation_fallback.failed")
-                raise fallback_error from validation_error
-
-        # Re-raise the original validation error
-        raise
-
-
-def validate_json_highlight_data(json_data: str | dict[str, JsonValue], _content_type: str | None = None) -> dict[str, object]:
-    """
-    Validate highlight data from JSON string or dictionary.
-
-    Args:
-        json_data: JSON string or dictionary containing highlight data
-        _content_type: Optional content type hint
-
-    Returns
-    -------
-        Validated highlight data dictionary
-
-    Raises
-    ------
-        ValueError: If JSON is invalid
-        ValidationError: If data doesn't match schema
-    """
-    # Parse JSON if needed
-    if isinstance(json_data, str):
-        try:
-            data = json.loads(json_data)
-        except json.JSONDecodeError as e:
-            msg = f"Invalid JSON format: {e}"
-            raise ValueError(msg) from e
+    if content_type == "video":
+        schema_class: type[CamelModel] = VideoHighlightData
+    elif content_type == "lesson":
+        schema_class = GenericHighlightData
     else:
-        data = json_data
-
-    if not isinstance(data, dict):
-        msg = "Highlight data must be a JSON object"
-        raise ValueError(msg)  # noqa: TRY004 - callers expect validation-shaped failures.
-
-    return validate_highlight_data({key: value for key, value in data.items() if isinstance(key, str)}, _content_type)
-
-
-def get_validation_schema_for_type(highlight_type: str) -> type[CamelModel]:
-    """
-    Get the validation schema class for a specific highlight type.
-
-    Args:
-        highlight_type: Type of highlight ('pdf', 'video', 'epub', 'generic')
-
-    Returns
-    -------
-        Pydantic model class for validation
-    """
-    schema_map = {
-        "pdf": PDFHighlightData,
-        "video": VideoHighlightData,
-        "epub": EPUBHighlightData,
-        "generic": GenericHighlightData,
-    }
-
-    return schema_map.get(highlight_type, GenericHighlightData)
-
-
-def get_validation_examples() -> dict[str, dict[str, JsonValue]]:
-    """
-    Get example valid highlight data for each type.
-
-    Returns
-    -------
-        Dictionary mapping highlight types to example data
-    """
-    return {
-        "pdf": {
-            "text": "This is selected text from a PDF document.",
-            "page": 1,
-            "position": {
-                "rects": [{"x1": 100.0, "y1": 200.0, "x2": 300.0, "y2": 220.0, "width": 200.0, "height": 20.0}],
-                "pageNumber": 1,
-            },
-            "color": "#FFFF00",
-            "note": "Important concept to remember",
-        },
-        "video": {
-            "text": "This is text from the video transcript.",
-            "startTime": 120.5,
-            "endTime": 125.8,
-            "color": "#FF6B6B",
-            "note": "Key point discussed in the video",
-            "transcriptIndex": 45,
-            "speaker": "Dr. Smith",
-        },
-        "epub": {
-            "text": "Selected text from an EPUB book.",
-            "cfi": "epubcfi(/6/14[chapter01]!/4/2/8/2)",
-            "color": "#4ECDC4",
-            "note": "Interesting passage",
-            "chapter": "Chapter 1: Introduction",
-            "spineIndex": 2,
-        },
-        "generic": {"text": "Generic selected text.", "color": "#95A5A6", "note": "General highlight"},
-    }
+        schema_class = _book_schema(data)
+    return schema_class.model_validate(data).model_dump(by_alias=True)

@@ -283,6 +283,25 @@ class ContentService:
         except SQLAlchemyError:
             logger.debug("Non-fatal: failed to delete highlights for content %s", row_id, exc_info=True)
 
+    async def _delete_lesson_highlights_for_course(self, session: AsyncSession, course_id: uuid.UUID) -> None:
+        """Delete lesson-body highlights for a course's lessons before the course is removed.
+
+        Highlights have no FK to lessons, so the course-row cascade that drops lessons leaves
+        their highlights orphaned. Clean them up explicitly while the lessons still exist.
+        """
+        from sqlalchemy import and_, delete
+
+        from src.courses.models import Lesson
+        from src.highlights.models import Highlight
+
+        try:
+            lesson_ids = select(Lesson.id).where(Lesson.course_id == course_id)
+            await session.execute(
+                delete(Highlight).where(and_(Highlight.content_type == "lesson", Highlight.content_id.in_(lesson_ids)))
+            )
+        except SQLAlchemyError:
+            logger.debug("Non-fatal: failed to delete lesson highlights for course %s", course_id, exc_info=True)
+
     async def _delete_tag_associations(
         self,
         session: AsyncSession,
@@ -363,6 +382,8 @@ class ContentService:
         # Cross-module cleanup
         await self._delete_progress_for_content(session, content_id)
         await self._delete_highlights(session, canonical_content_type, content_id)
+        if canonical_content_type == ContentType.COURSE:
+            await self._delete_lesson_highlights_for_course(session, content_id)
         await self._delete_tag_associations(session, canonical_content_type, content_id)
         await self._prune_orphan_tags(session)
 

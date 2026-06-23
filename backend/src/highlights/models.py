@@ -26,4 +26,4 @@ class Highlight(Base):
         DateTime(timezone=True), server_default=text("NOW()"), onupdate=text("NOW()")
     )
 
-    __table_args__ = (CheckConstraint("content_type IN ('book', 'course', 'video')", name="valid_content_type"),)
+    __table_args__ = (CheckConstraint("content_type IN ('book', 'video', 'lesson')", name="valid_content_type"),)
