@@ -177,7 +177,7 @@ _ai_service: AIService | None = None
 
 def get_ai_service() -> AIService:
     """Get the singleton AI service instance."""
-    global _ai_service  # noqa: PLW0603
+    global _ai_service  # ruff: ignore[global-statement]
     if _ai_service is None:
         _ai_service = AIService()
     return _ai_service

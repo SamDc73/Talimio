@@ -47,8 +47,8 @@ def _create_branch(api_key: str, project_id: str, name: str) -> tuple[str, str]:
         }
     ).encode()
 
-    req = urllib.request.Request(url, data=payload, headers=_neon_headers(api_key))  # noqa: S310
-    with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
+    req = urllib.request.Request(url, data=payload, headers=_neon_headers(api_key))  # ruff: ignore[suspicious-url-open-usage]
+    with urllib.request.urlopen(req, timeout=60) as resp:  # ruff: ignore[suspicious-url-open-usage]
         data = json.loads(resp.read())
 
     branch_id: str = data["branch"]["id"]
@@ -63,11 +63,11 @@ def _delete_branch(api_key: str, project_id: str, branch_id: str) -> None:
     url = f"{_NEON_API_BASE}/projects/{project_id}/branches/{branch_id}"
     headers = _neon_headers(api_key)
     headers.pop("Content-Type")
-    req = urllib.request.Request(url, method="DELETE", headers=headers)  # noqa: S310
+    req = urllib.request.Request(url, method="DELETE", headers=headers)  # ruff: ignore[suspicious-url-open-usage]
     try:
-        urllib.request.urlopen(req, timeout=30)  # noqa: S310
+        urllib.request.urlopen(req, timeout=30)  # ruff: ignore[suspicious-url-open-usage]
         logger.info("neon.branch_deleted", extra={"branch_id": branch_id})
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  # ruff: ignore[blind-except]
         logger.warning(
             "neon.branch_delete_failed",
             extra={"branch_id": branch_id, "error": str(exc)},

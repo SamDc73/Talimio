@@ -1,6 +1,6 @@
 """RAG system Pydantic schemas."""
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator  # noqa: TID251 - not an HTTP schema
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator  # ruff: ignore[banned-api] - not an HTTP schema
 
 from src.config.schema_casing import CamelModel
 

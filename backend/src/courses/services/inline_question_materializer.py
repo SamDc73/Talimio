@@ -108,7 +108,7 @@ class InlineQuestionMaterializer:
             existing.answer_kind = inline_question.answer_kind
             existing.grade_kind = inline_question.grade_kind
             existing.expected_payload = inline_question.expected_payload
-            object.__setattr__(existing, "question_payload", question_payload)  # noqa: PLC2801
+            object.__setattr__(existing, "question_payload", question_payload)  # ruff: ignore[unnecessary-dunder-call]
             existing.practice_context = inline_question.practice_context
             existing.source_component = source_component
             await self._session.flush()

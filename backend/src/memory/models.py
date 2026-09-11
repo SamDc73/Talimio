@@ -22,7 +22,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.base import Base
-from src.user import models as _user_models  # noqa: F401  # registers the users table these FKs resolve against
+from src.user import models as _user_models  # ruff: ignore[unused-import]  # registers the users table these FKs resolve against
 
 
 class UserProfileSlot(Base):

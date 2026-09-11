@@ -338,7 +338,7 @@ class Settings(BaseSettings):
 
     @property
     def primary_llm_models(self) -> list[str]:
-        """Return the ordered primary LLM model list."""
+        """Ordered primary LLM model list."""
         models = [candidate.strip() for candidate in self.PRIMARY_LLM_MODELS.split(",") if candidate.strip()]
         if models:
             return models
@@ -348,23 +348,23 @@ class Settings(BaseSettings):
 
     @property
     def primary_llm_model(self) -> str:
-        """Return the default primary LLM model."""
+        """Default primary LLM model."""
         return self.primary_llm_models[0]
 
     @property
     def ai_request_timeout(self) -> int:
-        """Get AI request timeout from environment."""
+        """AI request timeout, in seconds, from the environment."""
         return self.AI_REQUEST_TIMEOUT
 
     @property
     def frontend_app_url(self) -> str:
-        """Get the frontend app URL used for user-facing auth navigation."""
+        """Frontend app URL used for user-facing auth navigation."""
         configured = self.FRONTEND_APP_URL.strip()
         return configured or self.FRONTEND_URL
 
     @property
     def otel_enabled(self) -> bool:
-        """Return the effective OpenTelemetry enablement."""
+        """Effective OpenTelemetry enablement."""
         configured = self.OTEL_ENABLED
         if configured is not None:
             return configured

@@ -119,7 +119,7 @@ preview = true
 future-annotations = false
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
-"pydantic.BaseModel".msg = "HTTP API schemas inherit src.config.schema_casing.CamelModel; for LLM structured-output or internal models mark the exception with `# noqa: TID251`."
+"pydantic.BaseModel".msg = "HTTP API schemas inherit src.config.schema_casing.CamelModel; for LLM structured-output or internal models mark the exception with `# ruff: ignore[banned-api]`."
 
 [tool.ruff.lint.flake8-type-checking]
 exempt-modules = ["typing", "typing_extensions"]
@@ -224,6 +224,7 @@ invalid-type-form = "error"
 missing-argument = "error"
 unknown-argument = "error"
 unsupported-operator = "error"
+too-many-positional-arguments = "error"
 unused-awaitable = "error"
 unused-ignore-comment = "error"
 unused-type-ignore-comment = "error"
@@ -235,6 +236,7 @@ possibly-missing-import = "warn"
 possibly-missing-submodule = "warn"
 possibly-unresolved-reference = "warn"
 redundant-cast = "warn"
+redundant-condition = "warn"
 
 [tool.ty.environment]
 root = [".", "src"]

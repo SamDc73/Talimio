@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue  # noqa: TID251 - not an HTTP schema
+from pydantic import BaseModel, ConfigDict, Field, JsonValue  # ruff: ignore[banned-api] - not an HTTP schema
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -436,7 +436,7 @@ class CourseProgressService(ProgressTracker):
         percentage = (completed_count / total_lessons) * 100
         return min(round(percentage, 2), 100.0)
 
-    def _update_learning_patterns(  # noqa: PLR0912, PLR0915
+    def _update_learning_patterns(  # ruff: ignore[too-many-branches, too-many-statements]
         self, metadata: ProgressMetadata, _lesson_id: str, quiz_results: dict[str, object]
     ) -> None:
         """Update learning patterns based on quiz performance."""

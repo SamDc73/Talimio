@@ -3,7 +3,7 @@
 
 from typing import Literal
 
-from pydantic import AnyHttpUrl, BaseModel, Field, ValidationInfo, field_validator  # noqa: TID251 - not an HTTP schema
+from pydantic import AnyHttpUrl, BaseModel, Field, ValidationInfo, field_validator  # ruff: ignore[banned-api] - not an HTTP schema
 
 
 class MCPAuthConfig(BaseModel):

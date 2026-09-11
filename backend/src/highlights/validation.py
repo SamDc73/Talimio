@@ -32,7 +32,7 @@ class PDFHighlightData(CamelModel):
         """Validate PDF position data structure."""
         if not isinstance(v, dict):
             msg = "Position must be a dictionary"
-            raise ValueError(msg)  # noqa: TRY004 - Pydantic validators should report schema errors as ValueError.
+            raise ValueError(msg)  # ruff: ignore[type-check-without-type-error] - Pydantic validators should report schema errors as ValueError.
         position = {key: value for key, value in v.items() if isinstance(key, str)}
 
         # Required position fields for PDF
@@ -51,7 +51,7 @@ class PDFHighlightData(CamelModel):
         for i, rect in enumerate(rects):
             if not isinstance(rect, dict):
                 msg = f"Rect {i} must be a dictionary"
-                raise ValueError(msg)  # noqa: TRY004 - Pydantic validators should report schema errors as ValueError.
+                raise ValueError(msg)  # ruff: ignore[type-check-without-type-error] - Pydantic validators should report schema errors as ValueError.
 
             rect_data = {key: value for key, value in rect.items() if isinstance(key, str)}
             rect_fields = {"x1", "y1", "x2", "y2", "width", "height"}

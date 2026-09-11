@@ -712,7 +712,7 @@ class LearningCapabilityQueryService:
                 select(Lesson.id, Lesson.title).where(Lesson.course_id.in_(course_ids))
             )
         ).all()
-        lesson_title_by_id: dict[uuid.UUID, str] = {  # noqa: C416 - keeps typing precise for ty
+        lesson_title_by_id: dict[uuid.UUID, str] = {  # ruff: ignore[unnecessary-comprehension] - keeps typing precise for ty
             lesson_id: lesson_title for lesson_id, lesson_title in lesson_rows
         }
 

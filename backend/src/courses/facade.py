@@ -214,7 +214,7 @@ class CoursesFacadeInternalError(DomainError):
         super().__init__(detail, feature_area=FEATURE_AREA)
 
 
-class CoursesFacade:  # noqa: PLR0904
+class CoursesFacade:  # ruff: ignore[too-many-public-methods]
     """
     Single entry point for all course operations.
 

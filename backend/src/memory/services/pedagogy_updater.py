@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Literal, cast
 if TYPE_CHECKING:
     from src.courses.models import LessonFeedbackEvent
 
-from pydantic import BaseModel, Field, JsonValue  # noqa: TID251 - not an HTTP schema
+from pydantic import BaseModel, Field, JsonValue  # ruff: ignore[banned-api] - not an HTTP schema
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -590,7 +590,7 @@ def _build_card_edit_tools(
     draft_revision = initial_revision
     planned_edits: list[_PlannedCardEdit] = []
 
-    async def execute_replace(arguments: Mapping[str, object]) -> str:  # noqa: RUF029 - ToolExecutor protocol
+    async def execute_replace(arguments: Mapping[str, object]) -> str:  # ruff: ignore[unused-async] - ToolExecutor protocol
         nonlocal draft_text, draft_revision
         old_str = str(arguments.get("old_str") or "")
         new_str = str(arguments.get("new_str") or "")
@@ -601,7 +601,7 @@ def _build_card_edit_tools(
         )
         return f"ok, revision {draft_revision}"
 
-    async def execute_rethink(arguments: Mapping[str, object]) -> str:  # noqa: RUF029 - ToolExecutor protocol
+    async def execute_rethink(arguments: Mapping[str, object]) -> str:  # ruff: ignore[unused-async] - ToolExecutor protocol
         nonlocal draft_text, draft_revision
         new_text = str(arguments.get("new_text") or "")
         draft_text = preview_card_rethink(new_text=new_text)
@@ -609,7 +609,7 @@ def _build_card_edit_tools(
         planned_edits.append(_PlannedCardEdit(tool="student_card_rethink", arguments={"new_text": new_text}))
         return f"ok, revision {draft_revision}"
 
-    async def execute_finish(arguments: Mapping[str, object]) -> str:  # noqa: RUF029 - ToolExecutor protocol
+    async def execute_finish(arguments: Mapping[str, object]) -> str:  # ruff: ignore[unused-async] - ToolExecutor protocol
         del arguments
         return "edits recorded"
 

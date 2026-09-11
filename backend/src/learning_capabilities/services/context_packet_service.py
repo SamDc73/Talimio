@@ -21,7 +21,7 @@ class LearningContextPacketService:
     def __init__(self, query_service: LearningCapabilityQueryService) -> None:
         self._query_service = query_service
 
-    async def build_context_bundle(  # noqa: PLR0914
+    async def build_context_bundle(  # ruff: ignore[too-many-locals]
         self,
         *,
         user_id: uuid.UUID,

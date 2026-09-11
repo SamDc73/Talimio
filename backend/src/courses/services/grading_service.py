@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import asdict
 from typing import Literal, cast
 
-from pydantic import BaseModel, Field, JsonValue  # noqa: TID251 - not an HTTP schema
+from pydantic import BaseModel, Field, JsonValue  # ruff: ignore[banned-api] - not an HTTP schema
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai.client import LLMClient

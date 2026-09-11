@@ -333,7 +333,7 @@ class CodeExecutionService:
             logger.debug("Failed to refresh sandbox timeout", exc_info=True)
             return False
 
-    async def execute(  # noqa: PLR0912
+    async def execute(  # ruff: ignore[too-many-branches]
         self,
         *,
         source_code: str,
@@ -1339,7 +1339,7 @@ class CodeExecutionService:
 
         return cwd, template.format(entry=entry_q)
 
-    async def _try_workspace_fast_path(  # noqa: PLR0911
+    async def _try_workspace_fast_path(  # ruff: ignore[too-many-return-statements]
         self,
         *,
         sbx: Any,

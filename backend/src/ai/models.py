@@ -5,7 +5,7 @@ import re
 from typing import Literal, cast
 
 from pydantic import (
-    BaseModel,  # noqa: TID251 - not an HTTP schema
+    BaseModel,  # ruff: ignore[banned-api] - not an HTTP schema
     ConfigDict,
     Field,
     JsonValue,
@@ -45,7 +45,7 @@ def _coerce_slug_list(values: object, *, field: str) -> list[str]:
         values = [values]
     if not isinstance(values, list):
         msg = f"{field} must be provided as a list of slugs"
-        raise ValueError(msg)  # noqa: TRY004 - used by Pydantic validators for schema errors.
+        raise ValueError(msg)  # ruff: ignore[type-check-without-type-error] - used by Pydantic validators for schema errors.
     return [_coerce_slug(item, field=field) for item in values if str(item or "").strip()]
 
 

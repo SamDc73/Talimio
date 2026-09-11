@@ -3,14 +3,14 @@
 import structlog
 from fastapi import FastAPI
 from opentelemetry import metrics, trace
-from opentelemetry._logs import set_logger_provider  # noqa: PLC2701
-from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter  # noqa: PLC2701
+from opentelemetry._logs import set_logger_provider  # ruff: ignore[import-private-name]
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter  # ruff: ignore[import-private-name]
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.sdk._logs import LoggerProvider  # noqa: PLC2701
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor  # noqa: PLC2701
+from opentelemetry.sdk._logs import LoggerProvider  # ruff: ignore[import-private-name]
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor  # ruff: ignore[import-private-name]
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource

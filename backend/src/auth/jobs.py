@@ -22,7 +22,7 @@ from src.jobs import QUEUE_AUTH, defer_job
 
 logger = logging.getLogger(__name__)
 
-PASSWORD_RESET_EMAIL_TASK_NAME = "auth.send_password_reset_email"  # noqa: S105 — procrastinate task name, not a secret
+PASSWORD_RESET_EMAIL_TASK_NAME = "auth.send_password_reset_email"  # ruff: ignore[hardcoded-password-string] — procrastinate task name, not a secret
 
 
 async def defer_password_reset_email(session: AsyncSession, *, email: str) -> int | None:

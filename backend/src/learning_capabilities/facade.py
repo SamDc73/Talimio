@@ -3,7 +3,7 @@
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 
-from pydantic import BaseModel  # noqa: TID251 - not an HTTP schema
+from pydantic import BaseModel  # ruff: ignore[banned-api] - not an HTTP schema
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.courses.facade import CoursesFacade
@@ -66,7 +66,7 @@ from src.learning_capabilities.services.query_service import LearningCapabilityQ
 type _CapabilityHandler = Callable[..., Awaitable[BaseModel]]
 
 
-class LearningCapabilitiesFacade:  # noqa: PLR0904
+class LearningCapabilitiesFacade:  # ruff: ignore[too-many-public-methods]
     """Single typed entrypoint for learning capabilities."""
 
     def __init__(self, session: AsyncSession) -> None:

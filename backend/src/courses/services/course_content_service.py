@@ -1177,7 +1177,7 @@ class CourseContentService:
                 exc_info=(type(ai_result_or_error), ai_result_or_error, ai_result_or_error.__traceback__),
             )
             error_msg = "Failed to generate course outline"
-            raise RuntimeError(error_msg) from ai_result_or_error  # noqa: TRY004
+            raise RuntimeError(error_msg) from ai_result_or_error  # ruff: ignore[type-check-without-type-error]
 
         if isinstance(ai_result_or_error, BaseException):
             raise ai_result_or_error

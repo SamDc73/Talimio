@@ -426,7 +426,7 @@ class LearningCapabilityActionService:
         )
         return result
 
-    async def generate_concept_probe(  # noqa: PLR0911, PLR0912
+    async def generate_concept_probe(  # ruff: ignore[too-many-return-statements, too-many-branches]
         self,
         *,
         user_id: uuid.UUID,
@@ -925,7 +925,7 @@ class LearningCapabilityActionService:
             raise LearningCapabilitiesValidationError(detail)
 
         lesson_service = LessonService(self._session, user_id)
-        base_context = await lesson_service._prepare_lesson_context(  # noqa: SLF001
+        base_context = await lesson_service._prepare_lesson_context(  # ruff: ignore[private-member-access]
             lesson=lesson,
             course=course,
             generation_mode="learning_capability_mutation",

@@ -9,7 +9,7 @@ from typing import cast
 
 import structlog
 from opentelemetry import trace
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler  # noqa: PLC2701
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler  # ruff: ignore[import-private-name]
 from structlog.typing import Processor
 
 from src.config.settings import Settings, get_settings

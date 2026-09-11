@@ -9,7 +9,7 @@ from typing import TypeVar, cast
 
 import litellm
 from opentelemetry import trace
-from pydantic import BaseModel, JsonValue, ValidationError  # noqa: TID251 - not an HTTP schema
+from pydantic import BaseModel, JsonValue, ValidationError  # ruff: ignore[banned-api] - not an HTTP schema
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ai import AGENT_ID_ASSISTANT, AGENT_ID_DEFAULT
@@ -699,7 +699,7 @@ class LLMClient:
             return None
         return f"{span_context.trace_id:032x}"
 
-    def _build_completion_metadata(  # noqa: C901, PLR0912
+    def _build_completion_metadata(  # ruff: ignore[complex-structure, too-many-branches]
         self,
         *,
         metadata: JsonDict | None,
@@ -807,7 +807,7 @@ class LLMClient:
             if isinstance(response_cost, (int, float)):
                 span.set_attribute("llm.cost_usd", float(response_cost))
 
-    async def complete(  # noqa: C901, PLR0912
+    async def complete(  # ruff: ignore[complex-structure, too-many-branches]
         self,
         messages: Sequence[ChatMessage],
         temperature: float | None = None,
@@ -998,7 +998,7 @@ class LLMClient:
         msg = "Structured response failed schema validation"
         raise AISchemaValidationError(msg)
 
-    async def _run_autonomy_loop(self, request: _LLMRequest) -> tuple[object, list[ChatMessage]]:  # noqa: PLR0914
+    async def _run_autonomy_loop(self, request: _LLMRequest) -> tuple[object, list[ChatMessage]]:  # ruff: ignore[too-many-locals]
         """Run the shared non-stream autonomy loop for structured and free-form calls."""
         conversation = list(request.messages)
         tool_round = 0
@@ -1248,7 +1248,7 @@ class LLMClient:
             return mapping.get(name)
         return None
 
-    async def _stream_unstructured_completion(  # noqa: PLR0914
+    async def _stream_unstructured_completion(  # ruff: ignore[too-many-locals]
         self,
         *,
         messages: Sequence[ChatMessage],

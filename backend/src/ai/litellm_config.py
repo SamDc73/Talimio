@@ -135,7 +135,7 @@ def _configure_langfuse_otel_callback() -> None:
 
 def configure_litellm() -> None:
     """Apply process-wide LiteLLM settings exactly once."""
-    global _LITELLM_CONFIGURED  # noqa: PLW0603
+    global _LITELLM_CONFIGURED  # ruff: ignore[global-statement]
     if _LITELLM_CONFIGURED:
         return
 
@@ -143,7 +143,7 @@ def configure_litellm() -> None:
     # loop during process teardown. In tests, that happens after pytest closes its
     # capture streams and produces noisy closed-file logging. We manage cleanup
     # ourselves, so keep LiteLLM from registering the extra atexit hook.
-    cast("Any", litellm)._async_client_cleanup_registered = True  # noqa: SLF001
+    cast("Any", litellm)._async_client_cleanup_registered = True  # ruff: ignore[private-member-access]
     litellm.enable_json_schema_validation = True
     litellm.drop_params = True
     # Retry each model once (2 attempts total) on transient errors before
