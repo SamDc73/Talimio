@@ -15,6 +15,7 @@ export function CourseHeader({
 	toggleSidebar = noop,
 	courseId,
 	adaptiveEnabled = false,
+	showViewSwitch = true,
 }) {
 	const { toggleChat } = useChatSidebar()
 
@@ -62,64 +63,70 @@ export function CourseHeader({
 						</div>
 					</div>
 
-					<div className="hidden md:flex items-center border border-border rounded-full h-8 px-1 mx-4 bg-muted/50">
-						<button
-							className={cn(
-								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "outline" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-							)}
-							type="button"
-							onClick={() => mode !== "outline" && onModeChange("outline")}
-							aria-pressed={mode === "outline"}
-						>
-							<FileText className="size-3.5  inline-block mr-1" />
-							<span>Outline</span>
-						</button>
-						<button
-							className={cn(
-								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "track" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-							)}
-							type="button"
-							onClick={() => mode !== "track" && onModeChange("track")}
-							aria-pressed={mode === "track"}
-						>
-							<GitBranch className="size-3.5  inline-block mr-1" />
-							<span>Track</span>
-						</button>
-						<button
-							className={cn(
-								"px-3 py-1 text-xs font-medium rounded-full transition-colors",
-								mode === "documents"
-									? "bg-card text-foreground shadow-sm"
-									: "text-muted-foreground hover:text-foreground"
-							)}
-							type="button"
-							onClick={() => mode !== "documents" && onModeChange("documents")}
-							aria-pressed={mode === "documents"}
-						>
-							<Files className="size-3.5  inline-block mr-1" />
-							<span>Documents</span>
-						</button>
-					</div>
+					{showViewSwitch ? (
+						<div className="hidden md:flex items-center border border-border rounded-full h-8 px-1 mx-4 bg-muted/50">
+							<button
+								className={cn(
+									"px-3 py-1 text-xs font-medium rounded-full transition-colors",
+									mode === "outline"
+										? "bg-card text-foreground shadow-sm"
+										: "text-muted-foreground hover:text-foreground"
+								)}
+								type="button"
+								onClick={() => mode !== "outline" && onModeChange("outline")}
+								aria-pressed={mode === "outline"}
+							>
+								<FileText className="size-3.5  inline-block mr-1" />
+								<span>Outline</span>
+							</button>
+							<button
+								className={cn(
+									"px-3 py-1 text-xs font-medium rounded-full transition-colors",
+									mode === "track" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+								)}
+								type="button"
+								onClick={() => mode !== "track" && onModeChange("track")}
+								aria-pressed={mode === "track"}
+							>
+								<GitBranch className="size-3.5  inline-block mr-1" />
+								<span>Track</span>
+							</button>
+							<button
+								className={cn(
+									"px-3 py-1 text-xs font-medium rounded-full transition-colors",
+									mode === "documents"
+										? "bg-card text-foreground shadow-sm"
+										: "text-muted-foreground hover:text-foreground"
+								)}
+								type="button"
+								onClick={() => mode !== "documents" && onModeChange("documents")}
+								aria-pressed={mode === "documents"}
+							>
+								<Files className="size-3.5  inline-block mr-1" />
+								<span>Documents</span>
+							</button>
+						</div>
+					) : null}
 
 					<div className="flex items-center gap-2">
-						<div className="md:hidden">
-							<TooltipButton
-								variant="outline"
-								size="icon"
-								className="size-8  rounded-full"
-								onClick={() => {
-									const modes = ["outline", "track", "documents"]
-									const currentIndex = modes.indexOf(mode)
-									const nextIndex = (currentIndex + 1) % modes.length
-									onModeChange(modes[nextIndex])
-								}}
-								tooltipContent={`Switch View (${nextModeLabel} next)`}
-							>
-								{currentModeIcon}
-							</TooltipButton>
-						</div>
+						{showViewSwitch ? (
+							<div className="md:hidden">
+								<TooltipButton
+									variant="outline"
+									size="icon"
+									className="size-8  rounded-full"
+									onClick={() => {
+										const modes = ["outline", "track", "documents"]
+										const currentIndex = modes.indexOf(mode)
+										const nextIndex = (currentIndex + 1) % modes.length
+										onModeChange(modes[nextIndex])
+									}}
+									tooltipContent={`Switch View (${nextModeLabel} next)`}
+								>
+									{currentModeIcon}
+								</TooltipButton>
+							</div>
+						) : null}
 
 						<TooltipButton
 							variant="outline"

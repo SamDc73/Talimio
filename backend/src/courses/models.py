@@ -39,6 +39,7 @@ _DEFAULT_LEARNER_PROFILE = {
 
 LearningQuestionStatus = Literal["active", "answered", "expired"]
 CourseGenerationStatus = Literal["generating", "ready", "failed"]
+CourseMode = Literal["standard", "adaptive", "question_bank"]
 
 
 class Course(Base):
@@ -53,6 +54,14 @@ class Course(Base):
     tags: Mapped[str | None] = mapped_column(Text, nullable=True)
     setup_commands: Mapped[str | None] = mapped_column(Text, nullable=True)
     adaptive_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Where the learning material comes from; adaptive_enabled stays the LECTOR
+    # switch and is true for both "adaptive" and "question_bank".
+    mode: Mapped[CourseMode] = mapped_column(
+        String(20),
+        nullable=False,
+        default="standard",
+        server_default=text("'standard'"),
+    )
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     generation_status: Mapped[CourseGenerationStatus] = mapped_column(
         String(20),
@@ -292,6 +301,48 @@ class CourseAttachment(Base):
     )
 
     course: Mapped[Course] = relationship("Course", back_populates="attachments")
+
+
+class CourseQuestion(Base):
+    """Instructor-authored question in a question-bank course.
+
+    The bank is the course's canon and carries no learner state: per-learner
+    grading rows are materialized into ``learning_questions`` with
+    ``source_key = "bank:<id>"``. The table has no user_id on purpose: the
+    course implies its owner. ``concept_id`` is NULL until the outline job
+    maps the question onto the derived concept graph.
+    """
+
+    __tablename__ = "course_questions"
+    __table_args__ = (
+        UniqueConstraint("course_id", "position", name="course_questions_course_id_position_key"),
+        CheckConstraint("answer_kind IN ('text', 'latex', 'choice')", name="course_questions_answer_kind_check"),
+        Index("course_questions_course_concept_idx", "course_id", "concept_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("app_uuid7()"))
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    concept_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("concepts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    choices: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    hints: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+    )
 
 
 class Concept(Base):
@@ -643,6 +694,7 @@ __all__ = [
     "Course",
     "CourseAttachment",
     "CourseConcept",
+    "CourseQuestion",
     "LearningAttempt",
     "LearningQuestion",
     "Lesson",

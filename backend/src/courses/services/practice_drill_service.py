@@ -14,8 +14,8 @@ from src.ai.assistant.models import AssistantActiveProbe
 from src.ai.client import LLMClient
 from src.config.schema_casing import build_camel_config
 from src.config.settings import get_settings
-from src.courses.models import Concept, CourseConcept, Lesson, ProbeEvent, UserConceptState
-from src.courses.schemas import PracticeDrillItem, ProbeFamily, ProbeRendererKind
+from src.courses.models import Concept, CourseConcept, CourseQuestion, Lesson, ProbeEvent, UserConceptState
+from src.courses.schemas import DifficultyIntent, PracticeDrillItem, ProbeFamily, ProbeRendererKind
 from src.exceptions import NotFoundError, ValidationError
 
 
@@ -24,6 +24,10 @@ _RECENT_PERFORMANCE_WINDOW = 20
 _TARGET_PROBABILITY_HIGH_MASTERY = 0.52
 _TARGET_PROBABILITY_MID_MASTERY = 0.62
 _TARGET_PROBABILITY_LOW_MASTERY = 0.70
+# Accepted pace offers pin the band instead of deriving it from mastery.
+_EASE_TARGET_PROBABILITY = 0.78
+_STRETCH_TARGET_PROBABILITY = 0.48
+_INTENT_BAND_WIDTH = 0.08
 _FAMILY_RECOGNITION: ProbeFamily = "recognition_discrimination"
 _FAMILY_COMPLETION: ProbeFamily = "completion_transformation"
 _FAMILY_ERROR_DIAGNOSIS: ProbeFamily = "error_diagnosis_repair"
@@ -126,8 +130,9 @@ class PracticeDrillService:
         concept_id: uuid.UUID,
         count: int,
         learner_context: str | None = None,
+        difficulty_intent: DifficultyIntent | None = None,
     ) -> list[PracticeDrillItem]:
-        """Generate adaptive drills for a course concept."""
+        """Generate adaptive drills for a course concept; an accepted pace offer pins the difficulty band."""
         concept_lesson_row = await self._session.execute(
             select(Concept, Lesson.id)
             .join(CourseConcept, CourseConcept.concept_id == Concept.id)
@@ -150,12 +155,13 @@ class PracticeDrillService:
             message = "Concept is not assigned to this course"
             raise NotFoundError(message=message)
         concept, lesson_id = row
-        if lesson_id is None:
-            message = "Lesson is not assigned to this course concept"
-            raise NotFoundError(message=message)
 
         learner = await self._load_learner_profile(user_id=user_id, course_id=course_id, concept_id=concept_id)
-        generation_context = self._build_generation_context(learner, learner_context=learner_context)
+        generation_context = self._build_generation_context(
+            learner,
+            learner_context=learner_context,
+            difficulty_intent=difficulty_intent,
+        )
         seen_questions, seen_signatures = await self._load_recent_seen_keys(
             user_id=user_id,
             course_id=course_id,
@@ -181,7 +187,19 @@ class PracticeDrillService:
 
         return drills
 
-    def _build_generation_context(self, learner: _LearnerProfile, *, learner_context: str | None) -> _GenerationContext:
+    def _build_generation_context(
+        self,
+        learner: _LearnerProfile,
+        *,
+        learner_context: str | None,
+        difficulty_intent: DifficultyIntent | None = None,
+    ) -> _GenerationContext:
+        if difficulty_intent is not None:
+            return self._build_intent_generation_context(
+                learner,
+                learner_context=learner_context,
+                difficulty_intent=difficulty_intent,
+            )
         target_probability, target_low, target_high = self._build_target_band(
             mastery=learner.mastery,
             recent_correct=learner.recent_correct,
@@ -201,12 +219,46 @@ class PracticeDrillService:
             family_guidance=self._build_family_guidance(probe_family),
         )
 
+    def _build_intent_generation_context(
+        self,
+        learner: _LearnerProfile,
+        *,
+        learner_context: str | None,
+        difficulty_intent: DifficultyIntent,
+    ) -> _GenerationContext:
+        """Build the fixed band and family for an accepted pace offer, independent of the mastery heuristics."""
+        if difficulty_intent == "ease":
+            target = _EASE_TARGET_PROBABILITY
+            probe_family = _FAMILY_RECOGNITION
+            difficulty_guidance = (
+                "Warm-up set. One idea per question, concrete values, the most standard form of the concept, "
+                "no traps. The learner just missed a few; rebuild footing before difficulty returns."
+            )
+        else:
+            target = _STRETCH_TARGET_PROBABILITY
+            probe_family = _FAMILY_CONSTRUCTIVE
+            difficulty_guidance = (
+                "Stretch set. Edge cases, multi-step reasoning, or a transfer to a neighbouring situation the "
+                "learner has not seen. Tie the scenario to the learner's stated goals when the context names any."
+            )
+        return _GenerationContext(
+            learner_context=self._build_learner_context(learner, learner_context=learner_context),
+            difficulty_guidance=difficulty_guidance,
+            review_status=self._build_review_status(learner.overdue),
+            target_probability=target,
+            target_low=max(0.0, target - _INTENT_BAND_WIDTH),
+            target_high=min(1.0, target + _INTENT_BAND_WIDTH),
+            probe_family=probe_family,
+            renderer_kind=self._renderer_for_family(probe_family),
+            family_guidance=self._build_family_guidance(probe_family),
+        )
+
     async def _generate_drills_once(
         self,
         *,
         concept: Concept,
         concept_id: uuid.UUID,
-        lesson_id: uuid.UUID,
+        lesson_id: uuid.UUID | None,
         learner: _LearnerProfile,
         generation_context: _GenerationContext,
         seen_questions: set[str],
@@ -419,8 +471,23 @@ class PracticeDrillService:
             )
         ).all()
 
+        # Instructor bank questions for this concept: the AI must never restate them.
+        bank_rows = (
+            await self._session.execute(
+                select(CourseQuestion.question).where(
+                    and_(
+                        CourseQuestion.course_id == course_id,
+                        CourseQuestion.concept_id == concept_id,
+                    )
+                )
+            )
+        ).scalars().all()
+
         questions: set[str] = set()
         signatures: set[str] = set()
+        for bank_question in bank_rows:
+            questions.add(self._normalize_question_key(bank_question))
+            signatures.add(self._derive_structure_signature(bank_question))
         for extra in probe_rows:
             if not isinstance(extra, dict):
                 continue

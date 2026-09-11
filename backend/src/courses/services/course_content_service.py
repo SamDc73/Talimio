@@ -24,14 +24,17 @@ from src.courses.models import (
     ConceptSimilarity,
     Course,
     CourseConcept,
+    CourseMode,
     Lesson,
 )
+from src.courses.schemas import CourseQuestionCreate
 from src.courses.services.course_attachments_service import CourseAttachmentsService
 from src.courses.services.generation_jobs import (
     defer_course_outline_generation,
     defer_lesson_version_generation,
 )
 from src.courses.services.lesson_version_service import LessonVersionService
+from src.courses.services.question_bank_service import QuestionBankService
 from src.database.session import async_session_maker
 from src.exceptions import NotFoundError
 
@@ -67,21 +70,24 @@ class CourseContentService:
         user_id: uuid.UUID,
         book_ids: Sequence[uuid.UUID] | None = None,
         image_data_urls: Sequence[str] | None = None,
+        questions: Sequence[CourseQuestionCreate] | None = None,
     ) -> Course:
         """Create a draft course in a ``generating`` state and defer outline generation.
 
         Returns immediately; the procrastinate worker builds the outline and
         eager-enqueues lesson content. The deferred job commits atomically with
         the draft course row so a crash never leaves an enqueue without a course.
+        Question-bank courses store their instructor questions here; the job
+        maps them onto the derived concept graph.
         """
         session = self.session
         session_data = dict(data)
-        is_adaptive = bool(session_data.get("adaptive_enabled"))
+        mode = self._resolve_mode(session_data)
         prompt_text = self._normalize_prompt_text(session_data.get("prompt", ""))
         linked_book_ids = await self._validate_linked_books(session, user_id, book_ids or [])
         image_payload = list(image_data_urls or [])
 
-        course = self._build_draft_course(session_data=session_data, user_id=user_id, is_adaptive=is_adaptive)
+        course = self._build_draft_course(session_data=session_data, user_id=user_id, mode=mode)
         if not course.title or course.title == "Draft course":
             course.title = f"Generating: {prompt_text[:30]}..." if prompt_text else "Generating course..."
         course.generation_status = "generating"
@@ -90,6 +96,8 @@ class CourseContentService:
         await session.flush()
         await session.refresh(course)
         course_id = course.id
+        if questions:
+            await QuestionBankService(session).insert_questions(course_id=course_id, questions=questions)
         if linked_book_ids:
             # Attachment rows land in the same transaction as the course row;
             # generation never blocks the request on book embedding.
@@ -112,7 +120,8 @@ class CourseContentService:
                 "user_id": str(user_id),
                 "image_count": len(image_payload),
                 "book_count": len(linked_book_ids),
-                "adaptive_enabled": is_adaptive,
+                "question_count": len(questions or []),
+                "mode": mode,
             },
         )
         return course
@@ -172,16 +181,24 @@ class CourseContentService:
                     },
                 )
 
-                module_count, lesson_count = await self._build_and_persist_generated_course(
-                    session=session,
-                    course=course,
-                    session_data={},
-                    prompt_text=prompt_text,
-                    is_adaptive=is_adaptive,
-                    user_id=user_id,
-                    image_data_urls=image_payload,
-                    book_ids=book_id_list,
-                )
+                if course.mode == "question_bank":
+                    concept_count = await self._build_and_persist_question_bank_course(
+                        session=session,
+                        course=course,
+                        user_id=user_id,
+                    )
+                    span.set_attribute("app.course_concept_count", concept_count)
+                else:
+                    module_count, lesson_count = await self._build_and_persist_generated_course(
+                        session=session,
+                        course=course,
+                        session_data={},
+                        prompt_text=prompt_text,
+                        is_adaptive=is_adaptive,
+                        user_id=user_id,
+                        image_data_urls=image_payload,
+                        book_ids=book_id_list,
+                    )
                 await self._handle_post_creation(session=session, course=course)
                 course.generation_status = "ready"
                 await self._enqueue_lesson_content_generation(session=session, course_id=course_id, user_id=user_id)
@@ -312,12 +329,58 @@ class CourseContentService:
         )
         return len(normalized_modules), lesson_count
 
+    async def _build_and_persist_question_bank_course(
+        self,
+        *,
+        session: AsyncSession,
+        course: Course,
+        user_id: uuid.UUID,
+    ) -> int:
+        """Derive the concept graph from the instructor's bank and map every question onto it.
+
+        No lessons exist in this mode: the bank plus the graph is the course.
+        Returns the number of concepts created.
+        """
+        bank_service = QuestionBankService(session)
+        questions = await bank_service.list_questions(course.id)
+        # Release the read transaction before waiting on the planning LLM.
+        await session.commit()
+
+        structure = await self.ai_service.generate_question_bank_structure(
+            user_id=user_id,
+            questions_block=bank_service.build_prompt_block(questions),
+        )
+        session_data: MutableCoursePayload = {
+            "title": structure.course.title,
+            "description": structure.ai_outline_meta.scope,
+            "tags": structure.course.tags,
+            "setup_commands": structure.course.setup_commands,
+        }
+        self._serialize_payload_fields(session_data)
+        self._apply_course_updates(course, session_data)
+
+        adaptive_result = await self._create_adaptive_concepts(session=session, course=course, plan=structure)
+        await bank_service.assign_concepts(
+            questions=questions,
+            concepts_by_index=adaptive_result.concepts_by_index,
+            assignments=structure.assignments,
+        )
+        return len(adaptive_result.concepts_by_index)
+
+    @staticmethod
+    def _resolve_mode(session_data: MutableCoursePayload) -> CourseMode:
+        """Read the requested mode; legacy callers only send adaptive_enabled."""
+        raw_mode = session_data.get("mode")
+        if raw_mode in {"standard", "adaptive", "question_bank"}:
+            return cast("CourseMode", raw_mode)
+        return "adaptive" if bool(session_data.get("adaptive_enabled")) else "standard"
+
     def _build_draft_course(
         self,
         *,
         session_data: MutableCoursePayload,
         user_id: uuid.UUID,
-        is_adaptive: bool,
+        mode: CourseMode,
     ) -> Course:
         """Build a draft course object from session payload data."""
         draft_title = str(session_data.get("title") or "Draft course")
@@ -326,7 +389,8 @@ class CourseContentService:
             user_id=user_id,
             title=draft_title,
             description=draft_description,
-            adaptive_enabled=is_adaptive,
+            adaptive_enabled=mode != "standard",
+            mode=mode,
             archived=bool(session_data.get("archived")),
         )
 

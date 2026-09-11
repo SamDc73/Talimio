@@ -29,19 +29,23 @@ from src.ai.models import (
     AdaptiveCourseStructure,
     CourseStructure,
     ExecutionPlan,
+    ExerciseWorkReview,
     FigureVerification,
     GeneratedLesson,
+    QuestionBankStructure,
     SelfAssessmentQuiz,
 )
 from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
     COURSE_GENERATION_PROMPT,
     E2B_EXECUTION_SYSTEM_PROMPT,
+    EXERCISE_WORK_REVIEW_PROMPT,
     FIGURE_VERIFICATION_PROMPT,
     LESSON_GENERATION_PROMPT,
     MEMORY_CONTEXT_SYSTEM_PROMPT,
     PRACTICE_GENERATION_PROMPT,
     PRACTICE_PREDICTION_PROMPT,
+    QUESTION_BANK_STRUCTURE_PROMPT,
     SELF_ASSESSMENT_QUESTIONS_PROMPT,
 )
 from src.ai.tools.plan import (
@@ -1830,6 +1834,45 @@ class LLMClient:
             msg = "Failed to generate adaptive course structure"
             raise RuntimeError(msg) from error
 
+    async def generate_question_bank_structure(
+        self,
+        questions_block: str,
+        user_id: str | uuid.UUID | None = None,
+    ) -> QuestionBankStructure:
+        """Derive the concept graph and question-to-concept map for an instructor's question bank."""
+        messages = [
+            {"role": "system", "content": QUESTION_BANK_STRUCTURE_PROMPT},
+            {"role": "user", "content": questions_block},
+        ]
+        tracer = trace.get_tracer(__name__)
+        with tracer.start_as_current_span("llm.generation.question_bank_structure") as span:
+            span.set_attribute("llm.generation.name", "question_bank_structure")
+            span.set_attribute("llm.model.type", "structured")
+            if user_id is not None:
+                span.set_attribute("enduser.id", str(user_id))
+
+            try:
+                result = await self.get_completion(
+                    messages,
+                    response_model=QuestionBankStructure,
+                    user_id=user_id,
+                    metadata={
+                        "generation_name": "question_bank_structure",
+                        "tags": ["course", "question_bank"],
+                    },
+                )
+            except ValueError:
+                raise
+            except _GENERATION_WRAPPER_ERROR_TYPES as error:
+                self._logger.exception("Error generating question bank structure")
+                msg = "Failed to generate question bank structure"
+                raise RuntimeError(msg) from error
+
+        if not isinstance(result, QuestionBankStructure):
+            msg = "Expected QuestionBankStructure from structured output"
+            raise TypeError(msg)
+        return result
+
     async def generate_self_assessment_questions(
         self,
         *,
@@ -1944,6 +1987,7 @@ class LLMClient:
         inside the lesson-writer's own tool loop.
         """
         context_line = f"\nLesson context: {lesson_context.strip()}" if lesson_context and lesson_context.strip() else ""
+
         messages = [
             {"role": "system", "content": FIGURE_VERIFICATION_PROMPT},
             {
@@ -1964,6 +2008,43 @@ class LLMClient:
         )
         if not isinstance(result, FigureVerification):
             msg = "Expected FigureVerification from structured output"
+            raise TypeError(msg)
+        return result
+
+    async def review_exercise_work(
+        self,
+        *,
+        typed_work: str,
+        work_image_data_url: str | None,
+        user_id: str | uuid.UUID | None = None,
+    ) -> ExerciseWorkReview:
+        """Review a student's typed and/or stylus-drawn exercise work into a step-by-step guide.
+
+        Vision-capable call on the primary model: typed text and the canvas image travel in
+        the same user message, so handwriting and typed lines are judged as one body of work.
+        Memory and tools are disabled: this is a clean, self-contained judgment.
+        """
+        student_text = typed_work.strip() or "(no typed work submitted)"
+        user_content: list[dict[str, JsonValue]] = [
+            {"type": "text", "text": f"The student's typed work:\n{student_text}"},
+        ]
+        if work_image_data_url:
+            user_content.append({"type": "image_url", "image_url": {"url": work_image_data_url}})
+
+        messages = [
+            {"role": "system", "content": EXERCISE_WORK_REVIEW_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
+
+        result = await self.get_completion(
+            messages,
+            response_model=ExerciseWorkReview,
+            user_id=user_id,
+            enable_memory=False,
+            enable_tools=False,
+        )
+        if not isinstance(result, ExerciseWorkReview):
+            msg = "Expected ExerciseWorkReview from structured output"
             raise TypeError(msg)
         return result
 

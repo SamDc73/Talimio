@@ -38,7 +38,15 @@ export default function CourseLayout() {
 	const { lessonId } = useParams()
 
 	// Course context is only loaded when this layout is rendered
-	const { courseId, courseName, modules, adaptiveEnabled, adaptiveProgressPct, isLoading } = useCourseContext()
+	const {
+		courseId,
+		courseName,
+		modules,
+		adaptiveEnabled,
+		mode: courseMode,
+		adaptiveProgressPct,
+		isLoading,
+	} = useCourseContext()
 
 	const mode = getModeFromPath(pathname, courseId)
 
@@ -94,6 +102,7 @@ export default function CourseLayout() {
 				courseId={courseId}
 				courseName={courseName}
 				adaptiveEnabled={adaptiveEnabled}
+				showViewSwitch={courseMode !== "question_bank"}
 				progress={adaptiveProgressPct}
 				isOpen={isOpen}
 				toggleSidebar={toggleSidebar}

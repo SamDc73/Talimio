@@ -7,6 +7,7 @@ import { MasteryCircle } from "@/components/MasteryCircle"
 import { useCourseContext } from "@/features/course/CourseContext"
 import OutlineNode from "@/features/course/components/navigation/OutlineNode"
 import { useCourseProgress } from "@/features/course/hooks/use-course-progress"
+import QuestionBankView from "@/features/course/views/QuestionBankView"
 import logger from "@/lib/logger"
 import { useCourseNavigation } from "@/utils/navigationUtils"
 
@@ -100,7 +101,7 @@ function BuildForecast(meta) {
 }
 
 function OutlineView() {
-	const { courseId, modules, adaptiveEnabled } = useCourseContext()
+	const { courseId, modules, adaptiveEnabled, mode: courseMode } = useCourseContext()
 
 	const { isCompleted, metadata, rawMetadata, toggleCompletion } = useCourseProgress(courseId)
 	const { goToLesson } = useCourseNavigation()
@@ -263,6 +264,11 @@ function OutlineView() {
 		() => (showAllUpcoming ? comingList : comingList.slice(0, 5)),
 		[showAllUpcoming, comingList]
 	)
+
+	// Question-bank courses have no lessons to outline: the landing is the concept list plus practice.
+	if (courseMode === "question_bank") {
+		return <QuestionBankView />
+	}
 
 	// Non-adaptive: return the original minimal outline view
 	if (!adaptiveEnabled) {

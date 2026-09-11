@@ -111,6 +111,10 @@ export async function fetchConceptFrontierByCourseId(courseId, signal) {
 	return api.get(buildCoursePath(courseId, "/concepts"), { signal })
 }
 
+export async function fetchQuestionBankByCourseId(courseId, signal) {
+	return api.get(buildCoursePath(courseId, "/question-bank"), { signal })
+}
+
 /**
  * Hook for course operations
  * @param {string} courseId - The course ID
@@ -208,6 +212,8 @@ export function useCourseService(courseId = null) {
 					count: payload.count,
 					practiceContext: payload.practiceContext ?? "drill",
 					lessonId: payload.lessonId ?? null,
+					excludeQuestionIds: Array.isArray(payload.excludeQuestionIds) ? payload.excludeQuestionIds : [],
+					difficultyIntent: payload.difficultyIntent ?? null,
 				},
 				{ pathParams: { courseId } }
 			)

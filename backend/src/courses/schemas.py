@@ -11,7 +11,10 @@ from pydantic import ConfigDict, Field, JsonValue, field_validator, model_valida
 
 from src.books.schemas import BookRagStatus
 from src.config.schema_casing import CamelModel
-from src.courses.models import CourseGenerationStatus
+from src.courses.models import CourseGenerationStatus, CourseMode
+
+
+PracticeAnswerKind = Literal["latex", "text", "choice"]
 
 
 class LessonSummary(CamelModel):
@@ -137,6 +140,7 @@ class CourseBase(CamelModel):
     archived: bool = Field(default=False, description="Whether the course is archived")
     setup_commands: list[str] = Field(default_factory=list, description="Commands to run once per course sandbox")
     adaptive_enabled: bool = Field(default=False, description="Whether adaptive concept scheduling is enabled")
+    mode: CourseMode = Field("standard", description="Where the learning material comes from")
 
 
 class CourseCreate(CamelModel):
@@ -192,11 +196,51 @@ _IMAGE_DATA_URL_PREFIX = re.compile(r"^data:image/(png|jpe?g);base64,")
 _MAX_IMAGE_DATA_URL_CHARS = 8_000_000
 
 
-class CourseCreateRequest(CamelModel):
-    """JSON body for course creation: books by reference, images inline."""
+class CourseQuestionCreate(CamelModel):
+    """One instructor-authored question for a question-bank course."""
 
-    prompt: str = Field(min_length=1, max_length=20_000, description="Course generation prompt")
+    question: str = Field(min_length=1, max_length=4000, description="Learner-facing question prompt")
+    expected_answer: str = Field(min_length=1, max_length=4000, description="Server-owned expected answer")
+    answer_kind: PracticeAnswerKind = Field("text", description="Learner answer interpretation")
+    choices: list[str] = Field(default_factory=list, max_length=8, description="Choices for choice questions")
+    hints: list[str] = Field(default_factory=list, max_length=5, description="Optional learner-visible hints")
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_choices_for_kind(self) -> CourseQuestionCreate:
+        """Choice questions carry their choices; other kinds carry none."""
+        normalized_choices = [choice.strip() for choice in self.choices if choice.strip()]
+        if self.answer_kind == "choice":
+            if len(normalized_choices) < 3:
+                detail = "choice questions need at least three choices"
+                raise ValueError(detail)
+            if self.expected_answer.strip() not in normalized_choices:
+                detail = "expectedAnswer must exactly match one choice"
+                raise ValueError(detail)
+        elif normalized_choices:
+            detail = "choices are only allowed when answerKind is choice"
+            raise ValueError(detail)
+        self.choices = normalized_choices
+        self.hints = [hint.strip() for hint in self.hints if hint.strip()]
+        return self
+
+
+class CourseCreateRequest(CamelModel):
+    """JSON body for course creation: books by reference, images inline.
+
+    ``mode`` defaults from ``adaptiveEnabled`` when omitted so existing clients
+    keep working; question-bank courses send ``questions`` instead of a prompt.
+    """
+
+    prompt: str = Field("", max_length=20_000, description="Course generation prompt")
     adaptive_enabled: bool = Field(default=False, description="Enable adaptive scheduling")
+    mode: CourseMode = Field("standard", description="Where the learning material comes from")
+    questions: list[CourseQuestionCreate] = Field(
+        default_factory=list,
+        max_length=300,
+        description="Instructor-authored questions; required for question_bank courses",
+    )
     book_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50, description="Books to attach")
     image_data_urls: list[str] = Field(
         default_factory=list,
@@ -205,6 +249,31 @@ class CourseCreateRequest(CamelModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def resolve_mode(self) -> CourseCreateRequest:
+        """Derive mode from adaptiveEnabled for legacy bodies and check per-mode inputs."""
+        if "mode" not in self.model_fields_set and self.adaptive_enabled:
+            self.mode = "adaptive"
+        self.adaptive_enabled = self.mode != "standard"
+        self.prompt = self.prompt.strip()
+
+        if self.mode == "question_bank":
+            if not self.questions:
+                detail = "question_bank courses need at least one question"
+                raise ValueError(detail)
+            if self.book_ids or self.image_data_urls:
+                detail = "question_bank courses do not take books or images"
+                raise ValueError(detail)
+            return self
+
+        if self.questions:
+            detail = "questions are only accepted when mode is question_bank"
+            raise ValueError(detail)
+        if not self.prompt:
+            detail = "Prompt must not be empty"
+            raise ValueError(detail)
+        return self
 
     @field_validator("image_data_urls")
     @classmethod
@@ -272,6 +341,41 @@ class CourseListResponse(CamelModel):
     total: int = Field(description="Total number of courses")
     page: int = Field(description="Current page number")
     per_page: int = Field(description="Number of courses per page")
+
+
+class CourseQuestionRead(CamelModel):
+    """One bank question with its mapped concept and this learner's attempt stats.
+
+    The expected answer never leaves the server, matching question-set items.
+    """
+
+    id: uuid.UUID = Field(description="Bank question ID")
+    position: int = Field(description="Author order within the bank")
+    question: str = Field(description="Learner-facing question prompt")
+    answer_kind: PracticeAnswerKind = Field(description="Learner answer interpretation")
+    choices: list[str] = Field(default_factory=list, description="Choices for choice questions")
+    hints: list[str] = Field(default_factory=list, description="Learner-visible hints")
+    concept_id: uuid.UUID | None = Field(None, description="Mapped concept; null until the outline job runs")
+    concept_name: str | None = Field(None, description="Mapped concept display name")
+    attempts: int = Field(0, description="Attempts this learner has made on the question")
+    correct_attempts: int = Field(0, description="Correct attempts this learner has made on the question")
+
+
+class UncoveredConcept(CamelModel):
+    """Concept in the derived graph that no bank question practices; AI fills it on demand."""
+
+    id: uuid.UUID = Field(description="Concept ID")
+    name: str = Field(description="Concept display name")
+
+
+class QuestionBankResponse(CamelModel):
+    """Instructor bank for a question-bank course."""
+
+    questions: list[CourseQuestionRead] = Field(default_factory=list, description="Bank questions in author order")
+    uncovered_concepts: list[UncoveredConcept] = Field(
+        default_factory=list,
+        description="Graph concepts with no bank question",
+    )
 
 
 class ConceptSummary(CamelModel):
@@ -395,7 +499,6 @@ class NextReviewResponse(CamelModel):
 GradeKind = Literal["latex_expression", "jxg_state", "practice_answer"]
 GradeStatus = Literal["correct", "incorrect", "parse_error", "unsupported"]
 PracticeContext = Literal["inline", "quick_check", "scheduled_review", "drill", "review", "chat"]
-PracticeAnswerKind = Literal["latex", "text", "choice"]
 QuestionSetPracticeContext = Literal["inline", "drill", "review", "chat"]
 ProbeFamily = Literal[
     "free_recall",
@@ -407,6 +510,8 @@ ProbeFamily = Literal[
 ProbeRendererKind = Literal["free_form", "multiple_choice", "fill_in_blank", "text_response"]
 AttemptStatus = Literal["correct", "incorrect", "unsupported"]
 AttemptAnswerKind = Literal["text", "latex", "jxg_state", "choice", "skip"]
+QuestionSource = Literal["ai", "question_bank"]
+DifficultyIntent = Literal["ease", "stretch"]
 
 
 class JXGBoardState(CamelModel):
@@ -482,7 +587,10 @@ class GradeContextPayload(CamelModel):
     """Context payload for grading to enable adaptive wiring."""
 
     course_id: uuid.UUID = Field(description="Course ID for the practice interaction")
-    lesson_id: uuid.UUID = Field(description="Lesson ID for the practice interaction")
+    lesson_id: uuid.UUID | None = Field(
+        None,
+        description="Lesson ID for the practice interaction; question-bank courses have none",
+    )
     concept_id: uuid.UUID = Field(description="Concept ID used for adaptive scheduling")
     practice_context: PracticeContext = Field(description="Practice surface that collected the answer")
     hints_used: int | None = Field(
@@ -593,7 +701,7 @@ class PracticeDrillItem(CamelModel):
     """Single generated practice drill item."""
 
     concept_id: uuid.UUID = Field(description="Concept this drill belongs to")
-    lesson_id: uuid.UUID = Field(description="Lesson ID linked to this concept")
+    lesson_id: uuid.UUID | None = Field(None, description="Lesson ID linked to this concept, when the course has lessons")
     question: str = Field(min_length=1, description="Learner-facing drill question")
     expected_answer: str = Field(min_length=1, description="Expected answer string")
     answer_kind: PracticeAnswerKind = Field(description="Expected answer interpretation")
@@ -624,6 +732,15 @@ class QuestionSetRequest(CamelModel):
     count: Annotated[int, Field(ge=1, le=10)] = 1
     practice_context: QuestionSetPracticeContext = Field(description="Practice surface that will collect answers")
     lesson_id: uuid.UUID | None = Field(None, description="Optional lesson surface for inline questions")
+    exclude_question_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        max_length=200,
+        description="Question IDs already served this session; question-bank courses never repeat them",
+    )
+    difficulty_intent: DifficultyIntent | None = Field(
+        None,
+        description="Accepted pace offer: serve AI questions in that band instead of the bank",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -641,6 +758,22 @@ class QuestionSetItem(CamelModel):
     renderer_kind: ProbeRendererKind = Field(description="Known renderer contract for this question")
     choices: list[str] = Field(default_factory=list, description="Learner-visible choices for choice-based questions")
     hints: list[str] = Field(default_factory=list, description="Learner-visible hints")
+    source: QuestionSource = Field("ai", description="Whether the question came from the instructor bank or the AI")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PaceSignal(CamelModel):
+    """Pace offer computed per concept when a question set is built.
+
+    Offers are opt-in: the learner accepts by re-requesting with ``difficultyIntent``.
+    The client shows an offer at most once per concept per session.
+    """
+
+    kind: DifficultyIntent = Field(description="ease offers warm-ups; stretch offers harder questions")
+    concept_id: uuid.UUID = Field(description="Concept the offer is about")
+    message: str = Field(min_length=1, description="Learner-facing offer text")
+    reason: str = Field(min_length=1, description="Machine-readable trigger, for analytics")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -649,6 +782,7 @@ class QuestionSetResponse(CamelModel):
     """Server-owned question set response."""
 
     questions: list[QuestionSetItem] = Field(default_factory=list, description="Generated learner-visible questions")
+    pace: PaceSignal | None = Field(None, description="Pace offer for this concept, when its trigger fired")
 
     model_config = ConfigDict(extra="forbid")
 

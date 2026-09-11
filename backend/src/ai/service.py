@@ -3,7 +3,13 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.ai.models import AdaptiveCourseStructure, CourseStructure, ExecutionPlan, SelfAssessmentQuiz
+from src.ai.models import (
+    AdaptiveCourseStructure,
+    CourseStructure,
+    ExecutionPlan,
+    QuestionBankStructure,
+    SelfAssessmentQuiz,
+)
 from src.ai.tools.sandbox import SandboxToolContext
 
 
@@ -61,6 +67,18 @@ class AIService:
         """Generate the unified adaptive course payload."""
         return await self._course_llm.generate_adaptive_course_structure(
             user_prompt=user_prompt,
+            user_id=str(user_id),
+        )
+
+    async def generate_question_bank_structure(
+        self,
+        *,
+        user_id: uuid.UUID,
+        questions_block: str,
+    ) -> QuestionBankStructure:
+        """Derive the concept graph for an instructor's question bank."""
+        return await self._course_llm.generate_question_bank_structure(
+            questions_block=questions_block,
             user_id=str(user_id),
         )
 

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Loader2, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
@@ -18,6 +18,10 @@ const SOFT_STOP_LOW_ACCURACY_THRESHOLD = 0.4
 const SOFT_STOP_CEILING_QUESTIONS = 30
 const SOFT_STOP_CEILING_MS = 30 * 60 * 1000
 const SOFT_STOP_MAX_EVENTS = 50
+// Question-bank pace offers: one per concept per pass, and a few questions between offers.
+const PACE_OFFER_COOLDOWN_QUESTIONS = 3
+const EASE_WARMUP_COUNT = 2
+const STRETCH_COUNT = 1
 const PRACTICE_ATTENTION_NOTICE_CLASS_NAME = "rounded-lg border border-due-today/30 bg-due-today/10 p-4"
 const PRACTICE_ATTENTION_DISMISS_CLASS_NAME = "text-due-today-text hover:bg-due-today/15 hover:text-due-today-text"
 
@@ -31,11 +35,8 @@ function normalizeConcept(item) {
 		return null
 	}
 
+	// Question-bank courses have concepts without lessons.
 	const lessonId = item.lessonId ?? item.lesson?.id ?? null
-
-	if (!lessonId) {
-		return null
-	}
 
 	const masteryCandidate = item.mastery ?? item.confidence ?? item.strength ?? null
 	const masteryValue = typeof masteryCandidate === "string" ? Number(masteryCandidate) : masteryCandidate
@@ -43,7 +44,7 @@ function normalizeConcept(item) {
 
 	return {
 		conceptId: String(conceptId),
-		lessonId: String(lessonId),
+		lessonId: lessonId ? String(lessonId) : null,
 		title: item.name || item.title || "Concept",
 		mastery,
 	}
@@ -65,23 +66,15 @@ function normalizeDrill(rawItem) {
 		answerKind = "choice"
 	}
 	const conceptId = rawItem.conceptId ? String(rawItem.conceptId) : ""
-	const lessonId = rawItem.lessonId ? String(rawItem.lessonId) : ""
+	const lessonId = rawItem.lessonId ? String(rawItem.lessonId) : null
+	const source = rawItem.source === "question_bank" ? "question_bank" : "ai"
 	const answerField = typeof rawItem.answerField === "string" ? rawItem.answerField : ""
 	const probeFamily = typeof rawItem.probeFamily === "string" ? rawItem.probeFamily : ""
 	const rendererKind = typeof rawItem.rendererKind === "string" ? rawItem.rendererKind : ""
 	const choices = Array.isArray(rawItem.choices)
 		? rawItem.choices.filter((item) => typeof item === "string" && item.trim())
 		: []
-	if (
-		!question ||
-		!questionId ||
-		!answerKind ||
-		!answerField ||
-		!conceptId ||
-		!lessonId ||
-		!probeFamily ||
-		!rendererKind
-	) {
+	if (!question || !questionId || !answerKind || !answerField || !conceptId || !probeFamily || !rendererKind) {
 		return null
 	}
 
@@ -96,6 +89,7 @@ function normalizeDrill(rawItem) {
 		rendererKind,
 		choices,
 		hints: rawItem.hints,
+		source,
 	}
 }
 
@@ -179,11 +173,15 @@ function ChoicePracticeQuestion({ question, onGrade, onSkip, onComplete }) {
 }
 
 export default function PracticeView() {
-	const { courseId, adaptiveEnabled } = useCourseContext()
+	const { courseId, adaptiveEnabled, mode: courseMode } = useCourseContext()
+	const questionBankMode = courseMode === "question_bank"
 	const courseService = useCourseService(courseId)
-	const [searchParams] = useSearchParams()
+	const queryClient = useQueryClient()
+	const [searchParams, setSearchParams] = useSearchParams()
 	const navigate = useNavigate()
 	const focusConceptIdParam = searchParams.get("focusConceptId")?.trim() || null
+	// Question-bank passes are separate sessions: bumping the pass param resets exclusions and offers.
+	const passParam = searchParams.get("pass")?.trim() || ""
 
 	const [scheduledIndex, setScheduledIndex] = useState(0)
 	const fetchIndexRef = useRef(0)
@@ -195,6 +193,7 @@ export default function PracticeView() {
 	const [softStopNudge, setSoftStopNudge] = useState(null)
 	const [incorrectStreak, setIncorrectStreak] = useState({ conceptId: null, count: 0 })
 	const [escapeHatchDismissedFor, setEscapeHatchDismissedFor] = useState(null)
+	const [paceOffer, setPaceOffer] = useState(null)
 
 	const answerEventsRef = useRef([])
 	const sessionStartedAtRef = useRef(Date.now())
@@ -202,6 +201,8 @@ export default function PracticeView() {
 	const completedQuestionsRef = useRef(0)
 	const nudgeShownRef = useRef({ performance: false, ceiling: false })
 	const seenDrillKeysRef = useRef(new Set())
+	const paceOfferedConceptsRef = useRef(new Set())
+	const paceCooldownUntilRef = useRef(0)
 
 	const generatingRef = useRef(false)
 
@@ -214,14 +215,14 @@ export default function PracticeView() {
 	})
 
 	const dueConcepts = useMemo(() => {
-		if (!frontierData?.dueForReview || !Array.isArray(frontierData.dueForReview)) {
-			return []
-		}
-		return frontierData.dueForReview.map((item) => normalizeConcept(item)).filter(Boolean)
-	}, [frontierData])
+		const due = Array.isArray(frontierData?.dueForReview) ? frontierData.dueForReview : []
+		// Question-bank courses have no lessons to start from: a scheduled pass also walks unlocked concepts.
+		const ready = questionBankMode && Array.isArray(frontierData?.frontier) ? frontierData.frontier : []
+		return [...due, ...ready].map((item) => normalizeConcept(item)).filter(Boolean)
+	}, [frontierData, questionBankMode])
 
 	const mode = focusConceptIdParam ? "focused" : "scheduled"
-	const practiceSessionKey = `${mode}:${focusConceptIdParam ?? ""}`
+	const practiceSessionKey = `${mode}:${focusConceptIdParam ?? ""}:${passParam}`
 	const scheduledComplete = mode === "scheduled" && scheduledIndex >= dueConcepts.length
 	const bonusPracticeSuggestions = useMemo(() => {
 		const candidates = []
@@ -283,9 +284,24 @@ export default function PracticeView() {
 		practiceContext: "drill",
 	})
 
+	const offerPace = useCallback((pace, concept) => {
+		const conceptId = pace?.conceptId ? String(pace.conceptId) : null
+		if (!conceptId || (pace.kind !== "ease" && pace.kind !== "stretch")) {
+			return
+		}
+		if (paceOfferedConceptsRef.current.has(conceptId)) {
+			return
+		}
+		if (completedQuestionsRef.current < paceCooldownUntilRef.current) {
+			return
+		}
+		paceOfferedConceptsRef.current.add(conceptId)
+		setPaceOffer({ kind: pace.kind, conceptId, message: pace.message, concept })
+	}, [])
+
 	const requestMore = useCallback(
-		async (conceptToFetch, requestedCount = MICRO_BATCH_SIZE) => {
-			if (!courseId || !conceptToFetch?.conceptId || !conceptToFetch?.lessonId) {
+		async (conceptToFetch, requestedCount = MICRO_BATCH_SIZE, { difficultyIntent = null, prepend = false } = {}) => {
+			if (!courseId || !conceptToFetch?.conceptId) {
 				return
 			}
 			if (generatingRef.current) {
@@ -303,6 +319,8 @@ export default function PracticeView() {
 					count: requestedCount,
 					lessonId: conceptToFetch.lessonId,
 					practiceContext: "drill",
+					excludeQuestionIds: questionBankMode ? [...seenDrillKeysRef.current] : [],
+					difficultyIntent,
 				})
 				if (!response || !Array.isArray(response.questions)) {
 					setNoMoreItems(true)
@@ -313,6 +331,11 @@ export default function PracticeView() {
 						response,
 					})
 					return
+				}
+
+				// The offer rides on the bank response; a cleared bank can still carry a stretch offer.
+				if (questionBankMode && response.pace && !difficultyIntent) {
+					offerPace(response.pace, conceptToFetch)
 				}
 
 				const drills = response.questions
@@ -354,7 +377,9 @@ export default function PracticeView() {
 					return
 				}
 
-				setQueue((previousQueue) => [...previousQueue, ...acceptedDrills])
+				setQueue((previousQueue) =>
+					prepend ? [...acceptedDrills, ...previousQueue] : [...previousQueue, ...acceptedDrills]
+				)
 			} catch (error) {
 				const message = error?.message || "Failed to generate practice questions"
 				setGenerationError(message)
@@ -367,8 +392,35 @@ export default function PracticeView() {
 				setIsGenerating(false)
 			}
 		},
-		[courseId, courseService]
+		[courseId, courseService, offerPace, questionBankMode]
 	)
+
+	const handleAcceptPaceOffer = useCallback(async () => {
+		if (!paceOffer) {
+			return
+		}
+		const { kind, concept } = paceOffer
+		setPaceOffer(null)
+		paceCooldownUntilRef.current = completedQuestionsRef.current + PACE_OFFER_COOLDOWN_QUESTIONS
+		await requestMore(concept, kind === "ease" ? EASE_WARMUP_COUNT : STRETCH_COUNT, {
+			difficultyIntent: kind,
+			prepend: true,
+		})
+	}, [paceOffer, requestMore])
+
+	const handleDeclinePaceOffer = useCallback(() => {
+		setPaceOffer(null)
+		paceCooldownUntilRef.current = completedQuestionsRef.current + PACE_OFFER_COOLDOWN_QUESTIONS
+	}, [])
+
+	const handleRunAnotherPass = useCallback(async () => {
+		await queryClient.invalidateQueries({ queryKey: ["course", courseId, "adaptive-concepts"], exact: true })
+		setSearchParams((previous) => {
+			const next = new URLSearchParams(previous)
+			next.set("pass", String(Number(passParam || 0) + 1))
+			return next
+		})
+	}, [courseId, passParam, queryClient, setSearchParams])
 
 	const maybeTriggerCeilingNudge = useCallback(
 		(nowMs) => {
@@ -434,6 +486,7 @@ export default function PracticeView() {
 
 			const startAccuracy = sessionStartAccuracyRef.current
 			if (
+				!questionBankMode &&
 				!nudgeShownRef.current.performance &&
 				events.length >= SOFT_STOP_MIN_ANSWERS &&
 				events.length >= SOFT_STOP_RECENT_WINDOW * 2 &&
@@ -464,7 +517,7 @@ export default function PracticeView() {
 
 			maybeTriggerCeilingNudge(nowMs)
 		},
-		[activeConcept?.lessonId, courseId, maybeTriggerCeilingNudge]
+		[activeConcept?.lessonId, courseId, maybeTriggerCeilingNudge, questionBankMode]
 	)
 
 	const handleSoftStop = useCallback(() => {
@@ -495,6 +548,9 @@ export default function PracticeView() {
 		setIncorrectStreak({ conceptId: null, count: 0 })
 		setEscapeHatchDismissedFor(null)
 		seenDrillKeysRef.current.clear()
+		paceOfferedConceptsRef.current.clear()
+		paceCooldownUntilRef.current = 0
+		setPaceOffer(null)
 	}, [courseId])
 
 	useEffect(() => {
@@ -525,6 +581,9 @@ export default function PracticeView() {
 		setIncorrectStreak({ conceptId: null, count: 0 })
 		setEscapeHatchDismissedFor(null)
 		seenDrillKeysRef.current.clear()
+		paceOfferedConceptsRef.current.clear()
+		paceCooldownUntilRef.current = 0
+		setPaceOffer(null)
 		if (practiceSessionKey.startsWith("scheduled:")) {
 			setScheduledIndex(0)
 			fetchIndexRef.current = 0
@@ -677,6 +736,11 @@ export default function PracticeView() {
 					<h1 className="text-2xl font-semibold text-foreground">Practice</h1>
 					<p className="text-muted-foreground">You&apos;re caught up.</p>
 					<p className="text-sm text-muted-foreground">Questions answered this session: {completedCount}</p>
+					{questionBankMode ? (
+						<Button size="sm" onClick={handleRunAnotherPass}>
+							Run another pass
+						</Button>
+					) : null}
 					{hasSuggestions ? (
 						<div className="pt-2 space-y-3">
 							<div className="text-sm font-medium text-foreground">Bonus practice</div>
@@ -748,7 +812,9 @@ export default function PracticeView() {
 		<div className="mx-auto w-full max-w-container-4xl px-4 py-8 md:px-6">
 			<div className="rounded-xl border border-border bg-card shadow-sm p-6 space-y-6">
 				<div className="space-y-2">
-					<p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Adaptive Practice</p>
+					<p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+						{questionBankMode ? "Question Bank Practice" : "Adaptive Practice"}
+					</p>
 					<h1 className="text-2xl font-semibold text-foreground">{activeConcept?.title || "Practice"}</h1>
 					<p className="text-sm text-muted-foreground">
 						{mode === "focused"
@@ -802,6 +868,24 @@ export default function PracticeView() {
 							</Button>
 						</div>
 					</div>
+				) : null}
+
+				{paceOffer ? (
+					<div className={cn(PRACTICE_ATTENTION_NOTICE_CLASS_NAME, "space-y-3")}>
+						<p className="text-sm font-medium text-foreground">{paceOffer.message}</p>
+						<div className="flex flex-col sm:flex-row gap-2">
+							<Button size="sm" onClick={handleAcceptPaceOffer} disabled={isGenerating} className="sm:w-auto">
+								{paceOffer.kind === "ease" ? "Yes, warm me up" : "Yes, push me"}
+							</Button>
+							<Button variant="outline" size="sm" onClick={handleDeclinePaceOffer} className="sm:w-auto">
+								Not now
+							</Button>
+						</div>
+					</div>
+				) : null}
+
+				{questionBankMode && currentQuestion?.source === "ai" ? (
+					<p className="text-xs text-muted-foreground">This one is from Talimio, not your instructor's set.</p>
 				) : null}
 
 				{questionPanel}

@@ -35,6 +35,7 @@ from src.courses.schemas import (
     LessonRegenerateRequest,
     LessonVersionHistoryResponse,
     NextReviewResponse,
+    QuestionBankResponse,
     QuestionSetRequest,
     QuestionSetResponse,
     ReviewBatchResponse,
@@ -128,17 +129,16 @@ async def create_course(
     Returns 202 immediately with the draft course in a ``generating`` state;
     a durable worker builds the outline and lesson content out-of-request.
     Books arrive as references (bookIds); images arrive inline as base64
-    data URLs that feed the LLM prompt and are never persisted.
+    data URLs that feed the LLM prompt and are never persisted. Question-bank
+    courses send instructor ``questions`` instead of a prompt; the worker
+    derives their concept graph and creates no lessons.
     """
-    prompt_text = request.prompt.strip()
-    if not prompt_text:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Prompt must not be empty")
-
     return await facade.create_course(
-        {"prompt": prompt_text, "adaptive_enabled": request.adaptive_enabled},
+        {"prompt": request.prompt, "adaptive_enabled": request.adaptive_enabled, "mode": request.mode},
         auth.user_id,
         book_ids=list(dict.fromkeys(request.book_ids)),
         image_data_urls=request.image_data_urls,
+        questions=request.questions,
     )
 
 
@@ -207,6 +207,16 @@ async def detach_book_from_course(
 ) -> None:
     """Delete one attachment link; the book stays in the library."""
     await svc.detach(course_id, attachment_id, auth.user_id)
+
+
+@router.get("/{course_id}/question-bank")
+async def get_question_bank(
+    course_id: uuid.UUID,
+    auth: CurrentAuth,
+    facade: Annotated[CoursesFacade, Depends(get_courses_facade)],
+) -> QuestionBankResponse:
+    """Return the instructor question bank with this learner's attempt stats."""
+    return await facade.get_question_bank(course_id=course_id, user_id=auth.user_id)
 
 
 @router.get("/{course_id}/lessons/{lesson_id}")

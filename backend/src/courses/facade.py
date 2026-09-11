@@ -11,7 +11,7 @@ Coordinates internal course services and provides stable API for other modules.
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import TypedDict, cast
 
@@ -37,6 +37,7 @@ from .schemas import (
     AttemptRequest,
     AttemptResponse,
     ConceptReviewRequest,
+    CourseQuestionCreate,
     CourseResponse,
     FrontierResponse,
     GradeAnswerPayload,
@@ -50,9 +51,13 @@ from .schemas import (
     NextReviewResponse,
     PracticeAnswerKind,
     PracticeContext,
+    ProbeFamily,
+    ProbeRendererKind,
+    QuestionBankResponse,
     QuestionSetItem,
     QuestionSetRequest,
     QuestionSetResponse,
+    QuestionSource,
     ReviewBatchRequest,
     ReviewBatchResponse,
     ReviewOutcome,
@@ -68,6 +73,13 @@ from .services.frontier_builder import build_course_frontier
 from .services.grading_service import GradingService
 from .services.lesson_service import LessonService
 from .services.practice_drill_service import PracticeDrillService
+from .services.practice_pace_service import PracticePaceService
+from .services.question_bank_practice_service import (
+    QuestionBankPracticeService,
+    bank_probe_family,
+    bank_renderer_kind,
+)
+from .services.question_bank_service import QuestionBankService
 
 
 logger = logging.getLogger(__name__)
@@ -177,6 +189,13 @@ def _practice_context(value: str | None) -> PracticeContext:
     return "inline"
 
 
+def _attempt_context_tag(question: LearningQuestion, lesson_id: uuid.UUID | None) -> str:
+    """Probe-event tag: the lesson when one exists, else the concept (question-bank courses)."""
+    if lesson_id is not None:
+        return f"{question.practice_context}:{lesson_id}"
+    return f"{question.practice_context}:concept:{question.concept_id}"
+
+
 class CoursesFacadeUpstreamError(UpstreamUnavailableError):
     """Raised when course workflows fail on upstream or internal dependencies."""
 
@@ -243,6 +262,7 @@ class CoursesFacade:  # noqa: PLR0904
         user_id: uuid.UUID,
         book_ids: list[uuid.UUID] | None = None,
         image_data_urls: list[str] | None = None,
+        questions: Sequence[CourseQuestionCreate] | None = None,
     ) -> CourseResponse:
         """Create a new course entry and return its canonical response model."""
         try:
@@ -251,6 +271,7 @@ class CoursesFacade:  # noqa: PLR0904
                 user_id,
                 book_ids=book_ids,
                 image_data_urls=image_data_urls,
+                questions=questions,
             )
             query_service = CourseQueryService(self._session)
             return await query_service.get_course(created_course.id, user_id)
@@ -506,6 +527,19 @@ class CoursesFacade:  # noqa: PLR0904
             scheduler_service=scheduler_service,
         )
 
+    async def get_question_bank(
+        self,
+        *,
+        course_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> QuestionBankResponse:
+        """Return the instructor bank with this learner's attempt stats."""
+        course = await self._require_owned_course(course_id=course_id, user_id=user_id)
+        if course.mode != "question_bank":
+            detail = "Course has no question bank"
+            raise CoursesFacadeBadRequestError(detail)
+        return await QuestionBankService(self._session).get_question_bank(course_id=course.id, user_id=user_id)
+
     async def create_question_set(
         self,
         *,
@@ -518,7 +552,19 @@ class CoursesFacade:  # noqa: PLR0904
         if not course.adaptive_enabled:
             detail = "Adaptive scheduling is not enabled for this course"
             raise CoursesFacadeBadRequestError(detail)
+        if course.mode == "question_bank":
+            return await self._create_question_set_from_bank(course=course, payload=payload, user_id=user_id)
+        questions = await self._create_question_set_from_drills(course=course, payload=payload, user_id=user_id)
+        return QuestionSetResponse(questions=questions)
 
+    async def _create_question_set_from_drills(
+        self,
+        *,
+        course: Course,
+        payload: QuestionSetRequest,
+        user_id: uuid.UUID,
+    ) -> list[QuestionSetItem]:
+        """AI-generated questions for one concept, stored server-side before the learner sees them."""
         drill_service = PracticeDrillService(self._session)
         try:
             drills = await drill_service.generate_drills(
@@ -526,6 +572,7 @@ class CoursesFacade:  # noqa: PLR0904
                 course_id=course.id,
                 concept_id=payload.concept_id,
                 count=payload.count,
+                difficulty_intent=payload.difficulty_intent,
             )
         except DomainError:
             raise
@@ -579,27 +626,107 @@ class CoursesFacade:  # noqa: PLR0904
             )
             self._session.add(stored)
             await self._session.flush()
-            answer_field = "answerText"
-            if drill.answer_kind == "latex":
-                answer_field = "answerLatex"
-            elif drill.answer_kind == "choice":
-                answer_field = "choiceIndex"
             questions.append(
-                QuestionSetItem(
-                    question_id=stored.id,
-                    concept_id=stored.concept_id,
-                    lesson_id=stored.lesson_id,
-                    question=stored.question,
-                    answer_kind=_practice_answer_kind(stored.answer_kind) or "text",
-                    answer_field=answer_field,
+                self._question_set_item(
+                    stored,
                     probe_family=drill.probe_family,
                     renderer_kind=drill.renderer_kind,
                     choices=drill.choices,
-                    hints=stored.hints,
+                    source="ai",
                 )
             )
 
-        return QuestionSetResponse(questions=questions)
+        return questions
+
+    async def _create_question_set_from_bank(
+        self,
+        *,
+        course: Course,
+        payload: QuestionSetRequest,
+        user_id: uuid.UUID,
+    ) -> QuestionSetResponse:
+        """Serve the instructor's questions first; the AI fills coverage gaps and accepted pace offers.
+
+        Bank order is unseen first, then missed, never a repeat within the session.
+        """
+        bank_service = QuestionBankPracticeService(self._session)
+        if payload.difficulty_intent is not None:
+            # The learner accepted an offer: AI questions in that band, the bank is left untouched.
+            questions = await self._create_question_set_from_drills(course=course, payload=payload, user_id=user_id)
+            return QuestionSetResponse(questions=questions)
+
+        bank_questions = await bank_service.pick_questions(
+            course_id=course.id,
+            user_id=user_id,
+            concept_id=payload.concept_id,
+            count=payload.count,
+            exclude_question_ids=payload.exclude_question_ids,
+        )
+        if not bank_questions and not await bank_service.concept_has_questions(
+            course_id=course.id, concept_id=payload.concept_id
+        ):
+            # Coverage gap: the graph needs this concept but the instructor wrote nothing for it.
+            questions = await self._create_question_set_from_drills(course=course, payload=payload, user_id=user_id)
+            return QuestionSetResponse(questions=questions)
+
+        questions: list[QuestionSetItem] = []
+        for bank_question in bank_questions:
+            stored = await bank_service.materialize_learning_question(
+                user_id=user_id,
+                course_id=course.id,
+                bank_question=bank_question,
+                practice_context=payload.practice_context,
+            )
+            questions.append(
+                self._question_set_item(
+                    stored,
+                    probe_family=bank_probe_family(bank_question.answer_kind),
+                    renderer_kind=bank_renderer_kind(bank_question.answer_kind),
+                    choices=bank_question.choices,
+                    source="question_bank",
+                )
+            )
+        pace = await PracticePaceService(self._session).evaluate(
+            user_id=user_id,
+            course_id=course.id,
+            concept_id=payload.concept_id,
+            bank_exhausted=await bank_service.concept_bank_exhausted(
+                course_id=course.id,
+                user_id=user_id,
+                concept_id=payload.concept_id,
+            ),
+        )
+        return QuestionSetResponse(questions=questions, pace=pace)
+
+    @staticmethod
+    def _question_set_item(
+        stored: LearningQuestion,
+        *,
+        probe_family: ProbeFamily,
+        renderer_kind: ProbeRendererKind,
+        choices: list[str],
+        source: QuestionSource,
+    ) -> QuestionSetItem:
+        """Learner-visible view of a stored question; grading metadata stays server-side."""
+        answer_kind = _practice_answer_kind(stored.answer_kind) or "text"
+        answer_field = "answerText"
+        if answer_kind == "latex":
+            answer_field = "answerLatex"
+        elif answer_kind == "choice":
+            answer_field = "choiceIndex"
+        return QuestionSetItem(
+            question_id=stored.id,
+            concept_id=stored.concept_id,
+            lesson_id=stored.lesson_id,
+            question=stored.question,
+            answer_kind=answer_kind,
+            answer_field=answer_field,
+            probe_family=probe_family,
+            renderer_kind=renderer_kind,
+            choices=choices,
+            hints=stored.hints,
+            source=source,
+        )
 
     async def submit_attempt(
         self,
@@ -656,9 +783,7 @@ class CoursesFacade:  # noqa: PLR0904
         if question.status != "active" and question.source_key is None:
             detail = "Question has already been answered"
             raise CoursesFacadeBadRequestError(detail)
-        if question.lesson_id is None:
-            detail = "Question is missing lesson context"
-            raise CoursesFacadeValidationError(detail)
+        # Question-bank courses have no lessons; grading and scheduling key on the concept.
         lesson_id = question.lesson_id
 
         return await self._grade_and_record_attempt(
@@ -692,7 +817,7 @@ class CoursesFacade:  # noqa: PLR0904
         *,
         course_id: uuid.UUID,
         question: LearningQuestion,
-        lesson_id: uuid.UUID,
+        lesson_id: uuid.UUID | None,
         payload: AttemptRequest,
         user_id: uuid.UUID,
     ) -> AttemptResponse:
@@ -731,7 +856,7 @@ class CoursesFacade:  # noqa: PLR0904
             review_duration_ms=payload.duration_ms,
             correct=is_correct,
             latency_ms=payload.duration_ms,
-            context_tag=f"{question.practice_context}:{lesson_id}",
+            context_tag=_attempt_context_tag(question, lesson_id),
             extra={
                 "question_id": str(question.id),
                 "question": question.question,
@@ -834,7 +959,7 @@ class CoursesFacade:  # noqa: PLR0904
         *,
         course_id: uuid.UUID,
         question: LearningQuestion,
-        lesson_id: uuid.UUID,
+        lesson_id: uuid.UUID | None,
         payload: AttemptRequest,
         learner_answer: str,
         user_id: uuid.UUID,
@@ -888,7 +1013,7 @@ class CoursesFacade:  # noqa: PLR0904
         *,
         course_id: uuid.UUID,
         question: LearningQuestion,
-        lesson_id: uuid.UUID,
+        lesson_id: uuid.UUID | None,
         payload: AttemptRequest,
         learner_answer: str,
     ) -> GradeRequest:
@@ -1197,12 +1322,11 @@ class CoursesFacade:  # noqa: PLR0904
     def _build_review_progress_payload(
         self,
         *,
-        lesson_id: uuid.UUID,
+        lesson_id: uuid.UUID | None,
         last_review_snapshot: _ReviewSnapshot,
         concept_stats: dict[str, _ReviewConceptStats],
     ) -> dict[str, JsonValue]:
-        return {
-            "current_lesson_id": str(lesson_id),
+        payload: dict[str, JsonValue] = {
             "last_reviewed_concept": last_review_snapshot["concept_id"],
             "last_reviewed_rating": last_review_snapshot["rating"],
             "last_review_duration_ms": last_review_snapshot["duration_ms"],
@@ -1210,6 +1334,9 @@ class CoursesFacade:  # noqa: PLR0904
             "last_next_review_at": last_review_snapshot["next_review_at"],
             "concept_review_stats": concept_stats,
         }
+        if lesson_id is not None:
+            payload["current_lesson_id"] = str(lesson_id)
+        return payload
 
     async def get_concept_next_review(
         self,

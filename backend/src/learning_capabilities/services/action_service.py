@@ -525,6 +525,14 @@ class LearningCapabilityActionService:
                 concept_id=payload.concept_id,
                 reason="concept_not_assigned_to_current_lesson",
             )
+        if drill.lesson_id is None:
+            # Chat probes are stored per lesson; question-bank courses have none yet.
+            return GenerateConceptProbeCapabilityOutput(
+                course_id=course.id,
+                course_mode=course_mode,
+                concept_id=payload.concept_id,
+                reason="concept_has_no_lesson",
+            )
 
         active_probe_id = uuid.uuid4()
         active_probe = AssistantActiveProbe(

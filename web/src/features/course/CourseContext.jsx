@@ -17,6 +17,8 @@ export function CourseProvider({ children }) {
 	const modules = Array.isArray(course?.modules) ? course.modules : EMPTY_MODULES
 
 	const isAdaptiveCourse = course?.adaptive_enabled === true || course?.adaptiveEnabled === true
+	// Where the learning material comes from: standard, adaptive, or question_bank (instructor questions, no lessons).
+	const mode = course?.mode ?? "standard"
 
 	// Concept frontier for adaptive progress (avgMastery)
 	const [lastAdaptiveProgressPct, setLastAdaptiveProgressPct] = useState()
@@ -45,10 +47,20 @@ export function CourseProvider({ children }) {
 			courseName: course?.title || "Course",
 			modules,
 			adaptiveEnabled: isAdaptiveCourse,
+			mode,
 			adaptiveProgressPct: typeof adaptiveProgressPct === "number" ? adaptiveProgressPct : lastAdaptiveProgressPct,
 			isLoading: courseLoading,
 		}),
-		[courseId, course?.title, modules, isAdaptiveCourse, adaptiveProgressPct, lastAdaptiveProgressPct, courseLoading]
+		[
+			courseId,
+			course?.title,
+			modules,
+			isAdaptiveCourse,
+			mode,
+			adaptiveProgressPct,
+			lastAdaptiveProgressPct,
+			courseLoading,
+		]
 	)
 
 	return <CourseContext.Provider value={value}>{children}</CourseContext.Provider>

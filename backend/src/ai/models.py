@@ -458,6 +458,55 @@ class AdaptiveCourseStructure(BaseModel):
         return lookup
 
 
+class QuestionConceptAssignment(BaseModel):
+    """Maps one instructor question (by index) onto one concept node (by index)."""
+
+    question_index: int = Field(alias="questionIndex")
+    concept_index: int = Field(alias="conceptIndex")
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("question_index", mode="before")
+    @classmethod
+    def _normalize_question(cls, value: object) -> int:
+        return _coerce_index(value, field="questionIndex")
+
+    @field_validator("concept_index", mode="before")
+    @classmethod
+    def _normalize_concept(cls, value: object) -> int:
+        return _coerce_index(value, field="conceptIndex")
+
+
+class QuestionBankStructure(AdaptiveCourseStructure):
+    """Adaptive planning payload derived from an instructor's question bank.
+
+    Same graph contract as adaptive planning so the concept builder is reused.
+    ``lessons`` carries one description per concept node and is only used for
+    concept descriptions and order: no lesson content is ever generated for
+    this mode. ``assignments`` maps every question index onto a node.
+    """
+
+    assignments: list[QuestionConceptAssignment] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_assignments(self) -> "QuestionBankStructure":
+        node_count = len(self.ai_outline_meta.concept_graph.nodes)
+        seen_questions: set[int] = set()
+        for assignment in self.assignments:
+            if assignment.concept_index >= node_count:
+                msg = "assignment conceptIndex must point at an existing concept node"
+                raise ValueError(msg)
+            if assignment.question_index in seen_questions:
+                msg = "each question index must be assigned exactly once"
+                raise ValueError(msg)
+            seen_questions.add(assignment.question_index)
+        return self
+
+    def concept_index_by_question(self) -> dict[int, int]:
+        """Map question indices to their concept node index."""
+        return {assignment.question_index: assignment.concept_index for assignment in self.assignments}
+
+
 class ConceptNode(BaseModel):
     """Single concept node in an adaptive graph."""
 
@@ -917,3 +966,44 @@ class FigureVerification(BaseModel):
             msg = "a related figure requires a caveat describing how it diverges"
             raise ValueError(msg)
         return self
+
+
+StepReviewStatus = Literal["done", "corrected", "missing"]
+WorkReviewVerdict = Literal["correct", "partial", "incorrect"]
+
+
+class ExerciseReviewStep(BaseModel):
+    """One canonical-solution step mapped against the student's submitted work.
+
+    ``correction`` is plain-text math (unicode, no LaTeX) that the UI types out over the
+    student's work like an instructor writing on their paper; it stays empty when the
+    student already completed the step correctly.
+    """
+
+    label: str = Field(description="Short subgoal name for this step")
+    status: StepReviewStatus = Field(
+        description="done = student nailed it; corrected = there but flawed; missing = never attempted"
+    )
+    explanation: str = Field(
+        description="One or two sentences on what the student did relative to this step; markdown with inline LaTeX allowed"
+    )
+    correction: str = Field(
+        default="",
+        description="The exact correct working to write, plain-text math only (unicode, no LaTeX); empty when status is done",
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ExerciseWorkReview(BaseModel):
+    """Structured review of a student's exercise work, ready to be replayed step by step."""
+
+    verdict: WorkReviewVerdict = Field(
+        description="correct = every step done right; partial = at least one corrected or missing; incorrect = nothing salvageable"
+    )
+    headline: str = Field(
+        description="Warm one-liner opener in a 'let's see how you did' register; never blunt 'you are wrong'"
+    )
+    steps: list[ExerciseReviewStep] = Field(min_length=1, max_length=8)
+
+    model_config = ConfigDict(extra="forbid")
