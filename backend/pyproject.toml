@@ -88,6 +88,8 @@ ignore = [
     "E501",    # line too long (handled by formatter)
     "D100",    # Missing docstring in public module
     "D104",    # Missing docstring in public package
+    "PLW0717",  # too-many-statements-in-try-clause (broad try around service calls is the house style)
+    "ASYNC119", # yield-in-context-manager-in-async-generator (the FastAPI yield-dependency pattern)
     "TRY300",   # try-else-block
     "TRY301",   # abstract-raise
     "TRY401",   # redundant-exception-object

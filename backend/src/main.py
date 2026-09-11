@@ -128,10 +128,13 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """
     await _startup()
     worker_task = None if get_settings().is_cloud_run else await _start_jobs_worker()
-    yield
-    if worker_task is not None:
-        await _stop_jobs_worker(worker_task)
-    await _shutdown()
+    try:
+        yield
+    finally:
+        # Runs even when serving fails, so the worker and its connections close.
+        if worker_task is not None:
+            await _stop_jobs_worker(worker_task)
+        await _shutdown()
 
 
 async def _start_jobs_worker() -> asyncio.Task[None]:

@@ -1,0 +1,74 @@
+name: Lint
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - backend/**
+      - web/**
+      - .github/workflows/lint.yml
+  pull_request:
+    branches: ["main"]
+    paths:
+      - backend/**
+      - web/**
+      - .github/workflows/lint.yml
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: ruff
+        run: uv run ruff check src
+
+      # Report-only: 10 pre-existing type errors, tracked separately. Drop
+      # continue-on-error once they are cleared to make this gate real.
+      - name: ty
+        continue-on-error: true
+        run: uv run ty check src --project .
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: biome
+        run: pnpm exec biome check src
+
+      - name: eslint
+        run: pnpm exec eslint src
