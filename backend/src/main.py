@@ -20,7 +20,6 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Match
 
 from .ai.assistant.router import router as assistant_router
-from .ai.client import cleanup_ai_background_tasks
 from .ai.litellm_config import cleanup_litellm_async_clients
 from .ai.mcp.router import router as mcp_router
 from .ai.rag.router import router as rag_router
@@ -106,12 +105,6 @@ async def _startup() -> None:
 async def _shutdown() -> None:
     """Release resources on shutdown."""
     try:
-        await cleanup_ai_background_tasks()
-        logger.debug("shutdown.ai_background_tasks.cleaned")
-    except (RuntimeError, TimeoutError, TypeError, ValueError):
-        logger.warning("shutdown.ai_background_tasks.cleanup_failed", exc_info=True)
-
-    try:
         await cleanup_litellm_async_clients()
         logger.debug("shutdown.litellm.cleaned")
     except (RuntimeError, TimeoutError, TypeError, ValueError):
@@ -126,11 +119,18 @@ async def _shutdown() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
-    """Application lifespan events."""
+    """Application lifespan events.
+
+    A Cloud Run instance only lives while requests keep it warm, so a worker
+    hosted in it misses periodic jobs whenever traffic is idle; there the
+    ``talimio-worker`` worker pool runs the queue instead. Everywhere else
+    (self-hosted, local dev) one process serves requests and runs jobs.
+    """
     await _startup()
-    worker_task = await _start_jobs_worker()
+    worker_task = None if get_settings().is_cloud_run else await _start_jobs_worker()
     yield
-    await _stop_jobs_worker(worker_task)
+    if worker_task is not None:
+        await _stop_jobs_worker(worker_task)
     await _shutdown()
 
 

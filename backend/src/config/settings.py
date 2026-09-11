@@ -363,12 +363,17 @@ class Settings(BaseSettings):
         return configured or self.FRONTEND_URL
 
     @property
+    def is_cloud_run(self) -> bool:
+        """True inside a Cloud Run container (Cloud Run injects K_REVISION)."""
+        return bool(self.K_REVISION.strip())
+
+    @property
     def otel_enabled(self) -> bool:
         """Effective OpenTelemetry enablement."""
         configured = self.OTEL_ENABLED
         if configured is not None:
             return configured
-        return self.ENVIRONMENT == "production" or bool(self.K_REVISION.strip())
+        return self.ENVIRONMENT == "production" or self.is_cloud_run
 
     model_config = SettingsConfigDict(
         env_file=_SETTINGS_ENV_FILES,

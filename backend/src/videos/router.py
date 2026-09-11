@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from src.auth import CurrentAuth
 from src.config.schema_casing import CamelModel
@@ -37,12 +37,11 @@ def get_videos_facade(auth: CurrentAuth) -> VideosFacade:
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_video(
     video_data: VideoCreate,
-    background_tasks: BackgroundTasks,
     auth: CurrentAuth,
     facade: Annotated[VideosFacade, Depends(get_videos_facade)],
 ) -> VideoResponse:
     """Add a YouTube video to the library."""
-    return await facade.create_video(video_data=video_data, user_id=auth.user_id, background_tasks=background_tasks)
+    return await facade.create_video(video_data=video_data, user_id=auth.user_id)
 
 
 @router.get("")

@@ -5,7 +5,7 @@ import logging
 import uuid
 from typing import cast
 
-from fastapi import BackgroundTasks, status
+from fastapi import status
 from pydantic import JsonValue
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -26,6 +26,7 @@ from src.books.schemas import (
 )
 from src.database.session import async_session_maker
 from src.exceptions import ConflictError, DomainError, ErrorCategory, ErrorCode, NotFoundError, ValidationError
+from src.jobs import QUEUE_INGESTION, defer_job
 from src.storage.factory import get_storage_provider
 
 from .services.book_content_service import BookContentService
@@ -36,6 +37,7 @@ from .services.book_response_builder import BookResponseBuilder
 
 logger = logging.getLogger(__name__)
 BOOK_RESOURCE_TYPE = "book"
+BOOK_INGESTION_TASK_NAME = "ingestion.process_book"
 BOOK_RAG_STATUS_PENDING: BookRagStatus = "pending"
 BOOK_RAG_STATUS_PROCESSING: BookRagStatus = "processing"
 BOOK_RAG_STATUS_COMPLETED: BookRagStatus = "completed"
@@ -159,6 +161,12 @@ class BooksFacade:
             )
             message = "Failed to retrieve book"
             raise BooksFacadeInternalError(message) from error
+
+    async def ingest_book_background(self, book_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        """Job body: extract metadata, embed, then tag, in that order."""
+        await self.extract_book_metadata_background(book_id)
+        await self.embed_book_background(book_id)
+        await self.auto_tag_book_background(book_id, user_id)
 
     async def embed_book_background(self, book_id: uuid.UUID) -> None:
         """Process embeddings for a book in a dedicated background session."""
@@ -344,7 +352,7 @@ class BooksFacade:
         publication_year: int | None = None,
         publisher: str | None = None,
         tags: list[str] | None = None,
-        background_tasks: BackgroundTasks | None = None,
+        process_in_background: bool = True,
     ) -> BookResponse:
         """Create a book record after a browser-direct upload completes."""
         expected_prefix = f"books/{user_id!s}/direct/"
@@ -419,11 +427,14 @@ class BooksFacade:
                 raise
             raise
 
-        if background_tasks is not None:
+        if process_in_background:
+            await defer_job(
+                self._session,
+                task_name=BOOK_INGESTION_TASK_NAME,
+                queue=QUEUE_INGESTION,
+                args={"book_id": str(book_id), "user_id": str(user_id)},
+            )
             await self._session.commit()
-            background_tasks.add_task(self.extract_book_metadata_background, book_id)
-            background_tasks.add_task(self.embed_book_background, book_id)
-            background_tasks.add_task(self.auto_tag_book_background, book_id, user_id)
 
         return book_response
 

@@ -10,7 +10,6 @@ from urllib.parse import parse_qs, urlparse
 
 import aiohttp
 import yt_dlp
-from fastapi import BackgroundTasks
 from pydantic import JsonValue
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -21,6 +20,7 @@ from src.ai.rag.service import RAGService
 from src.database.pagination import Paginator
 from src.database.session import async_session_maker
 from src.exceptions import ConflictError, NotFoundError, UpstreamUnavailableError
+from src.jobs import QUEUE_INGESTION, defer_job
 from src.tagging.service import TaggingService
 from src.videos.models import Video, VideoChapter
 from src.videos.schemas import (
@@ -48,6 +48,7 @@ VIDEO_PIPELINE_STATUS_COMPLETED = "completed"
 VIDEO_PIPELINE_STATUS_FAILED = "failed"
 VIDEO_CHAPTER_STATUS_NOT_STARTED = "not_started"
 VIDEO_CHAPTER_STATUS_COMPLETED = "completed"
+VIDEO_INGESTION_TASK_NAME = "ingestion.process_video"
 
 
 class VideoNotFoundError(NotFoundError):
@@ -171,6 +172,13 @@ def _parse_json_tags(raw_tags: str | None) -> list[str]:
 def _merge_tags(existing_tags: list[str], generated_tags: list[str]) -> list[str]:
     """Merge existing and generated tags while keeping insertion order."""
     return list(dict.fromkeys([*existing_tags, *generated_tags]))
+
+
+async def run_video_ingestion(video_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """Job body: tag, extract chapters, then store the transcript, in that order."""
+    await _auto_tag_video_background(video_id, user_id)
+    await _extract_chapters_background(video_id, user_id)
+    await _process_transcript_to_jsonb(video_id)
 
 
 async def _auto_tag_video_background(video_id: uuid.UUID, user_id: uuid.UUID) -> None:
@@ -444,8 +452,6 @@ class VideoService:
         db: AsyncSession,
         video_data: VideoCreate,
         user_id: uuid.UUID,
-        *,
-        background_tasks: BackgroundTasks | None = None,
     ) -> VideoResponse:
         """Create a new video by fetching metadata from YouTube."""
         # Get the user ID for creation
@@ -512,13 +518,14 @@ class VideoService:
             return VideoResponse.model_validate(video_dict)
 
         video_id = video.id
-        # Persist before queuing background tasks so they can load the row.
+        await defer_job(
+            db,
+            task_name=VIDEO_INGESTION_TASK_NAME,
+            queue=QUEUE_INGESTION,
+            args={"video_id": str(video_id), "user_id": str(user_id)},
+        )
+        # One commit persists the row and its ingestion job together.
         await db.commit()
-
-        if background_tasks is not None:
-            background_tasks.add_task(_auto_tag_video_background, video_id, user_id)
-            background_tasks.add_task(_extract_chapters_background, video_id, user_id)
-            background_tasks.add_task(_process_transcript_to_jsonb, video_id)
 
         # Reload to ensure server-default timestamps are loaded
         refreshed_video = await db.get(Video, video_id, populate_existing=True)

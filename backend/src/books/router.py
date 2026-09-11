@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse, RedirectResponse
 
 from src.auth import CurrentAuth
@@ -46,7 +46,6 @@ async def get_book(
 async def create_book(
     book_data: BookCreate,
     auth: CurrentAuth,
-    background_tasks: BackgroundTasks,
     facade: Annotated[BooksFacade, Depends(get_books_facade)],
 ) -> BookResponse:
     """Finalize a direct upload to storage and create a book record."""
@@ -66,7 +65,7 @@ async def create_book(
         publication_year=book_data.publication_year,
         publisher=book_data.publisher,
         tags=book_data.tags,
-        background_tasks=background_tasks if book_data.process_in_background else None,
+        process_in_background=book_data.process_in_background,
     )
 
 

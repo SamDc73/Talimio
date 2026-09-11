@@ -5,7 +5,8 @@
 # 2) Push image
 # 3) Deploy + execute Cloud Run Neon rehearsal job
 # 4) Deploy + execute Cloud Run migrator job
-# 5) Deploy service with schema-validation startup
+# 5) Deploy the jobs worker pool (same image, runs the procrastinate worker)
+# 6) Deploy service with schema-validation startup
 #
 # Assumption: runtime env/secrets are managed on Cloud Run resources.
 
@@ -58,7 +59,29 @@ steps:
       - '--region=us-west1'
       - '--quiet'
 
-  # 5. Deploy to Cloud Run
+  # 5. Deploy the procrastinate worker as an always-on worker pool (no URL).
+  #    Same image as the service; `python -m` puts /app on sys.path like the migrator.
+  #    Like the service, env/secrets live on the resource: bootstrap the pool once with
+  #    the service's --set-env-vars/--set-secrets, and these deploys only swap the image.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'beta'
+      - 'run'
+      - 'worker-pools'
+      - 'deploy'
+      - 'talimio-worker'
+      - '--image=us-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/talimio-backend:$COMMIT_SHA'
+      - '--command=uv'
+      - '--args=run,python,-m,procrastinate,--app=src.jobs.app.job_app,worker'
+      - '--instances=1'
+      - '--cpu=1'
+      - '--memory=2Gi'
+      - '--region=us-west1'
+      - '--quiet'
+
+  # 6. Deploy to Cloud Run. Request-based billing: the API does no work after a
+  #    response ends (jobs run in the worker pool), so CPU can be throttled.
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -70,7 +93,7 @@ steps:
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--update-env-vars=MIGRATIONS_AUTO_APPLY=false'
-      - '--no-cpu-throttling'
+      - '--cpu-throttling'
       - '--memory=4Gi'
       - '--quiet'
 

@@ -8,7 +8,6 @@ import logging
 import uuid
 from typing import cast
 
-from fastapi import BackgroundTasks
 from pydantic import JsonValue
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,19 +49,9 @@ class VideosFacade:
         """
         return await self.get_video_with_progress(content_id, user_id)
 
-    async def create_video(
-        self,
-        video_data: VideoCreate,
-        user_id: uuid.UUID,
-        background_tasks: BackgroundTasks | None = None,
-    ) -> VideoResponse:
+    async def create_video(self, video_data: VideoCreate, user_id: uuid.UUID) -> VideoResponse:
         """Create a video record for the authenticated user."""
-        return await self._video_service.create_video(
-            self._session,
-            video_data,
-            user_id,
-            background_tasks=background_tasks,
-        )
+        return await self._video_service.create_video(self._session, video_data, user_id)
 
     async def get_videos(
         self,

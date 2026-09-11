@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import uuid
-from collections.abc import AsyncGenerator, Coroutine, Mapping, Sequence
+from collections.abc import AsyncGenerator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TypeVar, cast
@@ -73,8 +73,6 @@ StreamChunk = str | JsonDict
 
 _MAX_AUTONOMY_ROUNDS = 8
 _MAX_STRUCTURED_GENERATION_ATTEMPTS = 2
-_BACKGROUND_TASK_SHUTDOWN_TIMEOUT_SECONDS = 5.0
-_BACKGROUND_TASKS: set[asyncio.Task[object]] = set()
 
 _LITELLM_PROVIDER_ERROR_TYPES = (
     litellm.APIError,
@@ -135,42 +133,6 @@ def _extract_text_content(payload: Sequence[object]) -> str | None:
             text_parts.append(text)
 
     return "".join(text_parts) if text_parts else None
-
-
-def _handle_background_task_done(task: asyncio.Task[object]) -> None:
-    _BACKGROUND_TASKS.discard(task)
-    if task.cancelled():
-        return
-
-    error = task.exception()
-    if error is None:
-        return
-
-    logging.getLogger(__name__).error("ai.background_task.failed", exc_info=(type(error), error, error.__traceback__))
-
-
-def _schedule_background_task(coro: Coroutine[object, object, object]) -> None:
-    task = asyncio.create_task(coro)
-    _BACKGROUND_TASKS.add(task)
-    task.add_done_callback(_handle_background_task_done)
-
-
-async def cleanup_ai_background_tasks() -> None:
-    """Drain or cancel detached AI tasks during application shutdown."""
-    if not _BACKGROUND_TASKS:
-        return
-
-    tasks = set(_BACKGROUND_TASKS)
-    done, pending = await asyncio.wait(tasks, timeout=_BACKGROUND_TASK_SHUTDOWN_TIMEOUT_SECONDS)
-
-    for task in pending:
-        task.cancel()
-
-    if pending:
-        await asyncio.gather(*pending, return_exceptions=True)
-
-    for task in done:
-        _handle_background_task_done(task)
 
 
 _FAILED_TOOL_DISABLE_THRESHOLD = 2
