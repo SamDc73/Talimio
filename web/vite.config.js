@@ -1,5 +1,3 @@
-import { execFileSync } from "node:child_process"
-import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import faroUploader from "@grafana/faro-rollup-plugin"
@@ -8,7 +6,6 @@ import react from "@vitejs/plugin-react"
 import { defineConfig, loadEnv } from "vite"
 
 const Dirname = path.dirname(fileURLToPath(import.meta.url))
-const JS_SOURCEMAP_PATTERN = /\.(js|ts|jsx|tsx|mjs|cjs)\.map$/
 
 const normalizeBasePath = (value) => {
 	if (!value) return "/"
@@ -25,48 +22,6 @@ const getReleaseVersion = (env) => {
 
 	return getTrimmedValue(process.env.CF_PAGES_COMMIT_SHA)
 }
-
-const createFaroSourceMapUploadPlugin = ({ endpoint, apiKey, appId, stackId, bundleId }) => ({
-	name: "talimio-faro-sourcemap-uploader",
-	async writeBundle(options) {
-		const outputPath = options.dir || (options.file ? path.dirname(options.file) : process.cwd())
-		const sourcemapEndpoint = `${endpoint}/app/${appId}/sourcemaps/${bundleId}`
-		const filenames = await fs.promises.readdir(outputPath, { recursive: true })
-		const sourceMapFiles = filenames
-			.map((filename) => filename.toString())
-			.filter((filename) => JS_SOURCEMAP_PATTERN.test(filename))
-
-		if (sourceMapFiles.length === 0) {
-			return
-		}
-
-		const tarballPath = path.join(outputPath, `faro-sourcemaps-${bundleId}.tar.gz`)
-
-		try {
-			execFileSync("tar", ["-czf", tarballPath, "-C", outputPath, ...sourceMapFiles], {
-				stdio: "ignore",
-			})
-			const body = await fs.promises.readFile(tarballPath)
-			const response = await fetch(sourcemapEndpoint, {
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${stackId}:${apiKey}`,
-					"Content-Type": "application/gzip",
-				},
-				body,
-			})
-
-			if (!response.ok) {
-				const errorText = await response.text()
-				throw new Error(`Faro sourcemap upload failed: ${response.status} ${errorText}`)
-			}
-		} finally {
-			if (fs.existsSync(tarballPath)) {
-				await fs.promises.unlink(tarballPath)
-			}
-		}
-	},
-})
 
 export default defineConfig(({ mode }) => {
 	const env = loadEnv(mode, process.cwd(), "")
@@ -91,19 +46,10 @@ export default defineConfig(({ mode }) => {
 				appId: faroAppId,
 				stackId: faroStackId,
 				bundleId: releaseVersion,
+				// Uploads sourcemaps in batches under the API's 30 MB uncompressed limit.
 				gzipContents: true,
-				keepSourcemaps: true,
+				// Vite emits maps into assets/, so the map `file` property needs the same prefix.
 				prefixPath: "assets/",
-				skipUpload: true,
-			})
-		)
-		plugins.push(
-			createFaroSourceMapUploadPlugin({
-				endpoint: sourcemapEndpoint,
-				apiKey: sourcemapApiKey,
-				appId: faroAppId,
-				stackId: faroStackId,
-				bundleId: releaseVersion,
 			})
 		)
 	}
