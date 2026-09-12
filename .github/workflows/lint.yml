@@ -67,8 +67,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # biome.json sets vcs.useIgnoreFile, but web/.gitignore is untracked so a
+      # clean checkout has none and biome errors out. A checkout also contains
+      # no ignored files, so disabling the vcs integration here changes nothing.
       - name: biome
-        run: pnpm exec biome check src
+        run: pnpm exec biome check --vcs-enabled=false src
 
       - name: eslint
         run: pnpm exec eslint src
