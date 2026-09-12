@@ -34,4 +34,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 EXPOSE 8080
 
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# --no-dev matches the sync above; without it `uv run` re-syncs the dev group
+# and downloads ~23MB of tooling on every cold start.
+CMD ["uv", "run", "--no-dev", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]

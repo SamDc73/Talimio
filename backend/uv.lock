@@ -3292,6 +3292,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "google-cloud-storage" },
     { name = "httptools" },
+    { name = "httpx" },
     { name = "httpx-oauth" },
     { name = "itsdangerous" },
     { name = "latex2sympy2-extended" },
@@ -3328,7 +3329,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "aiosqlite" },
-    { name = "httpx" },
     { name = "pydantic-evals" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -3350,6 +3350,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "google-cloud-storage", specifier = ">=3.3.0" },
     { name = "httptools", specifier = ">=0.7.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "httpx-oauth", specifier = ">=0.16.1" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "latex2sympy2-extended", specifier = ">=1.11.0" },
@@ -3386,7 +3387,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "aiosqlite", specifier = ">=0.21.0" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic-evals", specifier = ">=1.106.0" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-asyncio", specifier = ">=0.26.0" },
