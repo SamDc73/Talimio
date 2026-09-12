@@ -85,20 +85,6 @@ export default defineConfig(({ mode }) => {
 					changeOrigin: true,
 					secure: false,
 					ws: true,
-					configure: (proxy, _options) => {
-						proxy.on("error", (_err, _req, _res) => {})
-						proxy.on("proxyReq", (proxyReq, req, _res) => {
-							// Forward cookies from the original request
-							if (req.headers.cookie) {
-								proxyReq.setHeader("Cookie", req.headers.cookie)
-							}
-						})
-						proxy.on("proxyRes", (proxyRes, _req, _res) => {
-							// Log set-cookie headers if present
-							if (proxyRes.headers["set-cookie"]) {
-							}
-						})
-					},
 				},
 			},
 		},
