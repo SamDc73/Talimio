@@ -63,6 +63,12 @@ backend/.env.prod
 web/.env.prod
 backend/.env.test
 
+# Live E2E credentials: real test-account passwords, never tracked.
+# The harnesses read them via tests/fixtures/live_client.py or env vars.
+backend/tests/e2e/conceptflow.vars
+backend/tests/e2e_hurl/fixtures/vars.cloud
+backend/tests/e2e_hurl/fixtures/vars.cloud.credentials
+
 # Compiled output
 dist/
 build/
