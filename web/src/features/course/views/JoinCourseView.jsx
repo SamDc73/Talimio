@@ -61,7 +61,7 @@ export default function JoinCourseView() {
 
 	if (!isLoading && (error || !preview)) {
 		body = (
-			<Card className="w-full max-w-lg">
+			<Card className="w-full max-w-container-lg">
 				<CardHeader>
 					<CardTitle>This link isn't valid</CardTitle>
 					<CardDescription>The share link may have been removed, or the course no longer exists.</CardDescription>
@@ -79,7 +79,7 @@ export default function JoinCourseView() {
 		const hiddenConceptCount = conceptNames.length - shownConcepts.length
 
 		body = (
-			<Card className="w-full max-w-lg">
+			<Card className="w-full max-w-container-lg">
 				<CardHeader>
 					<p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
 						{MODE_LABELS[preview.mode] ?? "Course"} shared with you
