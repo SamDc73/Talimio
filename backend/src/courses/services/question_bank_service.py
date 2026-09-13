@@ -66,6 +66,15 @@ class QuestionBankService:
         )
         return list(result.scalars().all())
 
+    async def covered_concept_ids(self, course_id: uuid.UUID) -> set[uuid.UUID]:
+        """Concepts that at least one instructor question maps onto."""
+        rows = await self._session.scalars(
+            select(CourseQuestion.concept_id)
+            .where(CourseQuestion.course_id == course_id, CourseQuestion.concept_id.is_not(None))
+            .distinct()
+        )
+        return {concept_id for concept_id in rows.all() if concept_id is not None}
+
     @staticmethod
     def build_prompt_block(questions: Sequence[CourseQuestion]) -> str:
         """Render the bank as the numbered list the structuring prompt expects (answers included so grouping is accurate)."""

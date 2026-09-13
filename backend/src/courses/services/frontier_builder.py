@@ -8,11 +8,12 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.courses.models import Concept, Lesson, LessonVersion, UserConceptState
+from src.courses.models import Concept, Course, Lesson, LessonVersion, UserConceptState
 from src.courses.schemas import ConceptSummary, FrontierResponse
 
 from .concept_graph_service import ConceptGraphService, FrontierEntry
 from .concept_scheduler_service import DueConceptEntry, LectorSchedulerService
+from .question_bank_service import QuestionBankService
 
 
 RecommendedLessonEntry = Literal["open_current", "start_next_pass"]
@@ -201,7 +202,17 @@ async def build_course_frontier(
     graph_service: ConceptGraphService,
     scheduler_service: LectorSchedulerService,
 ) -> FrontierResponse:
-    """Assemble the full frontier payload for a course."""
+    """Assemble the full frontier payload for a course.
+
+    In a question-bank course only the concepts with instructor questions gate
+    their dependents, and they rank ahead of the AI-only gap fillers, so the
+    learner always starts on the instructor's material.
+    """
+    bank_concept_ids: set[uuid.UUID] | None = None
+    course_mode = await session.scalar(select(Course.mode).where(Course.id == course_id))
+    if course_mode == "question_bank":
+        bank_concept_ids = await QuestionBankService(session).covered_concept_ids(course_id)
+
     lesson_rows = (
         await session.execute(
             select(Lesson.id, Lesson.concept_id).where(
@@ -215,7 +226,9 @@ async def build_course_frontier(
         for lesson_id, concept_id in lesson_rows
         if concept_id is not None
     }
-    frontier_entries = await graph_service.get_frontier(user_id=user_id, course_id=course_id)
+    frontier_entries = await graph_service.get_frontier(
+        user_id=user_id, course_id=course_id, gating_concept_ids=bank_concept_ids
+    )
     due_entries = await scheduler_service.get_due_concepts(user_id=user_id, course_id=course_id)
     ranked_due_entries = await scheduler_service.rank_due_entries(
         user_id=user_id,
@@ -227,6 +240,11 @@ async def build_course_frontier(
         entries=frontier_entries,
         due_entries=ranked_due_entries,
     )
+    if bank_concept_ids is not None:
+        # The instructor's concepts come first; AI-only gap fillers stay available but last.
+        ranked_frontier = [entry for entry in ranked_frontier if entry["concept"].id in bank_concept_ids] + [
+            entry for entry in ranked_frontier if entry["concept"].id not in bank_concept_ids
+        ]
     recommended_lesson_entries = await _build_recommended_lesson_entries(
         session=session,
         user_id=user_id,

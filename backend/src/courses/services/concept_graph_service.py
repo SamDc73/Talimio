@@ -228,8 +228,19 @@ class ConceptGraphService:
         )
         return total_updated
 
-    async def get_frontier(self, *, user_id: uuid.UUID, course_id: uuid.UUID) -> list[FrontierEntry]:
-        """Return unlocked concepts for the learner."""
+    async def get_frontier(
+        self,
+        *,
+        user_id: uuid.UUID,
+        course_id: uuid.UUID,
+        gating_concept_ids: set[uuid.UUID] | None = None,
+    ) -> list[FrontierEntry]:
+        """Return unlocked concepts for the learner.
+
+        ``gating_concept_ids`` narrows which prerequisites can lock a concept:
+        question-bank courses pass the concepts that have instructor questions, so
+        an AI-only prerequisite never blocks the instructor's material.
+        """
         concept_rows = await self._session.execute(
             select(Concept, UserConceptState, CourseConcept.order_hint)
             .select_from(CourseConcept)
@@ -264,6 +275,8 @@ class ConceptGraphService:
             prereqs = prereq_map.get(concept.id, set())
             unlocked = True
             for prereq in prereqs:
+                if gating_concept_ids is not None and prereq not in gating_concept_ids:
+                    continue
                 prereq_state = state_lookup.get(prereq)
                 if (
                     prereq_state is None
