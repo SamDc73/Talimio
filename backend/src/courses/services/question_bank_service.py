@@ -19,6 +19,7 @@ from src.courses.schemas import (
     CourseQuestionRead,
     PracticeAnswerKind,
     QuestionBankResponse,
+    QuestionFigure,
     UncoveredConcept,
 )
 from src.courses.services.question_bank_practice_service import (
@@ -50,6 +51,7 @@ class QuestionBankService:
                 answer_kind=item.answer_kind,
                 choices=item.choices,
                 hints=item.hints,
+                figure=item.figure.model_dump() if item.figure else None,
             )
             for position, item in enumerate(questions)
         ]
@@ -111,6 +113,7 @@ class QuestionBankService:
                     answer_kind=_answer_kind(question.answer_kind),
                     choices=question.choices,
                     hints=question.hints,
+                    figure=QuestionFigure.model_validate(question.figure) if question.figure else None,
                     concept_id=question.concept_id,
                     concept_name=concept_names.get(question.concept_id) if question.concept_id else None,
                     attempts=history.attempts,

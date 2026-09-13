@@ -54,6 +54,7 @@ from .schemas import (
     ProbeFamily,
     ProbeRendererKind,
     QuestionBankResponse,
+    QuestionFigure,
     QuestionSetItem,
     QuestionSetRequest,
     QuestionSetResponse,
@@ -714,6 +715,7 @@ class CoursesFacade:  # ruff: ignore[too-many-public-methods]
             answer_field = "answerLatex"
         elif answer_kind == "choice":
             answer_field = "choiceIndex"
+        figure = stored.question_payload.get("figure")
         return QuestionSetItem(
             question_id=stored.id,
             concept_id=stored.concept_id,
@@ -725,6 +727,7 @@ class CoursesFacade:  # ruff: ignore[too-many-public-methods]
             renderer_kind=renderer_kind,
             choices=choices,
             hints=stored.hints,
+            figure=QuestionFigure.model_validate(figure) if figure else None,
             source=source,
         )
 

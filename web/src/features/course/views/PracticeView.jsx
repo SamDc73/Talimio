@@ -6,6 +6,7 @@ import { fetchConceptFrontierByCourseId, useCourseService } from "@/api/courseAp
 import { Button } from "@/components/Button"
 import { LatexExpression } from "@/components/quiz/LatexExpression"
 import { useCourseContext } from "@/features/course/CourseContext"
+import { JXGFigure } from "@/features/course/components/JXGFigure"
 import { useLatexPracticeReview } from "@/features/course/hooks/use-latex-practice-review"
 import logger from "@/lib/logger"
 import { cn } from "@/lib/utils"
@@ -89,6 +90,7 @@ function normalizeDrill(rawItem) {
 		rendererKind,
 		choices,
 		hints: rawItem.hints,
+		figure: rawItem.figure && typeof rawItem.figure === "object" ? rawItem.figure : null,
 		source,
 	}
 }
@@ -887,6 +889,8 @@ export default function PracticeView() {
 				{questionBankMode && currentQuestion?.source === "ai" ? (
 					<p className="text-xs text-muted-foreground">This one is from Talimio, not your instructor's set.</p>
 				) : null}
+
+				{currentQuestion?.figure ? <JXGFigure figure={currentQuestion.figure} className="mb-2" /> : null}
 
 				{questionPanel}
 

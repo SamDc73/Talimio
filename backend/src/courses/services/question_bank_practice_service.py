@@ -163,6 +163,7 @@ class QuestionBankPracticeService:
                 "rendererKind": bank_renderer_kind(bank_question.answer_kind),
                 "choices": bank_question.choices,
                 "hints": bank_question.hints,
+                "figure": bank_question.figure,
             },
             hints=bank_question.hints,
             structure_signature=source_key,

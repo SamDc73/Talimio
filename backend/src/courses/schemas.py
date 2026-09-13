@@ -196,6 +196,37 @@ _IMAGE_DATA_URL_PREFIX = re.compile(r"^data:image/(png|jpe?g);base64,")
 _MAX_IMAGE_DATA_URL_CHARS = 8_000_000
 
 
+FigureElementType = Literal[
+    "point", "segment", "line", "arrow", "polygon", "circle", "arc", "angle", "text", "curve", "ellipse"
+]
+
+
+class FigureElement(CamelModel):
+    """One JSXGraph ``board.create(type, parents, attributes)`` call."""
+
+    type: FigureElementType = Field(description="JSXGraph element type")
+    parents: list[JsonValue] = Field(
+        min_length=1, description="Positional parents, e.g. two [x, y] points for an arrow"
+    )
+    attributes: dict[str, JsonValue] = Field(default_factory=dict, description="JSXGraph element attributes")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class QuestionFigure(CamelModel):
+    """Static JSXGraph drawing shown above a question, stored as data rather than a screenshot."""
+
+    bounding_box: list[float] = Field(
+        min_length=4, max_length=4, description="[left, top, right, bottom] in board units"
+    )
+    axis: bool = Field(default=False, description="Draw the default axes")
+    grid: bool = Field(default=False, description="Draw the grid")
+    keep_aspect_ratio: bool = Field(default=True, description="Keep x and y units equal")
+    elements: list[FigureElement] = Field(min_length=1, max_length=80, description="Elements drawn in order")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class CourseQuestionCreate(CamelModel):
     """One instructor-authored question for a question-bank course."""
 
@@ -204,6 +235,7 @@ class CourseQuestionCreate(CamelModel):
     answer_kind: PracticeAnswerKind = Field("text", description="Learner answer interpretation")
     choices: list[str] = Field(default_factory=list, max_length=8, description="Choices for choice questions")
     hints: list[str] = Field(default_factory=list, max_length=5, description="Optional learner-visible hints")
+    figure: QuestionFigure | None = Field(None, description="Optional diagram drawn with JSXGraph")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -355,6 +387,7 @@ class CourseQuestionRead(CamelModel):
     answer_kind: PracticeAnswerKind = Field(description="Learner answer interpretation")
     choices: list[str] = Field(default_factory=list, description="Choices for choice questions")
     hints: list[str] = Field(default_factory=list, description="Learner-visible hints")
+    figure: QuestionFigure | None = Field(None, description="Diagram drawn above the question")
     concept_id: uuid.UUID | None = Field(None, description="Mapped concept; null until the outline job runs")
     concept_name: str | None = Field(None, description="Mapped concept display name")
     attempts: int = Field(0, description="Attempts this learner has made on the question")
@@ -758,6 +791,7 @@ class QuestionSetItem(CamelModel):
     renderer_kind: ProbeRendererKind = Field(description="Known renderer contract for this question")
     choices: list[str] = Field(default_factory=list, description="Learner-visible choices for choice-based questions")
     hints: list[str] = Field(default_factory=list, description="Learner-visible hints")
+    figure: QuestionFigure | None = Field(None, description="Diagram drawn above the question")
     source: QuestionSource = Field("ai", description="Whether the question came from the instructor bank or the AI")
 
     model_config = ConfigDict(extra="forbid")

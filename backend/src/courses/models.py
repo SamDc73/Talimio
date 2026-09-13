@@ -337,6 +337,8 @@ class CourseQuestion(Base):
     answer_kind: Mapped[str] = mapped_column(String(40), nullable=False)
     choices: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
     hints: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    # Static JSXGraph drawing shown above the question; shape is schemas.QuestionFigure.
+    figure: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
