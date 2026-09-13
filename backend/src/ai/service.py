@@ -75,10 +75,12 @@ class AIService:
         *,
         user_id: uuid.UUID,
         questions_block: str,
+        question_count: int,
     ) -> QuestionBankStructure:
         """Derive the concept graph for an instructor's question bank."""
         return await self._course_llm.generate_question_bank_structure(
             questions_block=questions_block,
+            question_count=question_count,
             user_id=str(user_id),
         )
 

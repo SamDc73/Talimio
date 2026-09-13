@@ -69,7 +69,9 @@ class QuestionBankService:
     @staticmethod
     def build_prompt_block(questions: Sequence[CourseQuestion]) -> str:
         """Render the bank as the numbered list the structuring prompt expects (answers included so grouping is accurate)."""
-        lines: list[str] = []
+        lines: list[str] = [
+            f"{len(questions)} questions, numbered 0 to {len(questions) - 1}. Assign every one of them."
+        ]
         for index, item in enumerate(questions):
             lines.append(f"{index}. [{item.answer_kind}] {item.question}")
             if item.choices:

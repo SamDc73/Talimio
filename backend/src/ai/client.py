@@ -34,6 +34,7 @@ from src.ai.models import (
     GeneratedLesson,
     QuestionBankStructure,
     SelfAssessmentQuiz,
+    question_bank_structure_for,
 )
 from src.ai.prompts import (
     ADAPTIVE_COURSE_GENERATION_PROMPT,
@@ -945,11 +946,13 @@ class LLMClient:
                 return await self._run_autonomy_loop(request)
             except AISchemaValidationError as error:
                 last_error = error
+                detail = str(error.__cause__ or "")[:800]
                 self._logger.warning(
-                    "Structured generation validation failed on attempt %s/%s: %s",
+                    "Structured generation validation failed on attempt %s/%s: %s (%s)",
                     attempt,
                     _MAX_STRUCTURED_GENERATION_ATTEMPTS,
                     error,
+                    detail,
                 )
                 if attempt >= _MAX_STRUCTURED_GENERATION_ATTEMPTS:
                     raise
@@ -1799,9 +1802,15 @@ class LLMClient:
     async def generate_question_bank_structure(
         self,
         questions_block: str,
+        *,
+        question_count: int,
         user_id: str | uuid.UUID | None = None,
     ) -> QuestionBankStructure:
-        """Derive the concept graph and question-to-concept map for an instructor's question bank."""
+        """Derive the concept graph and question-to-concept map for an instructor's question bank.
+
+        ``question_count`` makes the response model reject a mapping that misses a
+        question, so the structured retry covers it.
+        """
         messages = [
             {"role": "system", "content": QUESTION_BANK_STRUCTURE_PROMPT},
             {"role": "user", "content": questions_block},
@@ -1816,7 +1825,7 @@ class LLMClient:
             try:
                 result = await self.get_completion(
                     messages,
-                    response_model=QuestionBankStructure,
+                    response_model=question_bank_structure_for(question_count),
                     user_id=user_id,
                     metadata={
                         "generation_name": "question_bank_structure",

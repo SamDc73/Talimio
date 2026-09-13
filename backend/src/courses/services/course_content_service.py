@@ -349,6 +349,7 @@ class CourseContentService:
         structure = await self.ai_service.generate_question_bank_structure(
             user_id=user_id,
             questions_block=bank_service.build_prompt_block(questions),
+            question_count=len(questions),
         )
         session_data: MutableCoursePayload = {
             "title": structure.course.title,

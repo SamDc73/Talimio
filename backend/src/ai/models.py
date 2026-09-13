@@ -486,7 +486,7 @@ class QuestionBankStructure(AdaptiveCourseStructure):
     this mode. ``assignments`` maps every question index onto a node.
     """
 
-    assignments: list[QuestionConceptAssignment] = Field(default_factory=list)
+    assignments: list[QuestionConceptAssignment] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _validate_assignments(self) -> "QuestionBankStructure":
@@ -505,6 +505,31 @@ class QuestionBankStructure(AdaptiveCourseStructure):
     def concept_index_by_question(self) -> dict[int, int]:
         """Map question indices to their concept node index."""
         return {assignment.question_index: assignment.concept_index for assignment in self.assignments}
+
+
+def question_bank_structure_for(question_count: int) -> type[QuestionBankStructure]:
+    """Response model that also requires every question index below ``question_count`` to be assigned.
+
+    Baking the count into the model turns an incomplete mapping into a schema
+    failure the LLM client retries, instead of a failed outline job later.
+    """
+
+    class CompleteQuestionBankStructure(QuestionBankStructure):
+        @model_validator(mode="after")
+        def _validate_complete(self) -> "CompleteQuestionBankStructure":
+            expected = set(range(question_count))
+            assigned = {assignment.question_index for assignment in self.assignments}
+            if assigned != expected:
+                missing = sorted(expected - assigned)[:10]
+                unknown = sorted(assigned - expected)[:10]
+                msg = (
+                    f"assignments must cover question indices 0..{question_count - 1} exactly once "
+                    f"(missing {missing}, unknown {unknown})"
+                )
+                raise ValueError(msg)
+            return self
+
+    return CompleteQuestionBankStructure
 
 
 class ConceptNode(BaseModel):

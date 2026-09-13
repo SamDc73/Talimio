@@ -528,7 +528,7 @@ Return ONLY valid JSON that matches the Schema section. Optional fields may be o
 
 ## Field rules (HARD REQUIREMENTS)
 - `lessons` has exactly one entry per concept node (its `index` is the node index); `description` is one factual sentence describing what the concept covers. It is stored as the concept description; no lesson content is generated.
-- `assignments` has exactly one entry per question, using the question numbers from the user message as 0-based `questionIndex`, and every `conceptIndex` points at a node.
+- `assignments` is REQUIRED: exactly one entry per question, so its length equals the question count stated in the user message. `questionIndex` is the question's number from the user message (0-based) and `conceptIndex` is the 0-based position of the node in `nodes` (the first node is 0, the last is one less than the node count).
 - Indices are 0-based positions in `ai_outline_meta.conceptGraph.nodes`. Node `slug` is optional and display-only.
 - `edges` list DIRECT prerequisites only (`sourceIndex` depends on `prereqIndex`); every non-root concept has at least one prerequisite; no cycles.
 - `layers` are ordered tiers of node indices covering every node exactly once, foundational first.
@@ -536,7 +536,7 @@ Return ONLY valid JSON that matches the Schema section. Optional fields may be o
 - Keep keys in each object in the same order as the Schema.
 
 ## Quality gate (self-check BEFORE output)
-- Every question index appears exactly once in `assignments`.
+- `assignments` is present, its length equals the question count, and every question index appears exactly once.
 - Every node index appears exactly once in `lessons` and exactly once in `layers`.
 - Concepts are general ideas; none is titled after a single question, brand, or example.
 - Prerequisites the bank silently assumes are present as nodes even without questions.
