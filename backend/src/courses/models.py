@@ -62,6 +62,12 @@ class Course(Base):
         default="standard",
         server_default=text("'standard'"),
     )
+    # Lineage for shared courses: the course this one was forked from, if any.
+    forked_from_course_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     generation_status: Mapped[CourseGenerationStatus] = mapped_column(
         String(20),
@@ -339,6 +345,30 @@ class CourseQuestion(Base):
     hints: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
     # Static JSXGraph drawing shown above the question; shape is schemas.QuestionFigure.
     figure: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+    )
+
+
+class CourseShare(Base):
+    """Join link for one course; redeeming it forks the course for another learner.
+
+    The table has no user_id on purpose: the course implies its owner.
+    """
+
+    __tablename__ = "course_shares"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, server_default=text("app_uuid7()"))
+    course_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -36,6 +36,7 @@ setup_logging(get_settings())
 logger = logging.getLogger(__name__)
 from .content.router import router as content_router
 from .courses.router import router as courses_router
+from .courses.share_router import router as course_shares_router
 from .database.migrate import apply_migrations, assert_migrations_current, validate_vector_schema_dimensions
 from .database.session import DbSession, engine
 from .exceptions import DomainError, ErrorCategory, ErrorCode
@@ -73,6 +74,7 @@ def _register_routers(app: FastAPI) -> None:
         progress_router,
         rag_router,
         courses_router,
+        course_shares_router,
         tagging_router,
         upload_sessions_router,
         user_router,

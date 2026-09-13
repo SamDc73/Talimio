@@ -115,6 +115,14 @@ export async function fetchQuestionBankByCourseId(courseId, signal) {
 	return api.get(buildCoursePath(courseId, "/question-bank"), { signal })
 }
 
+export async function fetchCourseShare(token, signal) {
+	return api.get(`/course-shares/${encodeURIComponent(token)}`, { signal })
+}
+
+export async function forkCourseShare(token) {
+	return api.post(`/course-shares/${encodeURIComponent(token)}/fork`)
+}
+
 /**
  * Hook for course operations
  * @param {string} courseId - The course ID

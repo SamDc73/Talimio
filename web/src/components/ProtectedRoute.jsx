@@ -1,10 +1,11 @@
 import { Loader2 } from "lucide-react"
-import { Navigate } from "react-router-dom"
+import { Navigate, useLocation } from "react-router-dom"
 
 import { useAuth } from "@/hooks/use-auth"
 
 function ProtectedRoute({ children }) {
 	const { isAuthenticated, loading } = useAuth()
+	const location = useLocation()
 
 	// Show loading spinner while checking auth
 	if (loading) {
@@ -19,9 +20,11 @@ function ProtectedRoute({ children }) {
 		)
 	}
 
-	// Require authentication for protected routes (component usage implies protection)
+	// Require authentication for protected routes (component usage implies protection).
+	// Send the learner back here after login so share links (/join/:token) survive the round trip.
 	if (!isAuthenticated) {
-		return <Navigate to="/auth" replace />
+		const redirect = encodeURIComponent(`${location.pathname}${location.search}`)
+		return <Navigate to={`/auth?redirect=${redirect}`} replace />
 	}
 
 	return children

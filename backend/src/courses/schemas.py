@@ -411,6 +411,31 @@ class QuestionBankResponse(CamelModel):
     )
 
 
+class CourseShareCreate(CamelModel):
+    """Mint a join link for one owned course."""
+
+    course_id: uuid.UUID = Field(description="Course to share")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CourseShareResponse(CamelModel):
+    """A join link minted for one course."""
+
+    token: str = Field(description="Opaque share token")
+    url: str = Field(description="Join link to send to another learner")
+
+
+class CourseSharePreview(CamelModel):
+    """What a learner sees before adding a shared course; never carries answers."""
+
+    title: str = Field(description="Course title")
+    description: str = Field(description="Course description")
+    mode: CourseMode = Field(description="Where the learning material comes from")
+    question_count: int = Field(description="Instructor questions in the bank")
+    concept_names: list[str] = Field(default_factory=list, description="Concepts the questions were mapped onto")
+
+
 class ConceptSummary(CamelModel):
     """Summary of a concept for adaptive frontier responses."""
 

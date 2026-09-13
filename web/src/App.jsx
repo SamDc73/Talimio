@@ -11,6 +11,7 @@ import BookViewer from "@/features/book-viewer/BookViewer"
 import { CourseProvider } from "@/features/course/CourseContext"
 import CourseLayout from "@/features/course/components/CourseLayout"
 import DocumentsView from "@/features/course/views/DocumentsView"
+import JoinCourseView from "@/features/course/views/JoinCourseView"
 import LessonContent from "@/features/course/views/LessonContent"
 import OutlineView from "@/features/course/views/OutlineView"
 import PracticeView from "@/features/course/views/PracticeView"
@@ -84,6 +85,16 @@ function App() {
 								<ProtectedRoute>
 									<HomePage />
 									<SettingsPage />
+								</ProtectedRoute>
+							}
+						/>
+
+						{/* Share links: preview a shared course, then add a copy */}
+						<Route
+							path="/join/:token"
+							element={
+								<ProtectedRoute>
+									<JoinCourseView />
 								</ProtectedRoute>
 							}
 						/>
